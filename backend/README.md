@@ -1,6 +1,6 @@
 # JobPilot Backend
 
-JobPilot 后端当前是一个最小 FastAPI 工程。现阶段已经完成应用骨架、配置管理、PostgreSQL 异步访问、SQLAlchemy、Alembic、健康检查、MVP 第一批核心业务表，以及 Resume / JobPosting 模块的最小 API 闭环。
+JobPilot 后端当前是一个最小 FastAPI 工程。现阶段已经完成应用骨架、配置管理、PostgreSQL 异步访问、SQLAlchemy、Alembic、健康检查、MVP 第一批核心业务表，以及 Resume / JobPosting / MatchResult 模块的最小 API 闭环。
 
 ## 环境要求
 
@@ -41,6 +41,10 @@ uv --directory backend run uvicorn app.main:app --reload
 - `GET http://localhost:8000/api/v1/jobs`
 - `GET http://localhost:8000/api/v1/jobs/{job_id}`
 - `PATCH http://localhost:8000/api/v1/jobs/{job_id}`
+- `POST http://localhost:8000/api/v1/matches`
+- `GET http://localhost:8000/api/v1/matches`
+- `GET http://localhost:8000/api/v1/matches/{match_id}`
+- `PATCH http://localhost:8000/api/v1/matches/{match_id}`
 
 如果默认 uv 缓存目录不可用：
 
@@ -160,6 +164,49 @@ curl.exe -X PATCH http://localhost:8000/api/v1/jobs/1 `
   -d "{\"status\":\"paused\",\"parsed_json\":{\"skills\":[\"FastAPI\",\"PostgreSQL\",\"SQLAlchemy\"]}}"
 ```
 
+## MatchResult API
+
+当前 MatchResult 模块支持最小闭环：
+
+- 创建匹配记录：`POST /api/v1/matches`
+- 匹配记录列表：`GET /api/v1/matches?limit=20&offset=0`
+- 匹配记录详情：`GET /api/v1/matches/{match_id}`
+- 更新匹配记录：`PATCH /api/v1/matches/{match_id}`
+
+创建匹配记录时需要传入已有的 `resume_id` 和 `job_posting_id`。当前 MatchResult 只是手工写入和更新的结构化记录，不包含真实 AI 匹配分析、自动打分或自动建议生成。
+
+列表接口默认按 `created_at DESC` 返回。当前不支持删除、搜索、复杂过滤或排序。
+
+### 调用示例
+
+创建匹配记录：
+
+```powershell
+curl.exe -X POST http://localhost:8000/api/v1/matches `
+  -H "Content-Type: application/json" `
+  -d "{\"resume_id\":1,\"job_posting_id\":1,\"overall_score\":82.5,\"strengths\":[\"FastAPI 经验匹配\",\"熟悉 PostgreSQL\"],\"weaknesses\":[\"缺少大型系统经验\"],\"missing_keywords\":[\"Kubernetes\"],\"suggestions\":[\"补充异步任务和部署经验\"]}"
+```
+
+查看列表：
+
+```powershell
+curl.exe "http://localhost:8000/api/v1/matches?limit=20&offset=0"
+```
+
+查看详情：
+
+```powershell
+curl.exe http://localhost:8000/api/v1/matches/1
+```
+
+更新匹配记录：
+
+```powershell
+curl.exe -X PATCH http://localhost:8000/api/v1/matches/1 `
+  -H "Content-Type: application/json" `
+  -d "{\"overall_score\":88.0,\"suggestions\":[\"突出 FastAPI 项目经验\",\"补充 PostgreSQL 调优经历\"]}"
+```
+
 本阶段完成：
 
 - 新增 `Resume`、`JobPosting`、`MatchResult`、`ApplicationRecord` 四个 SQLAlchemy 模型。
@@ -171,6 +218,9 @@ curl.exe -X PATCH http://localhost:8000/api/v1/jobs/1 `
 - 新增 Resume 的创建、列表、详情、更新接口。
 - 新增 JobPosting 的 Pydantic schemas。
 - 新增 JobPosting 的创建、列表、详情、更新接口。
+- 新增 MatchResult 的 Pydantic schemas。
+- 新增 MatchResult 的创建、列表、详情、更新接口。
+- 创建 MatchResult 时校验 `resume_id` 和 `job_posting_id` 是否存在。
 
 本阶段故意没做：
 
@@ -179,6 +229,7 @@ curl.exe -X PATCH http://localhost:8000/api/v1/jobs/1 `
 - 没有写 service 层业务逻辑。
 - 没有做认证、登录或权限系统。
 - 没有接入 AI、RAG、LangChain 或 LangGraph。
+- 没有做真实 AI 匹配分析、自动打分或自动建议生成。
 - 没有加入 pgvector 字段。
 - 没有写文件上传或对象存储。
 - 没有写 Redis 业务逻辑。
@@ -197,6 +248,7 @@ backend/
 │   ├── api/
 │   │   ├── health.py
 │   │   ├── jobs.py
+│   │   ├── matches.py
 │   │   └── resumes.py
 │   ├── core/
 │   │   └── config.py
@@ -211,6 +263,7 @@ backend/
 │   │   └── user.py
 │   ├── schemas/
 │   │   ├── job_posting.py
+│   │   ├── match_result.py
 │   │   └── resume.py
 │   └── main.py
 ├── .env.example
@@ -234,6 +287,7 @@ backend/
 - 第一批 MVP 核心业务模型和数据库表
 - Resume 模块最小 API 闭环
 - JobPosting 模块最小 API 闭环
+- MatchResult 模块最小 API 闭环
 
 未完成：
 
@@ -242,6 +296,6 @@ backend/
 - RAG、LangChain 或 LangGraph
 - 认证登录
 - 完整 CRUD 和删除接口
-- MatchResult / ApplicationRecord API
+- ApplicationRecord API
 - service 层业务逻辑
 - 生产 Dockerfile、Nginx 或 CI/CD
