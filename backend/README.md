@@ -1,6 +1,6 @@
 # JobPilot Backend
 
-JobPilot 后端当前是一个最小 FastAPI 工程。现阶段已经完成应用骨架、配置管理、PostgreSQL 异步访问、SQLAlchemy、Alembic、健康检查、MVP 第一批核心业务表，以及 Resume 模块的最小 API 闭环。
+JobPilot 后端当前是一个最小 FastAPI 工程。现阶段已经完成应用骨架、配置管理、PostgreSQL 异步访问、SQLAlchemy、Alembic、健康检查、MVP 第一批核心业务表，以及 Resume / JobPosting 模块的最小 API 闭环。
 
 ## 环境要求
 
@@ -37,6 +37,10 @@ uv --directory backend run uvicorn app.main:app --reload
 - `GET http://localhost:8000/api/v1/resumes`
 - `GET http://localhost:8000/api/v1/resumes/{resume_id}`
 - `PATCH http://localhost:8000/api/v1/resumes/{resume_id}`
+- `POST http://localhost:8000/api/v1/jobs`
+- `GET http://localhost:8000/api/v1/jobs`
+- `GET http://localhost:8000/api/v1/jobs/{job_id}`
+- `PATCH http://localhost:8000/api/v1/jobs/{job_id}`
 
 如果默认 uv 缓存目录不可用：
 
@@ -115,6 +119,47 @@ curl.exe -X PATCH http://localhost:8000/api/v1/resumes/1 `
   -d "{\"title\":\"后端开发简历 v2\",\"parse_status\":\"parsed\",\"parsed_json\":{\"skills\":[\"FastAPI\",\"PostgreSQL\",\"SQLAlchemy\"]}}"
 ```
 
+## JobPosting API
+
+当前 JobPosting 模块支持最小闭环：
+
+- 创建岗位：`POST /api/v1/jobs`
+- 岗位列表：`GET /api/v1/jobs?limit=20&offset=0`
+- 岗位详情：`GET /api/v1/jobs/{job_id}`
+- 更新岗位：`PATCH /api/v1/jobs/{job_id}`
+
+列表接口默认按 `created_at DESC` 返回。当前不支持删除、搜索、复杂过滤或排序。
+
+### 调用示例
+
+创建岗位：
+
+```powershell
+curl.exe -X POST http://localhost:8000/api/v1/jobs `
+  -H "Content-Type: application/json" `
+  -d "{\"company_name\":\"示例科技\",\"job_title\":\"后端开发工程师\",\"city\":\"上海\",\"source_url\":\"https://example.com/jobs/backend\",\"jd_text\":\"负责 FastAPI 后端服务、PostgreSQL 数据建模和接口开发。\"}"
+```
+
+查看列表：
+
+```powershell
+curl.exe "http://localhost:8000/api/v1/jobs?limit=20&offset=0"
+```
+
+查看详情：
+
+```powershell
+curl.exe http://localhost:8000/api/v1/jobs/1
+```
+
+更新岗位：
+
+```powershell
+curl.exe -X PATCH http://localhost:8000/api/v1/jobs/1 `
+  -H "Content-Type: application/json" `
+  -d "{\"status\":\"paused\",\"parsed_json\":{\"skills\":[\"FastAPI\",\"PostgreSQL\",\"SQLAlchemy\"]}}"
+```
+
 本阶段完成：
 
 - 新增 `Resume`、`JobPosting`、`MatchResult`、`ApplicationRecord` 四个 SQLAlchemy 模型。
@@ -124,6 +169,8 @@ curl.exe -X PATCH http://localhost:8000/api/v1/resumes/1 `
 - 保留已有 `users` 表和已有用户表迁移，不删除、不重命名、不重构。
 - 新增 Resume 的 Pydantic schemas。
 - 新增 Resume 的创建、列表、详情、更新接口。
+- 新增 JobPosting 的 Pydantic schemas。
+- 新增 JobPosting 的创建、列表、详情、更新接口。
 
 本阶段故意没做：
 
@@ -149,6 +196,7 @@ backend/
 ├── app/
 │   ├── api/
 │   │   ├── health.py
+│   │   ├── jobs.py
 │   │   └── resumes.py
 │   ├── core/
 │   │   └── config.py
@@ -162,6 +210,7 @@ backend/
 │   │   ├── resume.py
 │   │   └── user.py
 │   ├── schemas/
+│   │   ├── job_posting.py
 │   │   └── resume.py
 │   └── main.py
 ├── .env.example
@@ -184,6 +233,7 @@ backend/
 - 一个最小 `User` 模型
 - 第一批 MVP 核心业务模型和数据库表
 - Resume 模块最小 API 闭环
+- JobPosting 模块最小 API 闭环
 
 未完成：
 
@@ -192,6 +242,6 @@ backend/
 - RAG、LangChain 或 LangGraph
 - 认证登录
 - 完整 CRUD 和删除接口
-- JobPosting / MatchResult / ApplicationRecord API
+- MatchResult / ApplicationRecord API
 - service 层业务逻辑
 - 生产 Dockerfile、Nginx 或 CI/CD

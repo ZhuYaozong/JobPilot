@@ -2,11 +2,11 @@
 
 ## Current Stage
 
-This repository is in step 4: Resume module minimal API loop.
+This repository is in step 5: JobPosting module minimal API loop.
 
 ## Scope Rules
 
-- Do not expand scope beyond the requested Resume module API work.
+- Do not expand scope beyond the requested JobPosting module API work.
 - Keep the repository simple, runnable, and easy to explain.
 - Do not add real AI integration yet.
 - Do not add frontend implementation yet.
