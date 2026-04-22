@@ -2,11 +2,11 @@
 
 ## Current Stage
 
-This repository is in step 6: MatchResult module minimal API loop.
+This repository is in step 7: ApplicationRecord module minimal API loop.
 
 ## Scope Rules
 
-- Do not expand scope beyond the requested MatchResult module API work.
+- Do not expand scope beyond the requested ApplicationRecord module API work.
 - Keep the repository simple, runnable, and easy to explain.
 - Do not add real AI integration yet.
 - Do not add frontend implementation yet.
