@@ -1,8 +1,18 @@
 # JobPilot
 
-JobPilot is an MVP project being prepared for a 20-day sprint. This initial step only sets up the repository structure and local infrastructure services.
+JobPilot 是一个面向求职流程管理的 MVP 项目。当前已经完成本地基础设施、后端 FastAPI 骨架、核心业务表，以及四个核心业务模块的最小 API 闭环。
 
-## Directory Structure
+当前后端已支持：
+
+- 健康检查：`GET /health`、`GET /health/db`
+- 简历模块：`/api/v1/resumes`
+- 岗位模块：`/api/v1/jobs`
+- 匹配结果模块：`/api/v1/matches`
+- 投递记录模块：`/api/v1/applications`
+
+当前仍然保持 MVP 范围：不包含前端实现、认证登录、AI/RAG、自动提醒、状态机流转、文件上传或生产部署配置。
+
+## 目录结构
 
 ```text
 JobPilot/
@@ -22,38 +32,44 @@ JobPilot/
 └── README.md
 ```
 
-## Start Containers
+## 启动本地服务
 
 ```powershell
 docker compose up -d
 ```
 
-## Stop Containers
+后端启动方式：
+
+```powershell
+uv --cache-dir .uv-cache --directory backend run uvicorn app.main:app --reload
+```
+
+## 停止本地服务
 
 ```powershell
 docker compose down
 ```
 
-To stop containers and remove local named volumes:
+停止容器并删除本地命名卷：
 
 ```powershell
 docker compose down -v
 ```
 
-## View Logs
+## 查看日志
 
 ```powershell
 docker compose logs -f
 ```
 
-For one service:
+查看单个服务：
 
 ```powershell
 docker compose logs -f postgres
 docker compose logs -f redis
 ```
 
-## Connection Information
+## 连接信息
 
 PostgreSQL:
 
@@ -70,12 +86,12 @@ Redis:
 - Port: `26379`
 - URL: `redis://localhost:26379/0`
 
-## Verify pgvector
+## 验证 pgvector
 
-After PostgreSQL is running, verify that the `vector` extension is installed:
+PostgreSQL 启动后，可以验证 `vector` 扩展是否已安装：
 
 ```powershell
 docker compose exec postgres psql -U postgres -d jobpilot -c "SELECT extname, extversion FROM pg_extension WHERE extname = 'vector';"
 ```
 
-You should see one row for the `vector` extension.
+如果看到一行 `vector` 记录，说明扩展已启用。
