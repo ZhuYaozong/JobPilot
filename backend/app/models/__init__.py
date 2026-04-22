@@ -1,5 +1,6 @@
 from app.models.application_event import ApplicationEvent
 from app.models.application_record import ApplicationRecord
+from app.models.generated_artifact import GeneratedArtifact
 from app.models.job_posting import JobPosting
 from app.models.match_result import MatchResult
 from app.models.resume import Resume
@@ -9,6 +10,7 @@ from app.models.user import User
 __all__ = [
     "ApplicationEvent",
     "ApplicationRecord",
+    "GeneratedArtifact",
     "JobPosting",
     "MatchResult",
     "Resume",

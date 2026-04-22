@@ -15,7 +15,7 @@ def client() -> TestClient:
 
 @pytest.fixture
 def test_marker() -> str:
-    return f"pytest-step85-{uuid4().hex}"
+    return f"pytest-jobpilot-{uuid4().hex}"
 
 
 @pytest.fixture

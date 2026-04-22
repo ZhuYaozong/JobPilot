@@ -31,12 +31,16 @@ def test_application_transition_updates_stage_and_writes_event(
 
     assert events.status_code == 200
     event_data = events.json()
-    assert any(
-        event["event_type"] == "stage_changed"
+    matching_events = [
+        event
+        for event in event_data
+        if event["event_type"] == "stage_changed"
         and event["from_stage"] == "saved"
         and event["to_stage"] == "applied"
-        for event in event_data
-    )
+    ]
+    assert matching_events
+    assert matching_events[0]["payload_json"] == {"source": test_marker}
+    assert matching_events[0]["note"] == f"{test_marker} stage change"
 
 
 def test_transition_missing_application_returns_404(client: TestClient) -> None:
