@@ -1,4 +1,10 @@
 """Pydantic schemas will live here when the API grows."""
+from app.schemas.application_record import (
+    ApplicationRecordCreate,
+    ApplicationRecordListItem,
+    ApplicationRecordRead,
+    ApplicationRecordUpdate,
+)
 from app.schemas.job_posting import (
     JobPostingCreate,
     JobPostingListItem,
@@ -14,6 +20,10 @@ from app.schemas.match_result import (
 from app.schemas.resume import ResumeCreate, ResumeListItem, ResumeRead, ResumeUpdate
 
 __all__ = [
+    "ApplicationRecordCreate",
+    "ApplicationRecordListItem",
+    "ApplicationRecordRead",
+    "ApplicationRecordUpdate",
     "JobPostingCreate",
     "JobPostingListItem",
     "JobPostingRead",
