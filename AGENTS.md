@@ -2,11 +2,11 @@
 
 ## Current Stage
 
-This repository is in step 2: backend project skeleton and database wiring.
+This repository is in step 4: Resume module minimal API loop.
 
 ## Scope Rules
 
-- Do not expand scope beyond the requested backend skeleton and database wiring work.
+- Do not expand scope beyond the requested Resume module API work.
 - Keep the repository simple, runnable, and easy to explain.
 - Do not add real AI integration yet.
 - Do not add frontend implementation yet.

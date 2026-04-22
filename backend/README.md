@@ -1,6 +1,6 @@
 # JobPilot Backend
 
-JobPilot 后端当前是一个最小 FastAPI 工程。现阶段已经完成应用骨架、配置管理、PostgreSQL 异步访问、SQLAlchemy、Alembic、健康检查，以及 MVP 第一批核心业务表。
+JobPilot 后端当前是一个最小 FastAPI 工程。现阶段已经完成应用骨架、配置管理、PostgreSQL 异步访问、SQLAlchemy、Alembic、健康检查、MVP 第一批核心业务表，以及 Resume 模块的最小 API 闭环。
 
 ## 环境要求
 
@@ -33,6 +33,16 @@ uv --directory backend run uvicorn app.main:app --reload
 
 - `GET http://localhost:8000/health`
 - `GET http://localhost:8000/health/db`
+- `POST http://localhost:8000/api/v1/resumes`
+- `GET http://localhost:8000/api/v1/resumes`
+- `GET http://localhost:8000/api/v1/resumes/{resume_id}`
+- `PATCH http://localhost:8000/api/v1/resumes/{resume_id}`
+
+如果默认 uv 缓存目录不可用：
+
+```powershell
+uv --cache-dir .uv-cache --directory backend run uvicorn app.main:app --reload
+```
 
 ## 执行 Alembic 迁移
 
@@ -64,21 +74,67 @@ uv --directory backend run alembic current
 - `match_results`：保存某份简历和某个岗位之间的匹配分数、优势、劣势、缺失关键词和建议。
 - `application_records`：保存某份简历对某个岗位的投递/跟进状态、渠道、下一步动作和备注。
 
-本轮完成：
+## Resume API
+
+当前 Resume 模块支持最小闭环：
+
+- 创建简历：`POST /api/v1/resumes`
+- 简历列表：`GET /api/v1/resumes?limit=20&offset=0`
+- 简历详情：`GET /api/v1/resumes/{resume_id}`
+- 更新简历：`PATCH /api/v1/resumes/{resume_id}`
+
+列表接口默认按 `created_at DESC` 返回。当前不支持删除、搜索、复杂过滤或文件上传。
+
+### 调用示例
+
+创建简历：
+
+```powershell
+curl.exe -X POST http://localhost:8000/api/v1/resumes `
+  -H "Content-Type: application/json" `
+  -d "{\"title\":\"后端开发简历\",\"raw_text\":\"熟悉 FastAPI、PostgreSQL 和 SQLAlchemy。\",\"content_hash\":\"demo-resume-hash-001\",\"source_type\":\"manual\"}"
+```
+
+查看列表：
+
+```powershell
+curl.exe "http://localhost:8000/api/v1/resumes?limit=20&offset=0"
+```
+
+查看详情：
+
+```powershell
+curl.exe http://localhost:8000/api/v1/resumes/1
+```
+
+更新简历：
+
+```powershell
+curl.exe -X PATCH http://localhost:8000/api/v1/resumes/1 `
+  -H "Content-Type: application/json" `
+  -d "{\"title\":\"后端开发简历 v2\",\"parse_status\":\"parsed\",\"parsed_json\":{\"skills\":[\"FastAPI\",\"PostgreSQL\",\"SQLAlchemy\"]}}"
+```
+
+本阶段完成：
 
 - 新增 `Resume`、`JobPosting`、`MatchResult`、`ApplicationRecord` 四个 SQLAlchemy 模型。
 - 使用 JSONB 保存简历解析结果、JD 解析结果和匹配分析中的结构化字段。
 - 使用外键关联 `match_results` / `application_records` 到 `resumes` 和 `job_postings`。
 - 生成并执行 Alembic 迁移，创建 MVP 第一批业务表。
 - 保留已有 `users` 表和已有用户表迁移，不删除、不重命名、不重构。
+- 新增 Resume 的 Pydantic schemas。
+- 新增 Resume 的创建、列表、详情、更新接口。
 
-本轮故意没做：
+本阶段故意没做：
 
 - 没有写完整 CRUD API。
+- 没有写 delete 接口。
 - 没有写 service 层业务逻辑。
 - 没有做认证、登录或权限系统。
 - 没有接入 AI、RAG、LangChain 或 LangGraph。
 - 没有加入 pgvector 字段。
+- 没有写文件上传或对象存储。
+- 没有写 Redis 业务逻辑。
 - 没有写前端实现。
 
 ## 目录结构
@@ -92,7 +148,8 @@ backend/
 │   └── script.py.mako
 ├── app/
 │   ├── api/
-│   │   └── health.py
+│   │   ├── health.py
+│   │   └── resumes.py
 │   ├── core/
 │   │   └── config.py
 │   ├── db/
@@ -105,6 +162,7 @@ backend/
 │   │   ├── resume.py
 │   │   └── user.py
 │   ├── schemas/
+│   │   └── resume.py
 │   └── main.py
 ├── .env.example
 ├── alembic.ini
@@ -125,6 +183,7 @@ backend/
 - Alembic 读取模型 metadata 并执行迁移
 - 一个最小 `User` 模型
 - 第一批 MVP 核心业务模型和数据库表
+- Resume 模块最小 API 闭环
 
 未完成：
 
@@ -132,6 +191,7 @@ backend/
 - 真实 AI 集成
 - RAG、LangChain 或 LangGraph
 - 认证登录
-- 完整 CRUD
+- 完整 CRUD 和删除接口
+- JobPosting / MatchResult / ApplicationRecord API
 - service 层业务逻辑
 - 生产 Dockerfile、Nginx 或 CI/CD
