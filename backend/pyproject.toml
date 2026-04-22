@@ -6,10 +6,17 @@ dependencies = [
     "alembic>=1.18.4",
     "asyncpg>=0.31.0",
     "fastapi>=0.136.0",
+    "httpx>=0.28.1",
     "pydantic-settings>=2.14.0",
+    "pytest>=9.0.2",
     "sqlalchemy>=2.0.49",
     "uvicorn>=0.45.0",
 ]
+
+[tool.pytest.ini_options]
+addopts = ["-p", "no:cacheprovider"]
+pythonpath = ["."]
+testpaths = ["tests"]
 
 [[tool.uv.index]]
 url = "https://pypi.tuna.tsinghua.edu.cn/simple"
