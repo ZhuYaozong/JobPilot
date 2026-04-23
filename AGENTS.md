@@ -2,13 +2,13 @@
 
 ## Current Stage
 
-This repository is in step 12: minimal MatchResult AI analysis loop.
+This repository is in step 13: minimal Cover Letter draft generation loop.
 
 ## Scope Rules
 
-- Do not expand scope beyond the requested JD / Resume parsing and MatchResult AI analysis API work.
+- Do not expand scope beyond the requested JD / Resume parsing, MatchResult AI analysis, and Cover Letter draft generation API work.
 - Keep the repository simple, runnable, and easy to explain.
-- Do not add real AI capabilities beyond the existing JD structured parsing, Resume structured parsing, and MatchResult AI analysis loops.
+- Do not add real AI capabilities beyond the existing JD structured parsing, Resume structured parsing, MatchResult AI analysis, and Cover Letter draft generation loops.
 - Do not add frontend implementation yet.
 - Do not add complex backend business logic yet.
 - Do not add authentication, full CRUD, RAG, LangChain, LangGraph, pgAdmin, MinIO, Nginx, CI/CD, Dockerfile, or backend containers in this stage.
@@ -17,7 +17,8 @@ This repository is in step 12: minimal MatchResult AI analysis loop.
 - Current scope adds GeneratedArtifact as the AI output carrying layer, but still does not add real AI generation.
 - Step 10 added the first real AI capability: JD structured parsing into job_postings.parsed_json.
 - Step 11 added the second real AI capability: Resume structured parsing into resumes.parsed_json.
-- Current scope adds the third real AI capability: MatchResult generation from structured Resume and structured JD.
+- Step 12 added the third real AI capability: MatchResult generation from structured Resume and structured JD.
+- Current scope adds the first generation capability: Cover Letter draft generation into generated_artifacts.
 - Do not add LangChain, LangGraph, RAG, batch parsing, async queues, streaming, or other AI workflows in this stage.
 
 ## Working Style

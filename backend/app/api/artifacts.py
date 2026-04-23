@@ -7,12 +7,14 @@ from app.models.application_record import ApplicationRecord
 from app.models.generated_artifact import GeneratedArtifact
 from app.models.job_posting import JobPosting
 from app.models.resume import Resume
+from app.schemas.cover_letter_generation import CoverLetterGenerateRequest
 from app.schemas.generated_artifact import (
     GeneratedArtifactCreate,
     GeneratedArtifactListItem,
     GeneratedArtifactRead,
     GeneratedArtifactUpdate,
 )
+from app.services.cover_letter_service import generate_cover_letter
 
 router = APIRouter(prefix="/api/v1/artifacts", tags=["artifacts"])
 
@@ -100,6 +102,18 @@ async def list_artifacts(
     )
     result = await db.execute(statement)
     return list(result.scalars().all())
+
+
+@router.post(
+    "/generate-cover-letter",
+    response_model=GeneratedArtifactRead,
+    status_code=201,
+)
+async def generate_cover_letter_artifact(
+    payload: CoverLetterGenerateRequest,
+    db: AsyncSession = Depends(get_db),
+) -> GeneratedArtifact:
+    return await generate_cover_letter(db, payload)
 
 
 @router.get("/{artifact_id}", response_model=GeneratedArtifactRead)
