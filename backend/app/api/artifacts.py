@@ -14,7 +14,9 @@ from app.schemas.generated_artifact import (
     GeneratedArtifactRead,
     GeneratedArtifactUpdate,
 )
+from app.schemas.interview_prep_generation import InterviewPrepGenerateRequest
 from app.services.cover_letter_service import generate_cover_letter
+from app.services.interview_prep_service import generate_interview_prep
 
 router = APIRouter(prefix="/api/v1/artifacts", tags=["artifacts"])
 
@@ -114,6 +116,18 @@ async def generate_cover_letter_artifact(
     db: AsyncSession = Depends(get_db),
 ) -> GeneratedArtifact:
     return await generate_cover_letter(db, payload)
+
+
+@router.post(
+    "/generate-interview-prep",
+    response_model=GeneratedArtifactRead,
+    status_code=201,
+)
+async def generate_interview_prep_artifact(
+    payload: InterviewPrepGenerateRequest,
+    db: AsyncSession = Depends(get_db),
+) -> GeneratedArtifact:
+    return await generate_interview_prep(db, payload)
 
 
 @router.get("/{artifact_id}", response_model=GeneratedArtifactRead)
