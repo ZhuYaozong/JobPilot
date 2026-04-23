@@ -4,6 +4,9 @@ import httpx
 
 from app.core.config import settings
 
+LLM_REQUEST_TIMEOUT_SECONDS = 60.0
+LLM_CONNECT_TIMEOUT_SECONDS = 10.0
+
 
 class LLMConfigError(Exception):
     pass
@@ -36,7 +39,11 @@ class LLMClient:
         url = f"{settings.llm_base_url.rstrip('/')}/chat/completions"
 
         try:
-            async with httpx.AsyncClient() as client:
+            timeout = httpx.Timeout(
+                LLM_REQUEST_TIMEOUT_SECONDS,
+                connect=LLM_CONNECT_TIMEOUT_SECONDS,
+            )
+            async with httpx.AsyncClient(timeout=timeout) as client:
                 response = await client.post(url, json=payload, headers=headers)
         except httpx.HTTPError as exc:
             raise LLMClientError("LLM request failed") from exc
@@ -55,5 +62,9 @@ class LLMClient:
 
         if not isinstance(content, str) or not content.strip():
             raise LLMClientError("LLM response content is empty")
-
+        print("=================================")
+        print(data)
+        print("+++++++++++++++++++++++++++++++++")
+        print(response.text, flush=True)
+        print("=================================")
         return content

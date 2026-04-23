@@ -32,6 +32,24 @@ Job description:
 """
 
 
+def load_llm_json(raw_result: str) -> object:
+    text = raw_result.strip()
+    try:
+        return json.loads(text)
+    except JSONDecodeError:
+        pass
+
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines and lines[0].strip().startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+
+    return json.loads(text)
+
+
 async def parse_job_posting(
     db: AsyncSession,
     job: JobPosting,
@@ -51,7 +69,7 @@ async def parse_job_posting(
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     try:
-        parsed_data = json.loads(raw_result)
+        parsed_data = load_llm_json(raw_result)
         result = JobParsingResult.model_validate(parsed_data)
     except JSONDecodeError as exc:
         raise HTTPException(status_code=502, detail="LLM response is not valid JSON") from exc

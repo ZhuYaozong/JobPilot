@@ -82,3 +82,34 @@ def test_parse_invalid_llm_json_returns_502(
 
     assert response.status_code == 502
     assert response.json()["detail"] == "LLM response is not valid JSON"
+
+
+def test_parse_accepts_llm_json_code_fence(
+    client: TestClient,
+    create_job,
+    monkeypatch,
+) -> None:
+    async def fake_generate_text(self, prompt: str) -> str:
+        return """
+        ```json
+        {
+          "summary": "Role returned inside a JSON code fence.",
+          "responsibilities": ["Build AI applications"],
+          "required_skills": ["Python"],
+          "preferred_skills": [],
+          "keywords": ["ai"],
+          "seniority": null,
+          "city": "Hangzhou"
+        }
+        ```
+        """
+
+    monkeypatch.setattr(LLMClient, "generate_text", fake_generate_text)
+    job = create_job()
+
+    response = client.post(f"/api/v1/jobs/{job['id']}/parse")
+
+    assert response.status_code == 200
+    parsed_json = response.json()["parsed_json"]
+    assert parsed_json["summary"] == "Role returned inside a JSON code fence."
+    assert parsed_json["city"] == "Hangzhou"
