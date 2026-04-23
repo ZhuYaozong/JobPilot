@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.models.resume import Resume
 from app.schemas.resume import ResumeCreate, ResumeListItem, ResumeRead, ResumeUpdate
+from app.services.resume_parsing_service import parse_resume
 
 router = APIRouter(prefix="/api/v1/resumes", tags=["resumes"])
 
@@ -51,6 +52,15 @@ async def read_resume(
     db: AsyncSession = Depends(get_db),
 ) -> Resume:
     return await get_resume_or_404(db, resume_id)
+
+
+@router.post("/{resume_id}/parse", response_model=ResumeRead)
+async def parse_resume_detail(
+    resume_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> Resume:
+    resume = await get_resume_or_404(db, resume_id)
+    return await parse_resume(db, resume)
 
 
 @router.patch("/{resume_id}", response_model=ResumeRead)
