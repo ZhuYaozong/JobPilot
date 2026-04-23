@@ -2,11 +2,11 @@
 
 ## Current Stage
 
-This repository is in step 14: minimal Interview Prep generation loop.
+This repository is in step 15: minimal GeneratedArtifact feedback loop.
 
 ## Scope Rules
 
-- Do not expand scope beyond the requested JD / Resume parsing, MatchResult AI analysis, Cover Letter draft generation, and Interview Prep generation API work.
+- Do not expand scope beyond the requested JD / Resume parsing, MatchResult AI analysis, Cover Letter draft generation, Interview Prep generation, and GeneratedArtifact feedback API work.
 - Keep the repository simple, runnable, and easy to explain.
 - Do not add real AI capabilities beyond the existing JD structured parsing, Resume structured parsing, MatchResult AI analysis, Cover Letter draft generation, and Interview Prep generation loops.
 - Do not add frontend implementation yet.
@@ -19,7 +19,9 @@ This repository is in step 14: minimal Interview Prep generation loop.
 - Step 11 added the second real AI capability: Resume structured parsing into resumes.parsed_json.
 - Step 12 added the third real AI capability: MatchResult generation from structured Resume and structured JD.
 - Step 13 added the first generation capability: Cover Letter draft generation into generated_artifacts.
-- Current scope adds the second generation capability: Interview Prep generation into generated_artifacts.
+- Step 14 added the second generation capability: Interview Prep generation into generated_artifacts.
+- Current scope adds the minimal feedback loop for generated_artifacts through artifact_feedback_events.
+- Do not add a full evaluation system, feedback aggregation, dashboards, automatic regeneration, or status mutation from feedback in this stage.
 - Do not add LangChain, LangGraph, RAG, batch parsing, async queues, streaming, or other AI workflows in this stage.
 
 ## Working Style

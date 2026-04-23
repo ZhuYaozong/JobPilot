@@ -7,6 +7,11 @@ from app.models.application_record import ApplicationRecord
 from app.models.generated_artifact import GeneratedArtifact
 from app.models.job_posting import JobPosting
 from app.models.resume import Resume
+from app.schemas.artifact_feedback import (
+    ArtifactFeedbackCreate,
+    ArtifactFeedbackListItem,
+    ArtifactFeedbackRead,
+)
 from app.schemas.cover_letter_generation import CoverLetterGenerateRequest
 from app.schemas.generated_artifact import (
     GeneratedArtifactCreate,
@@ -15,6 +20,10 @@ from app.schemas.generated_artifact import (
     GeneratedArtifactUpdate,
 )
 from app.schemas.interview_prep_generation import InterviewPrepGenerateRequest
+from app.services.artifact_feedback_service import (
+    create_artifact_feedback,
+    list_artifact_feedback,
+)
 from app.services.cover_letter_service import generate_cover_letter
 from app.services.interview_prep_service import generate_interview_prep
 
@@ -128,6 +137,29 @@ async def generate_interview_prep_artifact(
     db: AsyncSession = Depends(get_db),
 ) -> GeneratedArtifact:
     return await generate_interview_prep(db, payload)
+
+
+@router.post(
+    "/{artifact_id}/feedback",
+    response_model=ArtifactFeedbackRead,
+    status_code=201,
+)
+async def create_feedback_for_artifact(
+    artifact_id: int,
+    payload: ArtifactFeedbackCreate,
+    db: AsyncSession = Depends(get_db),
+):
+    return await create_artifact_feedback(db, artifact_id, payload)
+
+
+@router.get("/{artifact_id}/feedback", response_model=list[ArtifactFeedbackListItem])
+async def list_feedback_for_artifact(
+    artifact_id: int,
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    db: AsyncSession = Depends(get_db),
+):
+    return await list_artifact_feedback(db, artifact_id, limit, offset)
 
 
 @router.get("/{artifact_id}", response_model=GeneratedArtifactRead)
