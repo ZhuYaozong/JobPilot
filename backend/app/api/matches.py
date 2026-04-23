@@ -6,12 +6,14 @@ from app.db.session import get_db
 from app.models.job_posting import JobPosting
 from app.models.match_result import MatchResult
 from app.models.resume import Resume
+from app.schemas.match_analysis import MatchAnalysisRequest
 from app.schemas.match_result import (
     MatchResultCreate,
     MatchResultListItem,
     MatchResultRead,
     MatchResultUpdate,
 )
+from app.services.match_analysis_service import analyze_match
 
 router = APIRouter(prefix="/api/v1/matches", tags=["matches"])
 
@@ -71,6 +73,14 @@ async def list_matches(
     )
     result = await db.execute(statement)
     return list(result.scalars().all())
+
+
+@router.post("/analyze", response_model=MatchResultRead)
+async def analyze_match_result(
+    payload: MatchAnalysisRequest,
+    db: AsyncSession = Depends(get_db),
+) -> MatchResult:
+    return await analyze_match(db, payload)
 
 
 @router.get("/{match_id}", response_model=MatchResultRead)
