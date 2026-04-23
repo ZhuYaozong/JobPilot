@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     app_debug: bool = True
     database_url: str = "postgresql+asyncpg://postgres:123456@localhost:25432/jobpilot"
     redis_url: str = "redis://localhost:26379/0"
+    llm_base_url: str | None = None
+    llm_api_key: str | None = None
+    llm_model_name: str | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",

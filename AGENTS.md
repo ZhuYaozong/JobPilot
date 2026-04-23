@@ -2,11 +2,11 @@
 
 ## Current Stage
 
-This repository is in step 9: GeneratedArtifact minimal backend loop.
+This repository is in step 10: minimal JD structured parsing AI loop.
 
 ## Scope Rules
 
-- Do not expand scope beyond the requested GeneratedArtifact module API work.
+- Do not expand scope beyond the requested JD parsing AI API work.
 - Keep the repository simple, runnable, and easy to explain.
 - Do not add real AI integration yet.
 - Do not add frontend implementation yet.
@@ -15,6 +15,8 @@ This repository is in step 9: GeneratedArtifact minimal backend loop.
 - Current scope adds ResumeVersion and ApplicationEvent as workflow carrying capabilities on top of the completed Resume / JobPosting / MatchResult / ApplicationRecord minimal loops.
 - Current test scope only covers the key workflow loop for ResumeVersion and Application transition; it is not a complete testing system.
 - Current scope adds GeneratedArtifact as the AI output carrying layer, but still does not add real AI generation.
+- Current scope adds the first real AI capability: JD structured parsing into job_postings.parsed_json.
+- Do not add LangChain, LangGraph, RAG, batch parsing, async queues, streaming, or other AI workflows in this stage.
 
 ## Working Style
 

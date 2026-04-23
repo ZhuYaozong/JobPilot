@@ -10,6 +10,7 @@ from app.schemas.job_posting import (
     JobPostingRead,
     JobPostingUpdate,
 )
+from app.services.job_parsing_service import parse_job_posting
 
 router = APIRouter(prefix="/api/v1/jobs", tags=["jobs"])
 
@@ -56,6 +57,15 @@ async def read_job(
     db: AsyncSession = Depends(get_db),
 ) -> JobPosting:
     return await get_job_or_404(db, job_id)
+
+
+@router.post("/{job_id}/parse", response_model=JobPostingRead)
+async def parse_job(
+    job_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> JobPosting:
+    job = await get_job_or_404(db, job_id)
+    return await parse_job_posting(db, job)
 
 
 @router.patch("/{job_id}", response_model=JobPostingRead)
