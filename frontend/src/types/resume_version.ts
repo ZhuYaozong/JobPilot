@@ -1,0 +1,33 @@
+import type { ISODateString } from "./common";
+
+export interface ResumeVersionListItem {
+  id: number;
+  resume_id: number;
+  job_posting_id: number | null;
+  version_no: number;
+  version_label: string;
+  content_format: string;
+  source_type: string;
+  is_active: boolean;
+  created_at: ISODateString;
+  updated_at: ISODateString;
+}
+
+export interface ResumeVersion extends ResumeVersionListItem {
+  content: string;
+  change_summary: string | null;
+}
+
+export interface ResumeVersionCreate {
+  resume_id: number;
+  version_no: number;
+  version_label: string;
+  content: string;
+  job_posting_id?: number | null;
+  content_format?: string;
+  source_type?: string;
+  change_summary?: string | null;
+  is_active?: boolean;
+}
+
+export type ResumeVersionUpdate = Partial<ResumeVersionCreate>;
