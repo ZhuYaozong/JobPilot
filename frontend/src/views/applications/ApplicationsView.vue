@@ -2,8 +2,8 @@
   <div class="page-stack">
     <SectionCard
       title="投递跟踪"
-      subtitle="当前页面已接入真实 ApplicationRecord / ApplicationEvent API，支持列表、详情、创建、transition 与事件时间线闭环。"
-      eyebrow="Workflow Workspace"
+      subtitle="当前页面已接入真实投递接口，支持列表、详情、创建、transition 与事件时间线闭环。"
+      eyebrow="工作流工作台"
     >
       <div class="api-note">
         <strong>已对齐接口</strong>
@@ -30,9 +30,11 @@
 
     <div class="resource-workspace">
       <SectionCard
-        title="ApplicationRecord 列表"
-        subtitle="左侧列表直接调用后端 /api/v1/applications，并复用 Resume / JobPosting 轻量映射展示更友好的标签。"
+        class="resource-panel resource-panel--list"
+        title="投递记录列表"
+        subtitle="左侧列表直接调用后端 /api/v1/applications，并复用简历 / 岗位轻量映射展示更友好的标签。"
       >
+        <div class="resource-list-shell">
         <div v-if="applicationsLoading" class="panel-loading">正在加载投递记录列表...</div>
         <div v-else-if="applications.length" class="resource-list">
           <button
@@ -44,112 +46,113 @@
             @click="selectApplication(application.id)"
           >
             <div class="resource-item__header">
-              <strong>Application #{{ application.id }}</strong>
-              <el-tag size="small" effect="plain">{{ application.current_stage }}</el-tag>
+              <strong>投递 #{{ application.id }}</strong>
+              <el-tag size="small" effect="plain">{{ formatApplicationStage(application.current_stage) }}</el-tag>
             </div>
             <p>{{ getResumeLabel(application.resume_id) }}</p>
             <small>{{ getJobLabel(application.job_posting_id) }}</small>
-            <small>{{ application.next_action || "暂无 next_action" }}</small>
+            <small>{{ application.next_action || "暂无下一步动作" }}</small>
             <small>
               {{
                 application.next_action_at
-                  ? `Next: ${formatDateTime(application.next_action_at)}`
-                  : `Updated: ${formatDateTime(application.updated_at)}`
+                  ? `待办时间：${formatDateTime(application.next_action_at)}`
+                  : `最近更新：${formatDateTime(application.updated_at)}`
               }}
             </small>
           </button>
         </div>
         <EmptyStateCard
           v-else
-          eyebrow="No ApplicationRecord"
+          eyebrow="暂无投递记录"
           title="还没有投递记录"
-          description="先在下方选择一组 Resume 和 JobPosting，创建第一条 ApplicationRecord。"
+          description="先在下方选择一组简历和岗位，创建第一条投递记录。"
         />
+        </div>
       </SectionCard>
 
       <SectionCard
-        title="ApplicationRecord 详情"
+        title="投递记录详情"
         subtitle="右侧展示投递详情、当前阶段和 ApplicationEvent 时间线。"
       >
         <div v-if="detailLoading" class="panel-loading">正在加载投递记录详情...</div>
         <EmptyStateCard
           v-else-if="!selectedApplication"
-          eyebrow="Select ApplicationRecord"
+          eyebrow="选择投递记录"
           title="先从左侧选择一条投递记录"
-          description="选中后会展示 current_stage、apply_channel、next_action、notes 和 ApplicationEvent 时间线。"
+          description="选中后会展示当前阶段、投递渠道、下一步动作、备注和事件时间线。"
         />
         <div v-else class="detail-stack">
           <div class="detail-actions">
             <div class="detail-title">
-              <h3>Application #{{ selectedApplication.id }}</h3>
+              <h3>投递 #{{ selectedApplication.id }}</h3>
               <p>{{ getApplicationContextSummary(selectedApplication) }}</p>
             </div>
 
             <div class="stage-hero">
-              <span>Current Stage</span>
-              <strong>{{ selectedApplication.current_stage }}</strong>
+              <span>当前阶段</span>
+              <strong>{{ formatApplicationStage(selectedApplication.current_stage) }}</strong>
             </div>
           </div>
 
           <div class="application-link-grid">
             <article>
-              <span>resume_id</span>
+              <span>关联简历</span>
               <strong>{{ getResumeLabel(selectedApplication.resume_id) }}</strong>
-              <p>{{ formatRawId("Resume", selectedApplication.resume_id) }}</p>
+              <p>{{ formatRawId("简历", selectedApplication.resume_id) }}</p>
             </article>
             <article>
-              <span>job_posting_id</span>
+              <span>关联岗位</span>
               <strong>{{ getJobLabel(selectedApplication.job_posting_id) }}</strong>
-              <p>{{ formatRawId("JobPosting", selectedApplication.job_posting_id) }}</p>
+              <p>{{ formatRawId("岗位", selectedApplication.job_posting_id) }}</p>
             </article>
             <article>
-              <span>apply_channel</span>
+              <span>投递渠道</span>
               <strong>{{ selectedApplication.apply_channel || "-" }}</strong>
             </article>
           </div>
 
           <div class="detail-meta">
             <article>
-              <span>current_stage</span>
-              <strong>{{ selectedApplication.current_stage }}</strong>
+              <span>当前阶段</span>
+              <strong>{{ formatApplicationStage(selectedApplication.current_stage) }}</strong>
             </article>
             <article>
-              <span>applied_at</span>
+              <span>投递时间</span>
               <strong>{{ formatDateTime(selectedApplication.applied_at) }}</strong>
             </article>
             <article>
-              <span>next_action_at</span>
+              <span>待办时间</span>
               <strong>{{ formatDateTime(selectedApplication.next_action_at) }}</strong>
             </article>
             <article>
-              <span>created_at</span>
+              <span>创建时间</span>
               <strong>{{ formatDateTime(selectedApplication.created_at) }}</strong>
             </article>
             <article>
-              <span>updated_at</span>
+              <span>最近更新</span>
               <strong>{{ formatDateTime(selectedApplication.updated_at) }}</strong>
             </article>
             <article>
-              <span>record_id</span>
+              <span>记录编号</span>
               <strong>#{{ selectedApplication.id }}</strong>
             </article>
           </div>
 
           <div class="detail-field">
-            <span>next_action</span>
+            <span>下一步动作</span>
             <p class="detail-code">{{ selectedApplication.next_action || "-" }}</p>
           </div>
 
           <div class="detail-field">
-            <span>notes</span>
+            <span>备注 notes</span>
             <pre class="text-block">{{
-              selectedApplication.notes || "当前没有 notes。"
+              selectedApplication.notes || "当前没有备注。"
             }}</pre>
           </div>
 
           <div class="detail-field">
             <div class="detail-field__header">
-              <span>ApplicationEvent 时间线</span>
+              <span>事件时间线 ApplicationEvent</span>
               <small>{{ applicationEvents.length }} 条事件</small>
             </div>
 
@@ -164,9 +167,9 @@
               >
                 <div class="event-item__header">
                   <div>
-                    <strong>{{ event.event_type }}</strong>
+                    <strong>{{ formatApplicationEventType(event.event_type) }}</strong>
                     <p class="stage-flow">
-                      {{ event.from_stage || "-" }} -> {{ event.to_stage || "-" }}
+                      {{ formatApplicationStage(event.from_stage) }} → {{ formatApplicationStage(event.to_stage) }}
                     </p>
                   </div>
                   <small>{{ formatDateTime(event.created_at) }}</small>
@@ -174,24 +177,24 @@
 
                 <div class="event-item__meta">
                   <article>
-                    <span>event_at</span>
+                    <span>事件时间</span>
                     <strong>{{ formatDateTime(event.event_at) }}</strong>
                   </article>
                   <article>
-                    <span>operator_type</span>
-                    <strong>{{ event.operator_type }}</strong>
+                    <span>操作来源</span>
+                    <strong>{{ formatOperatorType(event.operator_type) }}</strong>
                   </article>
                   <article>
-                    <span>application_record_id</span>
+                    <span>所属记录</span>
                     <strong>#{{ event.application_record_id }}</strong>
                   </article>
                 </div>
 
-                <p>{{ event.note || "当前事件没有 note。" }}</p>
+                <p>{{ event.note || "当前事件没有备注。" }}</p>
 
                 <JsonBlock
                   v-if="event.payload_json"
-                  title="payload_json"
+                  title="附加数据 payload_json"
                   caption="事件附加数据"
                   :value="event.payload_json"
                 />
@@ -207,14 +210,14 @@
 
     <div class="two-column">
       <SectionCard
-        title="创建 ApplicationRecord"
-        subtitle="表单字段严格对齐 ApplicationRecordCreate；ApplicationRecord 创建本身不依赖 parse。"
+        title="新建投递记录"
+        subtitle="表单字段严格对齐 ApplicationRecordCreate；投递记录创建本身不依赖 parse。"
       >
         <div class="analyze-stack">
           <div class="analyze-hint">
-            <p>Applications 页负责把已有 Resume / JobPosting 之后的投递状态记录下来。</p>
-            <p>Resume 选项会显示 parse_status，但这不是创建 ApplicationRecord 的前置硬校验。</p>
-            <p>若 Resume 或 JobPosting 资源为空，创建面板会禁用提交。</p>
+            <p>投递页负责把已有简历 / 岗位之后的投递状态记录下来。</p>
+            <p>简历选项会显示 parse_status，但这不是创建投递记录的前置硬校验。</p>
+            <p>若简历或岗位资源为空，创建面板会禁用提交。</p>
           </div>
 
           <p v-if="createUnavailableMessage" class="form-block-note">
@@ -222,27 +225,27 @@
           </p>
 
           <el-form label-position="top" class="create-form-grid" @submit.prevent>
-            <el-form-item label="resume_id" required>
+            <el-form-item label="简历" required>
               <el-select
                 v-model="createForm.resume_id"
                 filterable
-                placeholder="选择一份 Resume"
+                placeholder="选择一份简历"
                 :loading="referencesLoading"
               >
                 <el-option
                   v-for="resume in resumes"
                   :key="resume.id"
-                  :label="`${resume.title} (${resume.parse_status})`"
+                  :label="`${resume.title}（${formatParseStatus(resume.parse_status)}）`"
                   :value="resume.id"
                 />
               </el-select>
             </el-form-item>
 
-            <el-form-item label="job_posting_id" required>
+            <el-form-item label="岗位" required>
               <el-select
                 v-model="createForm.job_posting_id"
                 filterable
-                placeholder="选择一个 JobPosting"
+                placeholder="选择一个岗位"
                 :loading="referencesLoading"
               >
                 <el-option
@@ -254,32 +257,32 @@
               </el-select>
             </el-form-item>
 
-            <el-form-item label="current_stage" required>
+            <el-form-item label="当前阶段" required>
               <el-select
                 v-model="createForm.current_stage"
                 filterable
                 allow-create
                 default-first-option
                 :reserve-keyword="false"
-                placeholder="默认 saved"
+                placeholder="默认已收藏"
               >
                 <el-option
                   v-for="stage in stageSuggestions"
                   :key="stage"
-                  :label="stage"
+                  :label="formatApplicationStage(stage)"
                   :value="stage"
                 />
               </el-select>
             </el-form-item>
 
-            <el-form-item label="apply_channel">
+            <el-form-item label="投递渠道">
               <el-input
                 v-model="createForm.apply_channel"
                 placeholder="例如 boss、linkedin、referral"
               />
             </el-form-item>
 
-            <el-form-item label="applied_at">
+            <el-form-item label="投递时间">
               <el-input
                 v-model="createForm.applied_at"
                 type="datetime-local"
@@ -287,7 +290,7 @@
               />
             </el-form-item>
 
-            <el-form-item label="next_action_at">
+            <el-form-item label="待办时间">
               <el-input
                 v-model="createForm.next_action_at"
                 type="datetime-local"
@@ -295,14 +298,14 @@
               />
             </el-form-item>
 
-            <el-form-item class="create-form-grid__wide" label="next_action">
+            <el-form-item class="create-form-grid__wide" label="下一步动作">
               <el-input
                 v-model="createForm.next_action"
                 placeholder="例如三天后跟进 HR"
               />
             </el-form-item>
 
-            <el-form-item class="create-form-grid__wide" label="notes">
+            <el-form-item class="create-form-grid__wide" label="备注">
               <el-input
                 v-model="createForm.notes"
                 type="textarea"
@@ -321,7 +324,7 @@
                 :disabled="!canCreateApplication"
                 @click="handleCreateApplication"
               >
-                创建 ApplicationRecord
+                创建投递记录
               </el-button>
             </div>
           </el-form>
@@ -329,7 +332,7 @@
       </SectionCard>
 
       <SectionCard
-        title="执行 Transition"
+        title="执行阶段流转"
         subtitle="表单字段严格对齐 ApplicationTransitionRequest；当前只做最小流转闭环，不做复杂状态机。"
       >
         <div class="analyze-stack">
@@ -341,21 +344,21 @@
 
           <EmptyStateCard
             v-if="!selectedApplication"
-            eyebrow="Select ApplicationRecord"
-            title="先选择一条 ApplicationRecord"
-            description="选中后才可以执行 transition，并刷新详情与事件时间线。"
+            eyebrow="选择投递记录"
+            title="先选择一条投递记录"
+            description="选中后才可以执行阶段流转，并刷新详情与事件时间线。"
           />
 
           <template v-else>
             <p class="form-block-note">
-              当前流转对象：<strong>Application #{{ selectedApplication.id }}</strong>
+              当前流转对象：<strong>投递 #{{ selectedApplication.id }}</strong>
               <span class="form-block-note__sub">
                 {{ getApplicationContextSummary(selectedApplication) }}
               </span>
             </p>
 
             <el-form label-position="top" class="create-form-grid" @submit.prevent>
-              <el-form-item label="target_stage" required>
+              <el-form-item label="目标阶段" required>
                 <el-select
                   v-model="transitionForm.target_stage"
                   filterable
@@ -367,20 +370,20 @@
                   <el-option
                     v-for="stage in stageSuggestions"
                     :key="stage"
-                    :label="stage"
+                    :label="formatApplicationStage(stage)"
                     :value="stage"
                   />
                 </el-select>
               </el-form-item>
 
-              <el-form-item label="operator_type">
+              <el-form-item label="操作来源">
                 <el-input
                   v-model="transitionForm.operator_type"
                   placeholder="默认 user"
                 />
               </el-form-item>
 
-              <el-form-item label="next_action_at">
+              <el-form-item label="待办时间">
                 <el-input
                   v-model="transitionForm.next_action_at"
                   type="datetime-local"
@@ -388,7 +391,7 @@
                 />
               </el-form-item>
 
-              <el-form-item label="event_at">
+              <el-form-item label="事件时间">
                 <el-input
                   v-model="transitionForm.event_at"
                   type="datetime-local"
@@ -396,14 +399,14 @@
                 />
               </el-form-item>
 
-              <el-form-item class="create-form-grid__wide" label="next_action">
+              <el-form-item class="create-form-grid__wide" label="下一步动作">
                 <el-input
                   v-model="transitionForm.next_action"
                   placeholder="例如发送感谢邮件、跟进面试安排"
                 />
               </el-form-item>
 
-              <el-form-item class="create-form-grid__wide" label="notes">
+              <el-form-item class="create-form-grid__wide" label="备注">
                 <el-input
                   v-model="transitionForm.notes"
                   type="textarea"
@@ -412,16 +415,16 @@
                 />
               </el-form-item>
 
-              <el-form-item class="create-form-grid__wide" label="note">
+              <el-form-item class="create-form-grid__wide" label="事件备注">
                 <el-input
                   v-model="transitionForm.note"
                   type="textarea"
                   :rows="3"
-                  placeholder="ApplicationEvent note；例如从 saved 流转到 applied"
+                  placeholder="例如从 saved 流转到 applied"
                 />
               </el-form-item>
 
-              <el-form-item class="create-form-grid__wide" label="payload_json">
+              <el-form-item class="create-form-grid__wide" label="附加数据 payload_json">
                 <el-input
                   v-model="transitionForm.payload_json_text"
                   type="textarea"
@@ -432,7 +435,7 @@
 
               <div class="create-form-grid__wide create-form-actions">
                 <p class="create-form-hint">
-                  transition 成功后会刷新当前详情、事件时间线，并同步更新左侧列表里的 current_stage / next_action。
+                  transition 成功后会刷新当前详情、事件时间线，并同步更新左侧列表里的当前阶段和下一步动作。
                 </p>
                 <el-button
                   type="primary"
@@ -440,7 +443,7 @@
                   :disabled="!canTransition"
                   @click="handleTransitionApplication"
                 >
-                  执行 Transition
+                  执行流转
                 </el-button>
               </div>
             </el-form>
@@ -481,6 +484,12 @@ import type {
 } from "@/types/application_record";
 import { formatDateTime } from "@/utils/format";
 import { getErrorMessage } from "@/utils/http";
+import {
+  formatApplicationEventType,
+  formatApplicationStage,
+  formatOperatorType,
+  formatParseStatus,
+} from "@/utils/labels";
 
 interface ApplicationSelectionCriteria {
   resume_id: number;
@@ -600,7 +609,7 @@ const canTransition = computed(() => {
 
 const createUnavailableMessage = computed(() => {
   if (referencesLoading.value && !resumes.value.length && !jobs.value.length) {
-    return "正在加载 Resume 和 JobPosting 选项...";
+    return "正在加载简历和岗位选项...";
   }
 
   if (resumes.value.length && jobs.value.length) {
@@ -608,14 +617,14 @@ const createUnavailableMessage = computed(() => {
   }
 
   if (!resumes.value.length && !jobs.value.length) {
-    return "当前没有可用 Resume 和 JobPosting 选项，创建面板暂不可用。";
+    return "当前没有可用的简历和岗位选项，创建面板暂不可用。";
   }
 
   if (!resumes.value.length) {
-    return "当前没有可用 Resume 选项，请先在 /resumes 页面创建 Resume。";
+    return "当前没有可用简历选项，请先在简历页创建简历。";
   }
 
-  return "当前没有可用 JobPosting 选项，请先在 /jobs 页面创建 JobPosting。";
+  return "当前没有可用岗位选项，请先在岗位页创建岗位。";
 });
 
 function toTimestamp(value: string): number {
@@ -658,14 +667,14 @@ function parsePayloadJsonOrNull(value: string): JsonObject | null {
 
 function getResumeLabel(resumeId: number): string {
   const resume = resumeMap.value.get(resumeId);
-  return resume ? resume.title : `Resume #${resumeId}`;
+  return resume ? resume.title : `简历 #${resumeId}`;
 }
 
 function getJobLabel(jobPostingId: number): string {
   const job = jobMap.value.get(jobPostingId);
   return job
     ? `${job.company_name} · ${job.job_title}`
-    : `JobPosting #${jobPostingId}`;
+    : `岗位 #${jobPostingId}`;
 }
 
 function formatRawId(label: string, value: number | null): string {
@@ -675,7 +684,7 @@ function formatRawId(label: string, value: number | null): string {
 function getApplicationContextSummary(
   application: ApplicationRecordListItem,
 ): string {
-  return `${getResumeLabel(application.resume_id)} -> ${getJobLabel(
+  return `${getResumeLabel(application.resume_id)} → ${getJobLabel(
     application.job_posting_id,
   )}`;
 }
@@ -744,7 +753,7 @@ async function fetchApplicationDetail(applicationId: number) {
     selectedApplication.value = await getApplication(applicationId);
   } catch (error) {
     selectedApplication.value = null;
-    ElMessage.error(getErrorMessage(error, "ApplicationRecord 详情加载失败"));
+    ElMessage.error(getErrorMessage(error, "投递记录详情加载失败"));
   } finally {
     detailLoading.value = false;
   }
@@ -758,7 +767,7 @@ async function fetchApplicationEventsHistory(applicationId: number) {
     });
   } catch (error) {
     applicationEvents.value = [];
-    ElMessage.error(getErrorMessage(error, "ApplicationEvent 时间线加载失败"));
+    ElMessage.error(getErrorMessage(error, "事件时间线加载失败"));
   } finally {
     eventsLoading.value = false;
   }
@@ -812,7 +821,7 @@ async function fetchApplications(options?: {
       resetTransitionForm();
     }
   } catch (error) {
-    ElMessage.error(getErrorMessage(error, "ApplicationRecord 列表加载失败"));
+    ElMessage.error(getErrorMessage(error, "投递记录列表加载失败"));
   } finally {
     applicationsLoading.value = false;
   }
@@ -831,7 +840,7 @@ async function fetchReferences() {
   } else {
     resumes.value = [];
     ElMessage.error(
-      getErrorMessage(resumeResult.reason, "Resume 选项加载失败"),
+      getErrorMessage(resumeResult.reason, "简历选项加载失败"),
     );
   }
 
@@ -840,7 +849,7 @@ async function fetchReferences() {
   } else {
     jobs.value = [];
     ElMessage.error(
-      getErrorMessage(jobResult.reason, "JobPosting 选项加载失败"),
+      getErrorMessage(jobResult.reason, "岗位选项加载失败"),
     );
   }
 
@@ -879,7 +888,7 @@ function buildTransitionPayload(): ApplicationTransitionRequest {
 
 async function handleCreateApplication() {
   if (!canCreateApplication.value) {
-    ElMessage.warning("请先选择 resume_id、job_posting_id，并填写 current_stage");
+    ElMessage.warning("请先选择简历、岗位，并填写当前阶段");
     return;
   }
 
@@ -890,7 +899,7 @@ async function handleCreateApplication() {
     const created = await createApplication(payload);
     const createdId = extractApplicationId(created);
 
-    ElMessage.success("ApplicationRecord 创建成功");
+    ElMessage.success("投递记录已创建");
     resetCreateForm();
 
     await fetchApplications({
@@ -905,7 +914,7 @@ async function handleCreateApplication() {
           },
     });
   } catch (error) {
-    ElMessage.error(getErrorMessage(error, "创建 ApplicationRecord 失败"));
+    ElMessage.error(getErrorMessage(error, "创建投递记录失败"));
   } finally {
     createPending.value = false;
   }
@@ -913,12 +922,12 @@ async function handleCreateApplication() {
 
 async function handleTransitionApplication() {
   if (!selectedApplicationId.value) {
-    ElMessage.warning("请先选择一个 ApplicationRecord");
+    ElMessage.warning("请先选择一条投递记录");
     return;
   }
 
   if (!transitionForm.value.target_stage.trim()) {
-    ElMessage.warning("请先填写 target_stage");
+    ElMessage.warning("请先填写目标阶段");
     return;
   }
 
@@ -930,7 +939,7 @@ async function handleTransitionApplication() {
       buildTransitionPayload(),
     );
 
-    ElMessage.success("Application transition 执行成功");
+    ElMessage.success("阶段流转已完成");
 
     await Promise.all([
       fetchApplicationDetail(selectedApplicationId.value),
@@ -943,7 +952,7 @@ async function handleTransitionApplication() {
 
     resetTransitionForm();
   } catch (error) {
-    ElMessage.error(getErrorMessage(error, "执行 Application transition 失败"));
+    ElMessage.error(getErrorMessage(error, "执行阶段流转失败"));
   } finally {
     transitionPending.value = false;
   }

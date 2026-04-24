@@ -1,6 +1,6 @@
 # JobPilot
 
-JobPilot 是一个面向求职场景的 Agentic AI Workflow 系统。当前已经完成本地基础设施、后端 FastAPI 骨架、SQLAlchemy async、Alembic、Resume / JobPosting / MatchResult / ApplicationRecord 四个核心模块的最小 API 闭环、workflow 状态层、AI 产物承载层，以及 JD 结构化解析、Resume 结构化解析、MatchResult 自动生成、Cover Letter 草稿生成、Interview Prep 生成和 AI 产物反馈记录能力。第 16 步新增了 `frontend/` Vue 3 前端骨架，用于承接 Workflow Workspace 和 AI Copilot Layer 的页面与路由入口。第 24 步进一步补上了最小用户隔离、pytest 数据隔离，以及 recent-first / limit 规则显式化。
+JobPilot 是一个面向求职场景的 Agentic AI Workflow 系统。当前已经完成本地基础设施、后端 FastAPI 骨架、SQLAlchemy async、Alembic、Resume / JobPosting / MatchResult / ApplicationRecord 四个核心模块的最小 API 闭环、workflow 状态层、AI 产物承载层，以及 JD 结构化解析、Resume 结构化解析、MatchResult 自动生成、Cover Letter 草稿生成、Interview Prep 生成和 AI 产物反馈记录能力。第 16 步新增了 `frontend/` Vue 3 前端骨架，用于承接 Workflow Workspace 和 AI Copilot Layer 的页面与路由入口。第 24 步进一步补上了最小用户隔离、pytest 数据隔离，以及 recent-first / limit 规则显式化。第 25 步继续做纯前端收口：主要页面文案中文化，以及工作页左侧列表区的受控高度与内部滚动治理。
 
 第 8 步新增了工作流承载层第一阶段能力：
 

@@ -2,8 +2,8 @@
   <div class="page-stack">
     <SectionCard
       title="简历"
-      subtitle="当前页面已接入真实 Resume API，支持列表、详情、创建、解析和 ResumeVersion 只读查看。"
-      eyebrow="Workflow Workspace"
+      subtitle="当前页面已接入真实简历接口，支持列表、详情、创建、解析和 ResumeVersion 只读查看。"
+      eyebrow="工作流工作台"
     >
       <div class="api-note">
         <strong>已对齐接口</strong>
@@ -17,9 +17,11 @@
 
     <div class="resource-workspace">
       <SectionCard
-        title="Resume 列表"
-        subtitle="左侧列表直接调用后端 /api/v1/resumes，点击后加载详情。"
+        class="resource-panel resource-panel--list"
+        title="简历列表"
+        subtitle="左侧列表直接调用后端 /api/v1/resumes，选中后加载详情。"
       >
+        <div class="resource-list-shell">
         <div v-if="resumesLoading" class="panel-loading">正在加载简历列表...</div>
         <div v-else-if="resumes.length" class="resource-list">
           <button
@@ -32,64 +34,65 @@
           >
             <div class="resource-item__header">
               <strong>{{ resume.title }}</strong>
-              <el-tag size="small" effect="plain">{{ resume.parse_status }}</el-tag>
+              <el-tag size="small" effect="plain">{{ formatParseStatus(resume.parse_status) }}</el-tag>
             </div>
-            <p>{{ resume.source_type }}</p>
+            <p>{{ formatSourceType(resume.source_type) }}</p>
             <small>{{ resume.content_hash.slice(0, 12) }}...</small>
             <small>{{ formatDateTime(resume.updated_at) }}</small>
           </button>
         </div>
         <EmptyStateCard
           v-else
-          eyebrow="No Resume"
+          eyebrow="暂无简历"
           title="还没有简历记录"
-          description="先在下方创建一份 Resume，列表会自动刷新并选中新建项。"
+          description="先在下方创建一份简历，列表会自动刷新并选中新建项。"
         />
+        </div>
       </SectionCard>
 
       <SectionCard
-        title="Resume 详情"
-        subtitle="详情区支持查看 raw_text、parse_status、parsed_json 和只读版本列表。"
+        title="简历详情"
+        subtitle="详情区支持查看简历原文、解析状态、结构化结果和只读版本列表。"
       >
         <div v-if="detailLoading" class="panel-loading">正在加载简历详情...</div>
         <EmptyStateCard
           v-else-if="!selectedResume"
-          eyebrow="Select Resume"
+          eyebrow="选择简历"
           title="先从左侧选择一份简历"
-          description="选中后会展示原始文本、hash、解析状态和 ResumeVersion 列表。"
+          description="选中后会展示原始文本、内容哈希、解析状态和简历版本列表。"
         />
         <div v-else class="detail-stack">
           <div class="detail-actions">
             <div class="detail-title">
               <h3>{{ selectedResume.title }}</h3>
-              <p>{{ selectedResume.source_type }}</p>
+              <p>{{ formatSourceType(selectedResume.source_type) }}</p>
             </div>
             <el-button
               type="primary"
               :loading="parsePending"
               @click="handleParseResume"
             >
-              解析 Resume
+              解析简历
             </el-button>
           </div>
 
           <div class="detail-meta">
             <article>
-              <span>Source Type</span>
-              <strong>{{ selectedResume.source_type }}</strong>
+              <span>来源类型</span>
+              <strong>{{ formatSourceType(selectedResume.source_type) }}</strong>
             </article>
             <article>
-              <span>Parse Status</span>
-              <strong>{{ selectedResume.parse_status }}</strong>
+              <span>解析状态</span>
+              <strong>{{ formatParseStatus(selectedResume.parse_status) }}</strong>
             </article>
             <article>
-              <span>Updated</span>
+              <span>最近更新</span>
               <strong>{{ formatDateTime(selectedResume.updated_at) }}</strong>
             </article>
           </div>
 
           <div class="detail-field">
-            <span>Source File URL</span>
+            <span>来源文件链接</span>
             <a
               v-if="selectedResume.source_file_url"
               class="detail-link"
@@ -99,29 +102,29 @@
             >
               {{ selectedResume.source_file_url }}
             </a>
-            <p v-else class="detail-placeholder">未填写 source_file_url</p>
+            <p v-else class="detail-placeholder">未填写来源文件链接</p>
           </div>
 
           <div class="detail-field">
-            <span>content_hash</span>
+            <span>内容哈希 content_hash</span>
             <p class="detail-code">{{ selectedResume.content_hash }}</p>
           </div>
 
           <div class="detail-field">
-            <span>raw_text</span>
+            <span>简历原文 raw_text</span>
             <pre class="text-block">{{ selectedResume.raw_text }}</pre>
           </div>
 
           <JsonBlock
-            title="parsed_json"
-            caption="后端 parse 结果"
+            title="结构化结果 parsed_json"
+            caption="后端简历解析结果"
             :value="selectedResume.parsed_json"
-            empty-text="尚未解析 Resume，点击上方按钮后可查看结构化结果。"
+            empty-text="尚未解析简历，点击上方按钮后可查看结构化结果。"
           />
 
           <div class="detail-field">
             <div class="detail-field__header">
-              <span>ResumeVersion 列表</span>
+              <span>简历版本 ResumeVersion</span>
               <small>只读轻量接入</small>
             </div>
             <div v-if="versionsLoading" class="panel-loading panel-loading--inline">
@@ -136,46 +139,46 @@
                 <div>
                   <strong>{{ version.version_label }}</strong>
                   <p>
-                    v{{ version.version_no }} · {{ version.source_type }} ·
+                    v{{ version.version_no }} · {{ formatSourceType(version.source_type) }} ·
                     {{ version.content_format }}
                   </p>
                 </div>
                 <small>{{ formatDateTime(version.updated_at) }}</small>
               </article>
             </div>
-            <p v-else class="detail-placeholder">当前 Resume 还没有 ResumeVersion 记录。</p>
+            <p v-else class="detail-placeholder">当前简历还没有版本记录。</p>
           </div>
         </div>
       </SectionCard>
     </div>
 
     <SectionCard
-      title="创建 Resume"
+      title="新建简历"
       subtitle="表单字段严格对齐后端 ResumeCreate；content_hash 由前端基于 raw_text 自动计算。"
     >
       <el-form label-position="top" class="create-form-grid" @submit.prevent>
-        <el-form-item label="title" required>
+        <el-form-item label="简历标题" required>
           <el-input
             v-model="createForm.title"
             placeholder="例如 Java 后端简历 v1"
           />
         </el-form-item>
 
-        <el-form-item label="source_type">
+        <el-form-item label="来源类型">
           <el-input
             v-model="createForm.source_type"
             placeholder="默认 upload"
           />
         </el-form-item>
 
-        <el-form-item class="create-form-grid__wide" label="source_file_url">
+        <el-form-item class="create-form-grid__wide" label="来源文件链接">
           <el-input
             v-model="createForm.source_file_url"
             placeholder="https://example.com/resume.md"
           />
         </el-form-item>
 
-        <el-form-item class="create-form-grid__wide" label="raw_text" required>
+        <el-form-item class="create-form-grid__wide" label="简历原文" required>
           <el-input
             v-model="createForm.raw_text"
             type="textarea"
@@ -186,7 +189,7 @@
 
         <div class="create-form-grid__wide create-form-actions">
           <p class="create-form-hint">
-            content_hash 会在提交时基于 raw_text 自动生成 SHA-256。
+            content_hash 会在提交时根据简历原文自动生成 SHA-256。
           </p>
           <el-button
             type="primary"
@@ -194,7 +197,7 @@
             :disabled="!canCreateResume"
             @click="handleCreateResume"
           >
-            创建 Resume
+            创建简历
           </el-button>
         </div>
       </el-form>
@@ -221,6 +224,7 @@ import type { ResumeVersionListItem } from "@/types/resume_version";
 import { formatDateTime } from "@/utils/format";
 import { sha256Hex } from "@/utils/hash";
 import { getErrorMessage } from "@/utils/http";
+import { formatParseStatus, formatSourceType } from "@/utils/labels";
 
 const resumes = ref<ResumeListItem[]>([]);
 const resumeVersions = ref<ResumeVersionListItem[]>([]);
@@ -271,7 +275,7 @@ async function fetchResumeVersions(resumeId: number) {
     resumeVersions.value = await listResumeVersions(resumeId, { limit: 5 });
   } catch (error) {
     resumeVersions.value = [];
-    ElMessage.error(getErrorMessage(error, "ResumeVersion 列表加载失败"));
+    ElMessage.error(getErrorMessage(error, "简历版本列表加载失败"));
   } finally {
     versionsLoading.value = false;
   }
@@ -326,7 +330,7 @@ async function selectResume(resumeId: number) {
 
 async function handleCreateResume() {
   if (!canCreateResume.value) {
-    ElMessage.warning("请先填写 title 和 raw_text");
+    ElMessage.warning("请先填写简历标题和简历原文");
     return;
   }
 
@@ -334,11 +338,11 @@ async function handleCreateResume() {
   try {
     const payload = await buildCreatePayload();
     const created = await createResume(payload);
-    ElMessage.success("Resume 创建成功");
+    ElMessage.success("简历已创建");
     resetCreateForm();
     await fetchResumes(created.id);
   } catch (error) {
-    ElMessage.error(getErrorMessage(error, "创建 Resume 失败"));
+    ElMessage.error(getErrorMessage(error, "创建简历失败"));
   } finally {
     createPending.value = false;
   }
@@ -346,17 +350,17 @@ async function handleCreateResume() {
 
 async function handleParseResume() {
   if (!selectedResumeId.value) {
-    ElMessage.warning("请先选择一份 Resume");
+    ElMessage.warning("请先选择一份简历");
     return;
   }
 
   parsePending.value = true;
   try {
     selectedResume.value = await parseResume(selectedResumeId.value);
-    ElMessage.success("Resume 解析完成");
+    ElMessage.success("简历解析完成");
     await fetchResumes(selectedResumeId.value);
   } catch (error) {
-    ElMessage.error(getErrorMessage(error, "解析 Resume 失败"));
+    ElMessage.error(getErrorMessage(error, "解析简历失败"));
   } finally {
     parsePending.value = false;
   }

@@ -7,11 +7,11 @@
     <div class="header-controls">
       <div class="header-status">
         <span class="status-dot"></span>
-        <span>Minimal user scope for dev demos, not formal sign-in.</span>
+        <span>当前为最小用户隔离演示，不是正式登录系统。</span>
       </div>
 
       <label class="scope-switch">
-        <span>Current User</span>
+        <span>当前用户</span>
         <select v-model="selectedUser" @change="handleUserChange">
           <option
             v-for="option in DEV_USER_OPTIONS"

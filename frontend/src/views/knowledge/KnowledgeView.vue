@@ -2,34 +2,34 @@
   <div class="page-stack">
     <section class="hero-card knowledge-hero">
       <div>
-        <p class="eyebrow">AI Copilot Layer</p>
-        <h2>把 JobPilot 的 workflow 资产组织成未来可接 RAG runtime 的 Knowledge / Retrieval 入口。</h2>
+        <p class="eyebrow">AI 协作层</p>
+        <h2>把 JobPilot 的 workflow 资产组织成未来可接 RAG Runtime 的知识入口。</h2>
         <p>
-          Knowledge 不是普通文档管理页，也不假装已经接通真实向量检索。它的定位是为 Assistant 与未来
+          知识库不是普通文档管理页，也不假装已经接通真实向量检索。它的定位是为 Assistant 与未来
           analyze / generate 类工作流提供最小充分上下文，并保留引用与可追溯性的设计意识。
         </p>
       </div>
       <div class="hero-panel knowledge-hero__panel">
-        <span>Knowledge Summary</span>
+        <span>知识层概览</span>
         <div class="knowledge-summary-list">
           <article>
-            <strong>Private Knowledge</strong>
+            <strong>私有知识</strong>
             <small>Resume / JobPosting / MatchResult / GeneratedArtifact / ApplicationRecord</small>
           </article>
           <article>
-            <strong>General Knowledge</strong>
+            <strong>通用知识</strong>
             <small>岗位说明、公司资料、面试题、项目经验素材、方法论文档</small>
           </article>
           <article>
-            <strong>Retrieval Augmentation</strong>
-            <small>Future runtime flow only</small>
+            <strong>检索增强</strong>
+            <small>当前仅保留未来运行时结构</small>
           </article>
           <article>
-            <strong>Context Injection</strong>
+            <strong>上下文注入</strong>
             <small>为 Assistant 与工具调用提供补充上下文</small>
           </article>
           <article>
-            <strong>Citations / Trace</strong>
+            <strong>引用与追踪</strong>
             <small>当前未接真实引用、索引、召回或 trace</small>
           </article>
         </div>
@@ -49,17 +49,17 @@
     </div>
 
     <SectionCard
-      title="Knowledge Sources"
+      title="知识来源"
       subtitle="这里展示未来会进入检索层的知识源分类。当前只完成高保真入口，不做真实上传、索引或文件管理。"
-      eyebrow="Source Catalog"
+      eyebrow="知识目录"
     >
       <div class="split-grid knowledge-source-grid">
         <article class="knowledge-bucket">
           <div class="knowledge-bucket__header">
-            <div>
-              <span>Private Knowledge</span>
-              <h3>私有工作流知识</h3>
-            </div>
+                <div>
+                  <span>私有知识</span>
+                  <h3>私有工作流知识</h3>
+                </div>
             <el-button text type="primary" @click="notifyShell('私有知识接入')">
               了解入口
             </el-button>
@@ -88,10 +88,10 @@
 
         <article class="knowledge-bucket">
           <div class="knowledge-bucket__header">
-            <div>
-              <span>General Knowledge</span>
-              <h3>通用求职知识</h3>
-            </div>
+                <div>
+                  <span>通用知识</span>
+                  <h3>通用求职知识</h3>
+                </div>
             <el-button text type="primary" @click="notifyShell('通用知识接入')">
               了解入口
             </el-button>
@@ -121,9 +121,9 @@
     </SectionCard>
 
     <SectionCard
-      title="Retrieval Flow / Knowledge Pipeline"
+      title="检索流程 / Knowledge Pipeline"
       subtitle="这个流程表达未来 RAG 在 JobPilot 里的工作方式；当前并未接通真实上传、切分、embedding 或召回运行时。"
-      eyebrow="Future Runtime Flow"
+      eyebrow="未来运行时"
     >
       <div class="retrieval-flow">
         <button
@@ -142,9 +142,9 @@
 
     <div class="split-grid">
       <SectionCard
-        title="Context Injection"
+        title="上下文注入"
         subtitle="Knowledge 不替代 workflow 对象，而是为 Assistant 和未来工具调用提供检索增强上下文。"
-        eyebrow="Injection Layer"
+        eyebrow="注入层"
       >
         <div class="explain-grid">
           <article
@@ -160,9 +160,9 @@
       </SectionCard>
 
       <SectionCard
-        title="Citations / Trace Awareness"
+        title="引用 / 追踪意识"
         subtitle="未来 RAG 不应只返回结果，还应保留命中来源、片段摘要和注入依据。"
-        eyebrow="Trace Surface"
+        eyebrow="追踪层"
       >
         <div class="explain-grid">
           <article
@@ -179,9 +179,9 @@
     </div>
 
     <SectionCard
-      title="Status Surface"
+      title="状态面板"
       subtitle="这是产品入口的状态面板，不是实时监控。它帮助用户理解哪些 Knowledge 能力仍处于 planned / prototype 状态。"
-      eyebrow="System Entry"
+      eyebrow="系统入口"
     >
       <div class="status-surface">
         <button
@@ -205,26 +205,26 @@
 
     <div class="split-grid">
       <SectionCard
-        title="How It Works With Assistant"
-        subtitle="Assistant 会消费 Knowledge 返回的检索结果，但两者都建立在 Workflow Workspace 已有的真实对象之上。"
-        eyebrow="Assistant Binding"
+        title="与 AI 助手的关系"
+        subtitle="AI 助手会消费 Knowledge 返回的检索结果，但两者都建立在工作流工作台已有的真实对象之上。"
+        eyebrow="助手协同"
       >
         <div class="assistant-binding">
           <article class="binding-card">
-            <span>Workflow Workspace</span>
+            <span>工作流工作台</span>
             <h3>提供真实对象和状态</h3>
             <p>Jobs / Resumes / Matches / Artifacts / Applications 继续承接确定性对象、状态和动作入口。</p>
           </article>
           <article class="binding-card">
-            <span>Knowledge Layer</span>
+            <span>知识层</span>
             <h3>提供额外可检索上下文</h3>
             <p>未来它会围绕私有知识与通用知识返回检索片段，供 Assistant 和工具调用使用。</p>
           </article>
-          <article class="binding-card">
-            <span>Assistant Layer</span>
-            <h3>消费检索结果并组织任务</h3>
-            <p>Assistant 不直接替代工作页，而是在这些对象和 Knowledge 结果之上提供理解、建议和后续工具入口。</p>
-          </article>
+            <article class="binding-card">
+              <span>助手层</span>
+              <h3>消费检索结果并组织任务</h3>
+              <p>AI 助手不直接替代工作页，而是在这些对象和 Knowledge 结果之上提供理解、建议和后续工具入口。</p>
+            </article>
         </div>
 
         <div class="binding-actions">
@@ -238,23 +238,23 @@
       </SectionCard>
 
       <SectionCard
-        title="Current Boundary"
+        title="当前边界"
         subtitle="页面需要明确表达当前阶段的工程边界，避免把产品壳误解成已经接通的 RAG 系统。"
-        eyebrow="Boundary"
+        eyebrow="边界说明"
       >
         <div class="boundary-stack">
           <article class="boundary-card">
-            <span>Not Connected</span>
+            <span>尚未接通</span>
             <h3>未接真实上传、索引、embedding 或向量检索</h3>
             <p>本步不实现知识持久化、索引任务、召回链路、检索结果面板或引用注入运行时。</p>
           </article>
           <article class="boundary-card">
-            <span>Prototype Only</span>
+            <span>仅产品壳</span>
             <h3>只完成高保真入口壳</h3>
             <p>页面强调的是产品结构、工作流关系和上下文意识，不会伪造已存在的检索结果或后台任务。</p>
           </article>
           <article class="boundary-card">
-            <span>Future Direction</span>
+            <span>未来方向</span>
             <h3>为 RAG、Trace、Eval 预留清晰入口</h3>
             <p>后续可以在这个入口上继续接入真实 Knowledge Runtime，而不必推翻现在的页面组织方式。</p>
           </article>
@@ -305,44 +305,44 @@ interface StatusPanel {
 
 const privateKnowledgeSources: KnowledgeSourceCard[] = [
   {
-    group: "Workflow object",
+    group: "工作流对象",
     name: "Resume",
-    status: "Future retrieval source",
+    status: "未来检索来源",
     description: "从当前简历、解析结果和历史版本中抽取可复用上下文，服务简历建议和材料生成。",
     futureInput: "未来来源：从 workflow 对象直接抽取 + 用户私有资料导入",
   },
   {
-    group: "Workflow object",
+    group: "工作流对象",
     name: "JobPosting",
-    status: "Prototype only",
+    status: "仅产品壳",
     description: "围绕岗位原文、结构化 JD 和风险点，为岗位解读、匹配分析和面试准备提供上下文。",
     futureInput: "未来来源：从 workflow 对象直接抽取",
   },
   {
-    group: "Analysis layer",
+    group: "分析层",
     name: "MatchResult",
-    status: "Not indexed yet",
+    status: "尚未索引",
     description: "沉淀优势、差距、缺失项和建议，作为复盘和后续生成的中间知识层。",
     futureInput: "未来来源：从历史分析记录沉淀",
   },
   {
-    group: "Artifact layer",
+    group: "材料层",
     name: "GeneratedArtifact",
-    status: "Not indexed yet",
+    status: "尚未索引",
     description: "把 Cover Letter、Interview Prep 和后续材料版本变成可检索的经验资产。",
     futureInput: "未来来源：从生成记录与用户修改后的材料沉淀",
   },
   {
-    group: "Tracking layer",
+    group: "跟踪层",
     name: "ApplicationRecord",
-    status: "Future retrieval source",
+    status: "未来检索来源",
     description: "将投递阶段、下一步动作与跟进节奏纳入长期上下文，帮助生成策略建议。",
     futureInput: "未来来源：从 workflow 对象与事件时间线抽取",
   },
   {
-    group: "History layer",
+    group: "历史层",
     name: "Feedback / Workflow history",
-    status: "Prototype only",
+    status: "仅产品壳",
     description: "采纳、拒绝、编辑后使用和阶段流转记录，会成为未来个性化与复盘的重要输入。",
     futureInput: "未来来源：从反馈事件与 workflow history 沉淀",
   },
@@ -350,37 +350,37 @@ const privateKnowledgeSources: KnowledgeSourceCard[] = [
 
 const generalKnowledgeSources: KnowledgeSourceCard[] = [
   {
-    group: "General knowledge",
+    group: "通用知识",
     name: "岗位说明",
-    status: "Future retrieval source",
+    status: "未来检索来源",
     description: "沉淀不同岗位方向的职责拆解、能力模型和常见判断框架。",
     futureInput: "未来接入：资料导入或结构化整理",
   },
   {
-    group: "General knowledge",
+    group: "通用知识",
     name: "公司资料",
-    status: "Not connected",
+    status: "未接入",
     description: "为投递策略、岗位理解和面试准备提供公司背景、业务方向和团队语境。",
     futureInput: "未来接入：外部资料整理与知识沉淀",
   },
   {
-    group: "General knowledge",
+    group: "通用知识",
     name: "面试题",
-    status: "Prototype only",
+    status: "仅产品壳",
     description: "围绕岗位方向和能力模型组织常见面试题、追问方向与回答要点。",
     futureInput: "未来接入：问答素材库与领域资料沉淀",
   },
   {
-    group: "General knowledge",
+    group: "通用知识",
     name: "项目经验素材",
-    status: "Future retrieval source",
+    status: "未来检索来源",
     description: "沉淀项目片段、STAR 表达素材和能力证明片段，用于简历与面试回答增强。",
     futureInput: "未来接入：用户私有项目素材导入",
   },
   {
-    group: "General knowledge",
+    group: "通用知识",
     name: "方法论文档 / 求职方法论",
-    status: "Planned",
+    status: "规划中",
     description: "把通用求职方法论、表达策略和结构化框架变成可检索辅助材料。",
     futureInput: "未来接入：方法文档与知识策展",
   },
@@ -421,17 +421,17 @@ const retrievalFlow: RetrievalStep[] = [
 
 const contextInjectionCards: ExplainCard[] = [
   {
-    label: "Current object first",
+    label: "对象优先",
     title: "先使用 workflow 对象，再补检索上下文",
     description: "Knowledge 不会直接替代 Resume、JobPosting、MatchResult 等当前对象，而是在它们之上补充外部依据。",
   },
   {
-    label: "Assistant support",
+    label: "助手协同",
     title: "为 Assistant 提供检索增强上下文",
     description: "未来 Assistant 会消费检索片段，让场景建议、复盘和面试辅助更贴当前任务而不是泛化回答。",
   },
   {
-    label: "Tool support",
+    label: "工具协同",
     title: "为未来 Analyze / Generate 工具提供额外依据",
     description: "面试准备、材料生成和复盘建议都可能利用 Knowledge 片段作为额外辅助上下文。",
   },
@@ -439,17 +439,17 @@ const contextInjectionCards: ExplainCard[] = [
 
 const citationCards: ExplainCard[] = [
   {
-    label: "Retrieval trace",
+    label: "检索追踪",
     title: "保留命中的知识来源",
     description: "未来应记录命中来源、来源类别和片段摘要，避免结果来源不可解释。",
   },
   {
-    label: "Injection evidence",
+    label: "注入依据",
     title: "保留注入上下文的依据",
     description: "不仅要知道检索到了什么，还要知道哪些内容真的被注入到 Assistant 或工具调用里。",
   },
   {
-    label: "Result linkage",
+    label: "结果关联",
     title: "保留结果与上下文的关联",
     description: "未来 citations / trace 应帮助用户理解某条建议、某份材料或某次回答是基于哪些知识片段形成的。",
   },
@@ -457,17 +457,17 @@ const citationCards: ExplainCard[] = [
 
 const statusSurface: StatusCard[] = [
   {
-    label: "Knowledge Runtime",
-    value: "Shell",
+    label: "知识运行时",
+    value: "原型壳",
     detail: "当前只做高保真入口壳，不接真实检索运行时",
   },
   {
-    label: "Source Types",
+    label: "知识来源",
     value: "2",
-    detail: "Private Knowledge + General Knowledge",
+    detail: "私有知识 + 通用知识",
   },
   {
-    label: "Design Focus",
+    label: "设计重点",
     value: "RAG",
     detail: "强调检索增强、上下文注入与引用意识，而不是存文档",
   },
@@ -475,44 +475,44 @@ const statusSurface: StatusCard[] = [
 
 const statusPanels: StatusPanel[] = [
   {
-    label: "Live Retrieval",
+    label: "实时检索",
     title: "检索运行时",
-    state: "Not connected",
+    state: "未接入",
     description: "当前未接向量检索、关键词召回或 rerank 运行时。",
     action: "检索运行时",
   },
   {
-    label: "Indexing Jobs",
+    label: "索引任务",
     title: "索引任务",
-    state: "Not enabled",
+    state: "未启用",
     description: "当前没有真实 indexing jobs、chunk pipeline 或 embedding 任务。",
     action: "索引任务",
   },
   {
-    label: "Upload Entry",
+    label: "上传入口",
     title: "上传入口",
-    state: "Prototype only",
+    state: "仅产品壳",
     description: "未来可以在这里承接知识导入入口；本步不做真实上传。",
     action: "上传入口",
   },
   {
-    label: "Source Sync",
-    title: "Source Sync",
-    state: "Not connected",
+    label: "知识源同步",
+    title: "知识源同步",
+    state: "未接入",
     description: "当前不会把 workflow 对象自动同步进知识索引层。",
     action: "知识源同步",
   },
   {
-    label: "Citation View",
+    label: "引用视图",
     title: "引用视图",
-    state: "Planned",
+    state: "规划中",
     description: "未来会展示引用依据和检索片段；本步只保留设计意识。",
     action: "引用视图",
   },
   {
-    label: "Assistant Binding",
+    label: "助手绑定",
     title: "Assistant 绑定",
-    state: "Planned",
+    state: "规划中",
     description: "Assistant 与 Knowledge 的联动关系已经表达，但尚未建立真实数据流。",
     action: "Assistant 绑定",
   },

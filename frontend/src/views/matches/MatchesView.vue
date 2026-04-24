@@ -3,7 +3,7 @@
     <SectionCard
       title="匹配分析"
       subtitle="当前页面已接入真实 MatchResult API，支持列表、详情和 analyze 闭环。"
-      eyebrow="Workflow Workspace"
+      eyebrow="工作流工作台"
     >
       <div class="api-note">
         <strong>已对齐接口</strong>
@@ -15,9 +15,11 @@
 
     <div class="resource-workspace">
       <SectionCard
-        title="MatchResult 列表"
-        subtitle="左侧列表直接调用后端 /api/v1/matches，并复用 Resume / JobPosting 映射展示更友好的标签。"
+        class="resource-panel resource-panel--list"
+        title="匹配结果列表"
+        subtitle="左侧列表直接调用后端 /api/v1/matches，并复用简历 / 岗位映射展示更友好的标签。"
       >
+        <div class="resource-list-shell">
         <div v-if="matchesLoading" class="panel-loading">正在加载匹配结果列表...</div>
         <div v-else-if="matches.length" class="resource-list">
           <button
@@ -29,7 +31,7 @@
             @click="selectMatch(match.id)"
           >
             <div class="resource-item__header">
-              <strong>Match #{{ match.id }}</strong>
+              <strong>匹配 #{{ match.id }}</strong>
               <span class="score-chip">{{ formatScore(match.overall_score) }}</span>
             </div>
             <p>{{ getResumeLabel(match.resume_id) }}</p>
@@ -39,46 +41,47 @@
         </div>
         <EmptyStateCard
           v-else
-          eyebrow="No MatchResult"
+          eyebrow="暂无匹配结果"
           title="还没有匹配分析结果"
-          description="先在下方 Analyze 面板选择一组 Resume 和 JobPosting，生成第一条 MatchResult。"
+          description="先在下方分析面板选择一组简历和岗位，生成第一条匹配结果。"
         />
+        </div>
       </SectionCard>
 
       <SectionCard
-        title="MatchResult 详情"
-        subtitle="详情区展示总体分数、对象关联和 strengths / weaknesses / missing_keywords / suggestions。"
+        title="匹配结果详情"
+        subtitle="详情区展示综合得分、对象关联和优势、短板、缺失关键词、改进建议。"
       >
         <div v-if="detailLoading" class="panel-loading">正在加载匹配结果详情...</div>
         <EmptyStateCard
           v-else-if="!selectedMatch"
-          eyebrow="Select MatchResult"
-          title="先从左侧选择一条 MatchResult"
-          description="选中后会展示关联的 Resume、JobPosting 和结构化分析内容。"
+          eyebrow="选择匹配结果"
+          title="先从左侧选择一条匹配结果"
+          description="选中后会展示关联的简历、岗位和结构化分析内容。"
         />
         <div v-else class="detail-stack">
           <div class="detail-actions">
             <div class="detail-title">
-              <h3>Match #{{ selectedMatch.id }}</h3>
+              <h3>匹配 #{{ selectedMatch.id }}</h3>
               <p>{{ getResumeLabel(selectedMatch.resume_id) }}</p>
             </div>
             <div class="score-hero">
-              <span>Overall Score</span>
+              <span>综合得分</span>
               <strong>{{ formatScore(selectedMatch.overall_score) }}</strong>
             </div>
           </div>
 
           <div class="detail-meta">
             <article>
-              <span>Resume</span>
+              <span>简历</span>
               <strong>{{ getResumeLabel(selectedMatch.resume_id) }}</strong>
             </article>
             <article>
-              <span>JobPosting</span>
+              <span>岗位</span>
               <strong>{{ getJobLabel(selectedMatch.job_posting_id) }}</strong>
             </article>
             <article>
-              <span>Created</span>
+              <span>创建时间</span>
               <strong>{{ formatDateTime(selectedMatch.created_at) }}</strong>
             </article>
           </div>
@@ -101,7 +104,7 @@
                   {{ item }}
                 </li>
               </ul>
-              <p v-else class="detail-placeholder">暂无 {{ section.title }}。</p>
+              <p v-else class="detail-placeholder">暂无{{ section.title }}。</p>
             </article>
           </div>
         </div>
@@ -109,37 +112,37 @@
     </div>
 
     <SectionCard
-      title="Analyze Match"
-      subtitle="选择一组 Resume 与 JobPosting 后发起 analyze；不会自动触发 parse。"
+      title="发起匹配分析"
+      subtitle="选择一组简历与岗位后发起 analyze；不会自动触发 parse。"
     >
       <div class="analyze-stack">
         <div class="analyze-hint">
-          <p>Match 分析不会自动触发 JD parse 或 Resume parse。</p>
-          <p>请先在 Jobs / Resumes 页面完成解析；若对象未解析，后端会返回真实错误提示。</p>
+          <p>匹配分析不会自动触发 JD parse 或 Resume parse。</p>
+          <p>请先在岗位页 / 简历页完成解析；若对象未解析，后端会返回真实错误提示。</p>
         </div>
 
         <el-form label-position="top" class="create-form-grid" @submit.prevent>
-          <el-form-item label="resume_id" required>
+          <el-form-item label="简历" required>
             <el-select
               v-model="analyzeForm.resume_id"
               filterable
-              placeholder="选择一份 Resume"
+              placeholder="选择一份简历"
               :loading="referencesLoading"
             >
               <el-option
                 v-for="resume in resumes"
                 :key="resume.id"
-                :label="`${resume.title} (${resume.parse_status})`"
+                :label="`${resume.title}（${formatParseStatus(resume.parse_status)}）`"
                 :value="resume.id"
               />
             </el-select>
           </el-form-item>
 
-          <el-form-item label="job_posting_id" required>
+          <el-form-item label="岗位" required>
             <el-select
               v-model="analyzeForm.job_posting_id"
               filterable
-              placeholder="选择一个 JobPosting"
+              placeholder="选择一个岗位"
               :loading="referencesLoading"
             >
               <el-option
@@ -158,7 +161,7 @@
               :disabled="!canAnalyze"
               @click="handleAnalyzeMatch"
             >
-              生成 MatchResult
+              生成匹配结果
             </el-button>
           </div>
         </el-form>
@@ -181,6 +184,7 @@ import type { MatchResult, MatchResultListItem } from "@/types/match_result";
 import type { ResumeListItem } from "@/types/resume";
 import { formatDateTime } from "@/utils/format";
 import { getErrorMessage } from "@/utils/http";
+import { formatParseStatus } from "@/utils/labels";
 
 interface MatchSection {
   key: string;
@@ -241,22 +245,22 @@ const matchSections = computed(() => {
   return [
     {
       key: "strengths",
-      title: "strengths",
+      title: "优势亮点",
       items: formatArrayItems(match.strengths),
     },
     {
       key: "weaknesses",
-      title: "weaknesses",
+      title: "主要短板",
       items: formatArrayItems(match.weaknesses),
     },
     {
       key: "missing_keywords",
-      title: "missing_keywords",
+      title: "缺失关键词",
       items: formatArrayItems(match.missing_keywords),
     },
     {
       key: "suggestions",
-      title: "suggestions",
+      title: "改进建议",
       items: formatArrayItems(match.suggestions),
     },
   ];
@@ -296,14 +300,14 @@ function formatArrayItems(items?: unknown[] | null): string[] {
 
 function getResumeLabel(resumeId: number): string {
   const resume = resumeMap.value.get(resumeId);
-  return resume ? resume.title : `Resume #${resumeId}`;
+  return resume ? resume.title : `简历 #${resumeId}`;
 }
 
 function getJobLabel(jobPostingId: number): string {
   const job = jobMap.value.get(jobPostingId);
   return job
     ? `${job.company_name} · ${job.job_title}`
-    : `JobPosting #${jobPostingId}`;
+    : `岗位 #${jobPostingId}`;
 }
 
 async function fetchMatchDetail(matchId: number) {
@@ -313,7 +317,7 @@ async function fetchMatchDetail(matchId: number) {
     selectedMatch.value = normalizeMatchDetail(detail);
   } catch (error) {
     selectedMatch.value = null;
-    ElMessage.error(getErrorMessage(error, "MatchResult 详情加载失败"));
+    ElMessage.error(getErrorMessage(error, "匹配结果详情加载失败"));
   } finally {
     detailLoading.value = false;
   }
@@ -340,7 +344,7 @@ async function fetchMatches(nextSelectedId?: number | null) {
       selectedMatch.value = null;
     }
   } catch (error) {
-    ElMessage.error(getErrorMessage(error, "MatchResult 列表加载失败"));
+    ElMessage.error(getErrorMessage(error, "匹配结果列表加载失败"));
   } finally {
     matchesLoading.value = false;
   }
@@ -357,7 +361,7 @@ async function fetchReferences() {
     resumes.value = resumeResult.value;
   } else {
     ElMessage.error(
-      getErrorMessage(resumeResult.reason, "Resume 选项加载失败"),
+      getErrorMessage(resumeResult.reason, "简历选项加载失败"),
     );
   }
 
@@ -365,7 +369,7 @@ async function fetchReferences() {
     jobs.value = jobResult.value;
   } else {
     ElMessage.error(
-      getErrorMessage(jobResult.reason, "JobPosting 选项加载失败"),
+      getErrorMessage(jobResult.reason, "岗位选项加载失败"),
     );
   }
 
@@ -379,7 +383,7 @@ async function selectMatch(matchId: number) {
 
 async function handleAnalyzeMatch() {
   if (!canAnalyze.value) {
-    ElMessage.warning("请先选择 resume_id 和 job_posting_id");
+    ElMessage.warning("请先选择简历和岗位");
     return;
   }
 
@@ -389,11 +393,11 @@ async function handleAnalyzeMatch() {
       resume_id: analyzeForm.value.resume_id as number,
       job_posting_id: analyzeForm.value.job_posting_id as number,
     });
-    ElMessage.success("MatchResult 生成成功");
+    ElMessage.success("匹配结果已生成");
     selectedMatchId.value = created.id;
     await fetchMatches(created.id);
   } catch (error) {
-    ElMessage.error(getErrorMessage(error, "生成 MatchResult 失败"));
+    ElMessage.error(getErrorMessage(error, "生成匹配结果失败"));
   } finally {
     analyzePending.value = false;
   }

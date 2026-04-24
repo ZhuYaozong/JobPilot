@@ -2,15 +2,15 @@
   <div class="page-stack">
     <section class="hero-card assistant-hero">
       <div>
-        <p class="eyebrow">AI Copilot Layer</p>
-        <h2>把 JobPilot 的工作流对象，组织成未来可接 Agent Runtime 的 Copilot 工作区。</h2>
+        <p class="eyebrow">AI 协作层</p>
+        <h2>把 JobPilot 的工作流对象，组织成未来可接 Agent Runtime 的 AI 助手工作区。</h2>
         <p>
-          Assistant 不是普通闲聊页面，也不假装已经接通真实 Agent。它是一个带上下文插槽、工具入口、
+          AI 助手不是普通闲聊页面，也不假装已经接通真实 Agent。它是一个带上下文插槽、工具入口、
           Knowledge 入口和 workflow 意识的高保真产品壳，用来承接未来的智能辅助层。
         </p>
       </div>
       <div class="hero-panel assistant-hero__panel">
-        <span>Copilot Positioning</span>
+        <span>协作层定位</span>
         <strong>Resume → JobPosting → MatchResult → GeneratedArtifact → ApplicationRecord → Knowledge</strong>
         <small>当前仍未接真实发送、历史持久化、流式输出、tool call 或 RAG 检索。</small>
       </div>
@@ -21,7 +21,7 @@
         <SectionCard
           title="推荐场景"
           subtitle="这些是未来 Copilot 最常见的求职工作流入口；当前仅提供高保真场景卡。"
-          eyebrow="Scenario Entry"
+          eyebrow="场景入口"
         >
           <div class="scenario-stack">
             <button
@@ -48,9 +48,9 @@
         </SectionCard>
 
         <SectionCard
-          title="最近会话 / Session Preview"
+          title="最近会话预览"
           subtitle="这里只展示产品壳里的会话入口感，不代表真实持久化历史。"
-          eyebrow="Session Shell"
+          eyebrow="会话入口"
         >
           <div class="session-shell-note">
             <strong>当前边界</strong>
@@ -82,16 +82,16 @@
       <section class="chat-shell assistant-workspace">
         <div class="copilot-header">
           <div>
-            <p class="eyebrow">AI Copilot</p>
-            <h2>Prototype Shell</h2>
+            <p class="eyebrow">AI 助手</p>
+            <h2>产品原型壳</h2>
             <p>
-              当前会围绕 workflow 对象组织上下文、工具和知识入口，但尚未连接 live agent runtime。
+              当前会围绕 workflow 对象组织上下文、工具和知识入口，但尚未连接真实 Agent Runtime。
             </p>
           </div>
           <div class="copilot-status">
-            <el-tag effect="plain" type="warning">No live agent connected</el-tag>
-            <el-tag effect="plain">No streaming</el-tag>
-            <el-tag effect="plain">No persistence</el-tag>
+            <el-tag effect="plain" type="warning">未连接真实 Agent</el-tag>
+            <el-tag effect="plain">无流式输出</el-tag>
+            <el-tag effect="plain">无持久化</el-tag>
           </div>
         </div>
 
@@ -148,7 +148,7 @@
             type="textarea"
             :rows="4"
             resize="none"
-            placeholder="未来这里会接入真实 Copilot 输入区：基于当前 Resume / JobPosting / MatchResult / Knowledge 发起任务。"
+            placeholder="未来这里会接入真实 AI 助手输入区：基于当前 Resume / JobPosting / MatchResult / Knowledge 发起任务。"
           />
 
           <div class="composer-footer">
@@ -164,9 +164,9 @@
 
       <div class="assistant-column assistant-column--right">
         <SectionCard
-          title="当前上下文 Context Slots"
+          title="当前上下文槽位"
           subtitle="Copilot 应建立在 workflow 对象之上，而不是脱离对象自由聊天。"
-          eyebrow="Context Slots"
+          eyebrow="上下文槽位"
         >
           <div class="context-slot-list">
             <button
@@ -189,9 +189,9 @@
         </SectionCard>
 
         <SectionCard
-          title="Tools Preview"
+          title="工具预览"
           subtitle="这些能力将来会以工具形态进入 Copilot；当前只展示预览，不执行真实调用。"
-          eyebrow="Tool Surface"
+          eyebrow="工具入口"
         >
           <div class="tool-grid">
             <button
@@ -209,15 +209,15 @@
         </SectionCard>
 
         <SectionCard
-          title="Knowledge Entry"
+          title="知识入口"
           subtitle="Knowledge 是未来 RAG 的入口层；Assistant 将消费它返回的检索结果。"
-          eyebrow="Retrieval Entry"
+          eyebrow="检索入口"
         >
           <div class="knowledge-entry">
             <article class="assistant-card">
               <div class="assistant-card__header">
                 <div>
-                  <span>Private Knowledge</span>
+                  <span>私有知识</span>
                   <h3>私有工作流资料</h3>
                 </div>
               </div>
@@ -227,7 +227,7 @@
             <article class="assistant-card">
               <div class="assistant-card__header">
                 <div>
-                  <span>General Knowledge</span>
+                  <span>通用知识</span>
                   <h3>通用求职知识</h3>
                 </div>
               </div>
@@ -240,24 +240,24 @@
           </div>
         </SectionCard>
 
-        <SectionCard
-          title="How It Fits"
-          subtitle="Assistant 不替代 Workflow Workspace，而是建立在真实对象和状态之上的智能辅助层。"
-          eyebrow="Copilot Principles"
+      <SectionCard
+          title="协作关系"
+          subtitle="AI 助手不替代工作流工作台，而是建立在真实对象和状态之上的智能辅助层。"
+          eyebrow="设计原则"
         >
           <div class="principle-list">
             <article class="assistant-card">
-              <span>Workspace First</span>
+              <span>工作台优先</span>
               <h3>确定性工作页先承接真实状态</h3>
               <p>Jobs / Resumes / Matches / Artifacts / Applications 负责对象、状态和动作闭环。</p>
             </article>
             <article class="assistant-card">
-              <span>Copilot Next</span>
+              <span>助手协作</span>
               <h3>Assistant 负责理解、建议和工具入口</h3>
               <p>未来它会挂载 workflow 对象、调用工具、消费 Knowledge，而不是替代这些页面。</p>
             </article>
             <article class="assistant-card">
-              <span>Prototype Boundary</span>
+              <span>当前边界</span>
               <h3>当前只完成产品壳，不伪造智能行为</h3>
               <p>本步不会接真实 Agent、RAG、历史管理、流式输出或上下文持久化。</p>
             </article>
@@ -306,7 +306,7 @@ interface ToolPreview {
 const scenarios: ScenarioCard[] = [
   {
     key: "jd-reading",
-    label: "Scenario 01",
+    label: "场景 01",
     title: "岗位解读",
     description: "围绕 JobPosting 做职责拆解、要求归因、风险点辨识和投入优先级判断。",
     workflowHint: "通常建立在 JobPosting 和基础求职目标之上。",
@@ -314,7 +314,7 @@ const scenarios: ScenarioCard[] = [
   },
   {
     key: "resume-advice",
-    label: "Scenario 02",
+    label: "场景 02",
     title: "简历建议",
     description: "围绕 Resume 给出贴岗修改建议、表达压缩建议和亮点重排建议。",
     workflowHint: "通常会挂载 Resume、JobPosting 和已解析内容。",
@@ -322,7 +322,7 @@ const scenarios: ScenarioCard[] = [
   },
   {
     key: "match-review",
-    label: "Scenario 03",
+    label: "场景 03",
     title: "匹配复盘",
     description: "结合 MatchResult 做优势、短板、缺失项和改进优先级复盘。",
     workflowHint: "通常建立在 Resume + JobPosting + MatchResult 三元关系上。",
@@ -330,7 +330,7 @@ const scenarios: ScenarioCard[] = [
   },
   {
     key: "interview-mock",
-    label: "Scenario 04",
+    label: "场景 04",
     title: "面试模拟",
     description: "未来会围绕 Interview Prep、历史投递记录和岗位要求做追问模拟。",
     workflowHint: "通常依赖 GeneratedArtifact、ApplicationRecord 和 Knowledge。",
@@ -338,7 +338,7 @@ const scenarios: ScenarioCard[] = [
   },
   {
     key: "application-strategy",
-    label: "Scenario 05",
+    label: "场景 05",
     title: "投递策略",
     description: "围绕 ApplicationRecord 给出下一步跟进建议、节奏建议和优先级提醒。",
     workflowHint: "通常建立在 ApplicationRecord / ApplicationEvent 时间线上。",
@@ -346,7 +346,7 @@ const scenarios: ScenarioCard[] = [
   },
   {
     key: "artifact-polish",
-    label: "Scenario 06",
+    label: "场景 06",
     title: "材料润色",
     description: "围绕 GeneratedArtifact 和 feedback 历史，给出更贴岗位的语言与结构建议。",
     workflowHint: "通常依赖 GeneratedArtifact、ArtifactFeedback 和 MatchResult。",
@@ -356,28 +356,28 @@ const scenarios: ScenarioCard[] = [
 
 const sessionPreviews: SessionPreview[] = [
   {
-    badge: "Preview",
+    badge: "预览",
     title: "针对阿里 AI 应用岗的简历建议",
     summary: "未来会挂载 Resume + JobPosting，上下文化地给出定制建议；当前只是会话入口示意。",
-    timeLabel: "Shell only",
+    timeLabel: "仅产品壳",
   },
   {
-    badge: "Preview",
+    badge: "预览",
     title: "对比两个 JobPosting 的匹配度",
     summary: "未来会基于多个 JobPosting 和 MatchResult 做对照分析；当前不读取真实会话历史。",
-    timeLabel: "No persistence",
+    timeLabel: "无持久化",
   },
   {
-    badge: "Preview",
+    badge: "预览",
     title: "基于最新 MatchResult 生成面试追问",
     summary: "未来会接 Interview Prep、Knowledge 和工具链；当前只保留会话壳的结构感。",
-    timeLabel: "Future runtime",
+    timeLabel: "未来运行时",
   },
   {
-    badge: "Preview",
+    badge: "预览",
     title: "回看最近投递记录并制定下一步",
     summary: "未来会结合 ApplicationRecord / ApplicationEvent 做跟进建议；当前不会真正执行动作。",
-    timeLabel: "Prototype",
+    timeLabel: "原型态",
   },
 ];
 
@@ -385,80 +385,80 @@ const contextSlots: ContextSlot[] = [
   {
     model: "Resume",
     description: "挂载当前简历、parsed_json 和版本上下文，为改写建议和对照分析提供基础。",
-    status: "Not attached",
-    source: "Workflow object",
+    status: "尚未挂载",
+    source: "工作流对象",
   },
   {
     model: "JobPosting",
     description: "挂载目标岗位、结构化 JD 和风险点，避免 Copilot 脱离岗位语境自由输出。",
-    status: "Will bind from workflow objects",
-    source: "Workflow object",
+    status: "将从工作流对象绑定",
+    source: "工作流对象",
   },
   {
     model: "MatchResult",
     description: "挂载整体分数、优势、差距和建议，帮助 Copilot 做更贴上下文的复盘。",
-    status: "Future context source",
-    source: "Analysis layer",
+    status: "未来上下文源",
+    source: "分析层",
   },
   {
     model: "GeneratedArtifact",
     description: "挂载 Cover Letter / Interview Prep 等材料及 feedback 记录，用于润色和追问。",
-    status: "Future context source",
-    source: "Artifact layer",
+    status: "未来上下文源",
+    source: "材料层",
   },
   {
     model: "ApplicationRecord",
     description: "挂载投递阶段、下一步动作和事件时间线，让 Copilot 带着 workflow 状态说话。",
-    status: "Future context source",
-    source: "Tracking layer",
+    status: "未来上下文源",
+    source: "跟踪层",
   },
   {
     model: "Knowledge",
     description: "挂载未来检索结果、通用求职资料和用户私有知识，作为 RAG 注入入口。",
-    status: "Future retrieval surface",
-    source: "Knowledge entry",
+    status: "未来检索入口",
+    source: "知识入口",
   },
 ];
 
 const toolPreviews: ToolPreview[] = [
   {
-    group: "Parse",
-    name: "Parse JD",
+    group: "解析",
+    name: "解析 JD",
     description: "围绕 JobPosting 触发结构化解析能力，供后续分析和生成使用。",
   },
   {
-    group: "Parse",
-    name: "Parse Resume",
+    group: "解析",
+    name: "解析简历",
     description: "围绕 Resume 触发结构化解析能力，供后续匹配与建议使用。",
   },
   {
-    group: "Analyze",
-    name: "Analyze Match",
+    group: "分析",
+    name: "匹配分析",
     description: "基于结构化 Resume + JD 生成 MatchResult，用于差距复盘和材料策略。",
   },
   {
-    group: "Generate",
-    name: "Generate Cover Letter",
+    group: "生成",
+    name: "生成求职信",
     description: "基于 Resume / JobPosting / MatchResult 生成求职信草稿。",
   },
   {
-    group: "Generate",
-    name: "Generate Interview Prep",
+    group: "生成",
+    name: "生成面试准备",
     description: "基于 workflow 对象生成面试准备提纲和后续追问方向。",
   },
   {
-    group: "Feedback",
-    name: "Record Artifact Feedback",
+    group: "反馈",
+    name: "记录材料反馈",
     description: "记录对 GeneratedArtifact 的采纳与修改反馈，形成轻量闭环。",
   },
   {
-    group: "Workflow",
-    name: "Transition Application",
+    group: "工作流",
+    name: "执行投递流转",
     description: "围绕 ApplicationRecord 执行阶段流转并写入 ApplicationEvent。",
   },
   {
-    group: "Knowledge",
-    name: "Retrieve Knowledge",
+    group: "知识",
+    name: "检索知识",
     description: "未来从私有资料与通用知识中检索最小充分上下文，供 Copilot 使用。",
   },
 ];
@@ -485,21 +485,21 @@ const messageMocks = computed(() => {
   return [
     {
       role: "assistant",
-      label: "Assistant",
-      caption: "Welcome",
+      label: "AI 助手",
+      caption: "欢迎说明",
       content:
         "我会围绕当前 Resume、JobPosting、MatchResult、GeneratedArtifact、ApplicationRecord 和 Knowledge 来组织上下文，而不是做脱离 workflow 的普通闲聊。",
     },
     {
       role: "user",
-      label: "User Intent Preview",
+      label: "用户意图预览",
       caption: activeScenario.value.phase,
       content: `如果后续接通 Runtime，这里会围绕「${activeScenario.value.title}」场景来组织问题，并优先使用对应 workflow 对象作为上下文。`,
     },
     {
       role: "assistant",
-      label: "Assistant",
-      caption: "Runtime Boundary",
+      label: "AI 助手",
+      caption: "运行时边界",
       content:
         "后续这里会接入 LangChain / LangGraph / RAG，让 Copilot 能调用 Jobs / Resumes / Matches / Artifacts / Applications 的真实数据；当前仍然只是高保真产品壳，不会真实发送消息。",
     },
@@ -520,7 +520,7 @@ function notifyShell(feature: string) {
 
 function handleSendPlaceholder() {
   if (!draftPrompt.value.trim()) {
-    ElMessage.warning("当前只是 Copilot 产品壳；如需演示输入区，请先输入一段示例问题。");
+    ElMessage.warning("当前只是 AI 助手产品壳；如需演示输入区，请先输入一段示例问题。");
     return;
   }
 

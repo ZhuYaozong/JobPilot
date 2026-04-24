@@ -2,8 +2,8 @@
   <div class="page-stack">
     <SectionCard
       title="岗位 JD"
-      subtitle="当前页面已接入真实 JobPosting API，支持列表、详情、创建与 JD 解析闭环。"
-      eyebrow="Workflow Workspace"
+      subtitle="当前页面已接入真实岗位接口，支持列表、详情、创建与 JD 解析闭环。"
+      eyebrow="工作流工作台"
     >
       <div class="api-note">
         <strong>已对齐接口</strong>
@@ -16,9 +16,11 @@
 
     <div class="resource-workspace">
       <SectionCard
-        title="JobPosting 列表"
-        subtitle="左侧列表直接调用后端 /api/v1/jobs，点击后加载详情。"
+        class="resource-panel resource-panel--list"
+        title="岗位列表"
+        subtitle="左侧列表直接调用后端 /api/v1/jobs，选中后加载详情。"
       >
+        <div class="resource-list-shell">
         <div v-if="jobsLoading" class="panel-loading">正在加载岗位列表...</div>
         <div v-else-if="jobs.length" class="resource-list">
           <button
@@ -31,7 +33,7 @@
           >
             <div class="resource-item__header">
               <strong>{{ job.job_title }}</strong>
-              <el-tag size="small" effect="plain">{{ job.status }}</el-tag>
+              <el-tag size="small" effect="plain">{{ formatJobStatus(job.status) }}</el-tag>
             </div>
             <p>{{ job.company_name }}</p>
             <small>{{ job.city || "城市未填写" }}</small>
@@ -40,22 +42,23 @@
         </div>
         <EmptyStateCard
           v-else
-          eyebrow="No JobPosting"
+          eyebrow="暂无岗位"
           title="还没有岗位记录"
-          description="先在下方创建一个 JobPosting，列表会自动刷新并选中新建项。"
+          description="先在下方创建一个岗位记录，列表会自动刷新并选中新建项。"
         />
+        </div>
       </SectionCard>
 
       <SectionCard
-        title="JobPosting 详情"
-        subtitle="详情区支持查看原始 JD 和 parse 后的 structured JSON。"
+        title="岗位详情"
+        subtitle="详情区支持查看原始 JD 和解析后的结构化内容。"
       >
         <div v-if="detailLoading" class="panel-loading">正在加载岗位详情...</div>
         <EmptyStateCard
           v-else-if="!selectedJob"
-          eyebrow="Select JobPosting"
+          eyebrow="选择岗位"
           title="先从左侧选择一条岗位记录"
-          description="选中后会展示 company_name、job_title、jd_text、source_url 和 parsed_json。"
+          description="选中后会展示公司、岗位名称、JD 原文、来源链接和结构化结果。"
         />
         <div v-else class="detail-stack">
           <div class="detail-actions">
@@ -74,21 +77,21 @@
 
           <div class="detail-meta">
             <article>
-              <span>City</span>
+              <span>城市</span>
               <strong>{{ selectedJob.city || "-" }}</strong>
             </article>
             <article>
-              <span>Status</span>
-              <strong>{{ selectedJob.status }}</strong>
+              <span>状态</span>
+              <strong>{{ formatJobStatus(selectedJob.status) }}</strong>
             </article>
             <article>
-              <span>Updated</span>
+              <span>最近更新</span>
               <strong>{{ formatDateTime(selectedJob.updated_at) }}</strong>
             </article>
           </div>
 
           <div class="detail-field">
-            <span>Source URL</span>
+            <span>来源链接</span>
             <a
               v-if="selectedJob.source_url"
               class="detail-link"
@@ -102,13 +105,13 @@
           </div>
 
           <div class="detail-field">
-            <span>JD Text</span>
+            <span>JD 原文</span>
             <pre class="text-block">{{ selectedJob.jd_text }}</pre>
           </div>
 
           <JsonBlock
-            title="parsed_json"
-            caption="后端 parse 结果"
+            title="结构化结果 parsed_json"
+            caption="后端 JD 解析结果"
             :value="selectedJob.parsed_json"
             empty-text="尚未解析 JD，点击上方按钮后可查看结构化结果。"
           />
@@ -117,36 +120,36 @@
     </div>
 
     <SectionCard
-      title="创建 JobPosting"
+      title="新建岗位"
       subtitle="表单字段严格对齐后端 JobPostingCreate，本步不引入额外字段。"
     >
       <el-form label-position="top" class="create-form-grid" @submit.prevent>
-        <el-form-item label="company_name" required>
+        <el-form-item label="公司名称" required>
           <el-input
             v-model="createForm.company_name"
             placeholder="例如 OpenAI"
           />
         </el-form-item>
 
-        <el-form-item label="job_title" required>
+        <el-form-item label="岗位名称" required>
           <el-input
             v-model="createForm.job_title"
             placeholder="例如 AI Application Engineer"
           />
         </el-form-item>
 
-        <el-form-item label="city">
-          <el-input v-model="createForm.city" placeholder="例如 Shanghai" />
+        <el-form-item label="城市">
+          <el-input v-model="createForm.city" placeholder="例如 上海" />
         </el-form-item>
 
-        <el-form-item label="source_url">
+        <el-form-item label="来源链接">
           <el-input
             v-model="createForm.source_url"
             placeholder="https://example.com/job/123"
           />
         </el-form-item>
 
-        <el-form-item class="create-form-grid__wide" label="jd_text" required>
+        <el-form-item class="create-form-grid__wide" label="岗位描述 JD" required>
           <el-input
             v-model="createForm.jd_text"
             type="textarea"
@@ -162,7 +165,7 @@
             :disabled="!canCreateJob"
             @click="handleCreateJob"
           >
-            创建 JobPosting
+            创建岗位
           </el-button>
         </div>
       </el-form>
@@ -185,6 +188,7 @@ import type {
 } from "@/types/job_posting";
 import { formatDateTime } from "@/utils/format";
 import { getErrorMessage } from "@/utils/http";
+import { formatJobStatus } from "@/utils/labels";
 
 const jobs = ref<JobPostingListItem[]>([]);
 const jobsLoading = ref(false);
@@ -275,18 +279,18 @@ async function selectJob(jobId: number) {
 
 async function handleCreateJob() {
   if (!canCreateJob.value) {
-    ElMessage.warning("请先填写 company_name、job_title 和 jd_text");
+    ElMessage.warning("请先填写公司名称、岗位名称和岗位描述");
     return;
   }
 
   createPending.value = true;
   try {
     const created = await createJob(buildCreatePayload());
-    ElMessage.success("JobPosting 创建成功");
+    ElMessage.success("岗位已创建");
     resetCreateForm();
     await fetchJobs(created.id);
   } catch (error) {
-    ElMessage.error(getErrorMessage(error, "创建 JobPosting 失败"));
+    ElMessage.error(getErrorMessage(error, "创建岗位失败"));
   } finally {
     createPending.value = false;
   }
@@ -294,7 +298,7 @@ async function handleCreateJob() {
 
 async function handleParseJob() {
   if (!selectedJobId.value) {
-    ElMessage.warning("请先选择一个 JobPosting");
+    ElMessage.warning("请先选择一条岗位记录");
     return;
   }
 

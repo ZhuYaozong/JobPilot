@@ -2,8 +2,8 @@
   <div class="page-stack">
     <SectionCard
       title="AI 材料"
-      subtitle="当前页面已接入真实 GeneratedArtifact API，支持列表、详情、Cover Letter / Interview Prep 生成与 ArtifactFeedback 记录闭环。"
-      eyebrow="Workflow Workspace"
+      subtitle="当前页面已接入真实材料接口，支持列表、详情、求职信 / 面试准备生成与反馈记录闭环。"
+      eyebrow="工作流工作台"
     >
       <div class="api-note">
         <strong>已对齐接口</strong>
@@ -17,7 +17,7 @@
 
       <div class="artifact-guidance">
         <p>
-          Cover Letter / Interview Prep 生成依赖已 parse 的
+          求职信 / 面试准备生成依赖已 parse 的
           <strong>Resume</strong>、已 parse 的 <strong>JobPosting</strong>，以及同一组对象对应的
           <strong>MatchResult</strong>。
         </p>
@@ -33,9 +33,11 @@
 
     <div class="resource-workspace">
       <SectionCard
-        title="GeneratedArtifact 列表"
-        subtitle="左侧列表直接调用后端 /api/v1/artifacts，并复用 Resume / JobPosting 轻量映射展示更友好的标签。"
+        class="resource-panel resource-panel--list"
+        title="材料列表"
+        subtitle="左侧列表直接调用后端 /api/v1/artifacts，并复用简历 / 岗位轻量映射展示更友好的标签。"
       >
+        <div class="resource-list-shell">
         <div v-if="artifactsLoading" class="panel-loading">正在加载材料列表...</div>
         <div v-else-if="artifacts.length" class="resource-list">
           <button
@@ -48,15 +50,15 @@
           >
             <div class="resource-item__header">
               <strong>{{ artifact.title }}</strong>
-              <el-tag size="small" effect="plain">{{ artifact.status }}</el-tag>
+              <el-tag size="small" effect="plain">{{ formatArtifactStatus(artifact.status) }}</el-tag>
             </div>
 
             <div class="artifact-item__tags">
               <el-tag size="small" type="success" effect="plain">
-                {{ artifact.artifact_type }}
+                {{ formatArtifactType(artifact.artifact_type) }}
               </el-tag>
               <el-tag size="small" type="warning" effect="plain">
-                {{ artifact.generator_type }}
+                {{ formatGeneratorType(artifact.generator_type) }}
               </el-tag>
             </div>
 
@@ -67,22 +69,23 @@
         </div>
         <EmptyStateCard
           v-else
-          eyebrow="No GeneratedArtifact"
+          eyebrow="暂无材料"
           title="还没有 AI 材料记录"
-          description="先在下方选择一组 Resume 和 JobPosting，生成第一份 Cover Letter 或 Interview Prep。"
+          description="先在下方选择一组简历和岗位，生成第一份求职信或面试准备。"
         />
+        </div>
       </SectionCard>
 
       <SectionCard
-        title="GeneratedArtifact 详情"
-        subtitle="右侧展示详情正文、结构化 JSON 和 ArtifactFeedback 历史。"
+        title="材料详情"
+        subtitle="右侧展示正文内容、结构化 JSON 和反馈历史。"
       >
         <div v-if="detailLoading" class="panel-loading">正在加载材料详情...</div>
         <EmptyStateCard
           v-else-if="!selectedArtifact"
-          eyebrow="Select GeneratedArtifact"
+          eyebrow="选择材料"
           title="先从左侧选择一条材料记录"
-          description="选中后会展示 artifact_type、正文内容、content_json 与 feedback 历史。"
+          description="选中后会展示材料类型、正文内容、content_json 与反馈历史。"
         />
         <div v-else class="detail-stack">
           <div class="detail-actions">
@@ -94,82 +97,82 @@
 
           <div class="detail-tag-row">
             <el-tag effect="plain" type="success">
-              {{ selectedArtifact.artifact_type }}
+              {{ formatArtifactType(selectedArtifact.artifact_type) }}
             </el-tag>
-            <el-tag effect="plain">{{ selectedArtifact.status }}</el-tag>
+            <el-tag effect="plain">{{ formatArtifactStatus(selectedArtifact.status) }}</el-tag>
             <el-tag effect="plain" type="warning">
-              {{ selectedArtifact.generator_type }}
+              {{ formatGeneratorType(selectedArtifact.generator_type) }}
             </el-tag>
           </div>
 
           <div class="detail-meta">
             <article>
-              <span>Artifact ID</span>
+              <span>材料编号</span>
               <strong>#{{ selectedArtifact.id }}</strong>
             </article>
             <article>
-              <span>artifact_type</span>
-              <strong>{{ selectedArtifact.artifact_type }}</strong>
+              <span>材料类型</span>
+              <strong>{{ formatArtifactType(selectedArtifact.artifact_type) }}</strong>
             </article>
             <article>
-              <span>status</span>
-              <strong>{{ selectedArtifact.status }}</strong>
+              <span>状态</span>
+              <strong>{{ formatArtifactStatus(selectedArtifact.status) }}</strong>
             </article>
             <article>
-              <span>generator_type</span>
-              <strong>{{ selectedArtifact.generator_type }}</strong>
+              <span>生成方式</span>
+              <strong>{{ formatGeneratorType(selectedArtifact.generator_type) }}</strong>
             </article>
             <article>
-              <span>created_at</span>
+              <span>创建时间</span>
               <strong>{{ formatDateTime(selectedArtifact.created_at) }}</strong>
             </article>
             <article>
-              <span>updated_at</span>
+              <span>最近更新</span>
               <strong>{{ formatDateTime(selectedArtifact.updated_at) }}</strong>
             </article>
           </div>
 
           <div class="artifact-link-grid">
             <article>
-              <span>resume_id</span>
+              <span>关联简历</span>
               <strong>{{ getResumeLabel(selectedArtifact.resume_id) }}</strong>
-              <p>{{ formatRawId("Resume", selectedArtifact.resume_id) }}</p>
+              <p>{{ formatRawId("简历", selectedArtifact.resume_id) }}</p>
             </article>
             <article>
-              <span>job_posting_id</span>
+              <span>关联岗位</span>
               <strong>{{ getJobLabel(selectedArtifact.job_posting_id) }}</strong>
-              <p>{{ formatRawId("JobPosting", selectedArtifact.job_posting_id) }}</p>
+              <p>{{ formatRawId("岗位", selectedArtifact.job_posting_id) }}</p>
             </article>
             <article>
-              <span>application_record_id</span>
-              <strong>{{ formatRawId("ApplicationRecord", selectedArtifact.application_record_id) }}</strong>
+              <span>关联投递</span>
+              <strong>{{ formatRawId("投递记录", selectedArtifact.application_record_id) }}</strong>
             </article>
           </div>
 
           <div class="detail-field">
-            <span>content_text</span>
+            <span>正文内容 content_text</span>
             <MarkdownBlock
               v-if="selectedArtifact.content_text"
               :content="selectedArtifact.content_text"
             />
-            <p v-else class="detail-placeholder">当前没有 content_text。</p>
+            <p v-else class="detail-placeholder">当前没有正文内容。</p>
           </div>
 
           <JsonBlock
-            title="content_json"
+            title="结构化内容 content_json"
             caption="后端生成元数据或结构化内容"
             :value="selectedArtifact.content_json"
-            empty-text="当前没有 content_json。"
+            empty-text="当前没有结构化内容。"
           />
 
           <div class="detail-field">
             <div class="detail-field__header">
-              <span>ArtifactFeedback 历史</span>
+              <span>反馈历史 ArtifactFeedback</span>
               <small>{{ feedbackEvents.length }} 条事件</small>
             </div>
 
             <div v-if="feedbackLoading" class="panel-loading panel-loading--inline">
-              正在加载 feedback 历史...
+              正在加载反馈历史...
             </div>
             <div v-else-if="sortedFeedbackEvents.length" class="feedback-stack">
               <article
@@ -178,14 +181,14 @@
                 class="feedback-item"
               >
                 <div class="feedback-item__header">
-                  <strong>{{ feedback.feedback_type }}</strong>
+                  <strong>{{ formatFeedbackType(feedback.feedback_type) }}</strong>
                   <small>{{ formatDateTime(feedback.created_at) }}</small>
                 </div>
-                <p>{{ feedback.note || "未填写 note。" }}</p>
+                <p>{{ feedback.note || "未填写备注。" }}</p>
               </article>
             </div>
             <p v-else class="detail-placeholder">
-              当前没有 feedback 记录，提交后会按最新时间展示在最前面。
+              当前没有反馈记录，提交后会按最新时间展示在最前面。
             </p>
           </div>
         </div>
@@ -194,12 +197,12 @@
 
     <div class="two-column">
       <SectionCard
-        title="Generate Cover Letter"
+        title="生成求职信"
         subtitle="严格对齐 CoverLetterGenerateRequest；本步不接 application_record_id。"
       >
         <div class="analyze-stack">
           <div class="analyze-hint">
-            <p>生成前请先在 Resumes / Jobs 页面完成 parse。</p>
+            <p>生成前请先在简历页 / 岗位页完成 parse。</p>
             <p>同一组 Resume + JobPosting 还需要已有 MatchResult，否则后端会返回真实错误。</p>
             <p>language_mode 当前只允许 zh 或 bilingual。</p>
           </div>
@@ -209,27 +212,27 @@
           </p>
 
           <el-form label-position="top" class="create-form-grid" @submit.prevent>
-            <el-form-item label="resume_id" required>
+            <el-form-item label="简历" required>
               <el-select
                 v-model="coverLetterForm.resume_id"
                 filterable
-                placeholder="选择一份 Resume"
+                placeholder="选择一份简历"
                 :loading="referencesLoading"
               >
                 <el-option
                   v-for="resume in resumes"
                   :key="resume.id"
-                  :label="`${resume.title} (${resume.parse_status})`"
+                  :label="`${resume.title}（${formatParseStatus(resume.parse_status)}）`"
                   :value="resume.id"
                 />
               </el-select>
             </el-form-item>
 
-            <el-form-item label="job_posting_id" required>
+            <el-form-item label="岗位" required>
               <el-select
                 v-model="coverLetterForm.job_posting_id"
                 filterable
-                placeholder="选择一个 JobPosting"
+                placeholder="选择一个岗位"
                 :loading="referencesLoading"
               >
                 <el-option
@@ -241,7 +244,7 @@
               </el-select>
             </el-form-item>
 
-            <el-form-item class="create-form-grid__wide" label="language_mode" required>
+            <el-form-item class="create-form-grid__wide" label="语言模式" required>
               <el-select v-model="coverLetterForm.language_mode">
                 <el-option
                   v-for="option in languageModeOptions"
@@ -254,7 +257,7 @@
 
             <div class="create-form-grid__wide create-form-actions">
               <p class="create-form-hint">
-                JobPosting 选项列表没有 parse_status 字段；若岗位尚未 parse，后端会直接返回真实错误。
+                岗位选项列表没有 parse_status 字段；若岗位尚未 parse，后端会直接返回真实错误。
               </p>
               <el-button
                 type="primary"
@@ -262,7 +265,7 @@
                 :disabled="!canGenerateCoverLetter"
                 @click="handleGenerateCoverLetter"
               >
-                生成 Cover Letter
+                生成求职信
               </el-button>
             </div>
           </el-form>
@@ -270,12 +273,12 @@
       </SectionCard>
 
       <SectionCard
-        title="Generate Interview Prep"
+        title="生成面试准备"
         subtitle="严格对齐 InterviewPrepGenerateRequest；当前只生成中文准备提纲。"
       >
         <div class="analyze-stack">
           <div class="analyze-hint">
-            <p>Interview Prep 使用同一组 Resume / JobPosting 上下文。</p>
+            <p>Interview Prep 使用同一组简历 / 岗位上下文。</p>
             <p>若缺少 parse 结果、MatchResult 或 LLM 配置，页面会直接展示后端真实 detail。</p>
             <p>本阶段不做批量生成、模板系统、流式输出或导出。</p>
           </div>
@@ -285,27 +288,27 @@
           </p>
 
           <el-form label-position="top" class="create-form-grid" @submit.prevent>
-            <el-form-item label="resume_id" required>
+            <el-form-item label="简历" required>
               <el-select
                 v-model="interviewPrepForm.resume_id"
                 filterable
-                placeholder="选择一份 Resume"
+                placeholder="选择一份简历"
                 :loading="referencesLoading"
               >
                 <el-option
                   v-for="resume in resumes"
                   :key="resume.id"
-                  :label="`${resume.title} (${resume.parse_status})`"
+                  :label="`${resume.title}（${formatParseStatus(resume.parse_status)}）`"
                   :value="resume.id"
                 />
               </el-select>
             </el-form-item>
 
-            <el-form-item label="job_posting_id" required>
+            <el-form-item label="岗位" required>
               <el-select
                 v-model="interviewPrepForm.job_posting_id"
                 filterable
-                placeholder="选择一个 JobPosting"
+                placeholder="选择一个岗位"
                 :loading="referencesLoading"
               >
                 <el-option
@@ -319,7 +322,7 @@
 
             <div class="create-form-grid__wide create-form-actions">
               <p class="create-form-hint">
-                生成成功后会刷新 artifacts 列表，并自动选中新生成的 Interview Prep。
+                生成成功后会刷新材料列表，并自动选中新生成的面试准备。
               </p>
               <el-button
                 type="primary"
@@ -327,7 +330,7 @@
                 :disabled="!canGenerateInterviewPrep"
                 @click="handleGenerateInterviewPrep"
               >
-                生成 Interview Prep
+                生成面试准备
               </el-button>
             </div>
           </el-form>
@@ -336,8 +339,8 @@
     </div>
 
     <SectionCard
-      title="Record Artifact Feedback"
-      subtitle="反馈表单严格对齐 ArtifactFeedbackCreate；提交成功后只刷新当前选中 artifact 的 feedback 历史。"
+      title="记录材料反馈"
+      subtitle="反馈表单严格对齐 ArtifactFeedbackCreate；提交成功后只刷新当前选中材料的反馈历史。"
     >
       <div class="analyze-stack">
         <div class="analyze-hint">
@@ -347,9 +350,9 @@
 
         <EmptyStateCard
           v-if="!selectedArtifact"
-          eyebrow="Select GeneratedArtifact"
-          title="先选择一条 GeneratedArtifact"
-          description="选中后才可以记录 accepted、edited_then_used、rejected 或 saved_for_later。"
+          eyebrow="选择材料"
+          title="先选择一条材料记录"
+          description="选中后才可以记录已采用、编辑后采用、已拒绝或稍后再看。"
         />
 
         <template v-else>
@@ -361,7 +364,7 @@
           </p>
 
           <el-form label-position="top" class="create-form-grid" @submit.prevent>
-            <el-form-item label="feedback_type" required>
+            <el-form-item label="反馈类型" required>
               <el-select
                 v-model="feedbackForm.feedback_type"
                 placeholder="选择反馈类型"
@@ -375,7 +378,7 @@
               </el-select>
             </el-form-item>
 
-            <el-form-item class="create-form-grid__wide" label="note">
+            <el-form-item class="create-form-grid__wide" label="补充说明">
               <el-input
                 v-model="feedbackForm.note"
                 type="textarea"
@@ -386,7 +389,7 @@
 
             <div class="create-form-grid__wide create-form-actions">
               <p class="create-form-hint">
-                提交成功后不会重刷整个 artifacts 列表，只刷新当前选中材料的 feedback 历史。
+                提交成功后不会重刷整个材料列表，只刷新当前选中材料的反馈历史。
               </p>
               <el-button
                 type="primary"
@@ -394,7 +397,7 @@
                 :disabled="!canSubmitFeedback"
                 @click="handleSubmitFeedback"
               >
-                记录 ArtifactFeedback
+                记录反馈
               </el-button>
             </div>
           </el-form>
@@ -434,6 +437,13 @@ import type {
 } from "@/types/generated_artifact";
 import { formatDateTime } from "@/utils/format";
 import { getErrorMessage } from "@/utils/http";
+import {
+  formatArtifactStatus,
+  formatArtifactType,
+  formatFeedbackType,
+  formatGeneratorType,
+  formatParseStatus,
+} from "@/utils/labels";
 
 type LanguageMode = NonNullable<CoverLetterGenerateRequest["language_mode"]>;
 
@@ -460,16 +470,16 @@ interface FeedbackFormState {
 }
 
 const languageModeOptions: Array<{ label: string; value: LanguageMode }> = [
-  { label: "zh", value: "zh" },
-  { label: "bilingual", value: "bilingual" },
+  { label: "仅中文 zh", value: "zh" },
+  { label: "中英双语 bilingual", value: "bilingual" },
 ];
 
 const feedbackTypeOptions: Array<{ label: string; value: ArtifactFeedbackType }> =
   [
-    { label: "accepted", value: "accepted" },
-    { label: "edited_then_used", value: "edited_then_used" },
-    { label: "rejected", value: "rejected" },
-    { label: "saved_for_later", value: "saved_for_later" },
+    { label: "已采用", value: "accepted" },
+    { label: "编辑后采用", value: "edited_then_used" },
+    { label: "已拒绝", value: "rejected" },
+    { label: "稍后再看", value: "saved_for_later" },
   ];
 
 const artifacts = ref<GeneratedArtifactListItem[]>([]);
@@ -554,7 +564,7 @@ const canSubmitFeedback = computed(() => {
 
 const generateUnavailableMessage = computed(() => {
   if (referencesLoading.value && !resumes.value.length && !jobs.value.length) {
-    return "正在加载 Resume 和 JobPosting 选项...";
+    return "正在加载简历和岗位选项...";
   }
 
   if (resumes.value.length && jobs.value.length) {
@@ -562,14 +572,14 @@ const generateUnavailableMessage = computed(() => {
   }
 
   if (!resumes.value.length && !jobs.value.length) {
-    return "当前没有可用 Resume 和 JobPosting 选项，生成面板暂不可用。";
+    return "当前没有可用的简历和岗位选项，生成面板暂不可用。";
   }
 
   if (!resumes.value.length) {
-    return "当前没有可用 Resume 选项，请先在 /resumes 页面创建并解析 Resume。";
+    return "当前没有可用简历选项，请先在简历页创建并解析简历。";
   }
 
-  return "当前没有可用 JobPosting 选项，请先在 /jobs 页面创建并解析 JobPosting。";
+  return "当前没有可用岗位选项，请先在岗位页创建并解析岗位。";
 });
 
 function toTimestamp(value: string): number {
@@ -579,22 +589,20 @@ function toTimestamp(value: string): number {
 
 function getResumeLabel(resumeId: number | null): string {
   if (resumeId === null) {
-    return "未关联 Resume";
+    return "未关联简历";
   }
 
   const resume = resumeMap.value.get(resumeId);
-  return resume ? resume.title : `Resume #${resumeId}`;
+  return resume ? resume.title : `简历 #${resumeId}`;
 }
 
 function getJobLabel(jobPostingId: number | null): string {
   if (jobPostingId === null) {
-    return "未关联 JobPosting";
+    return "未关联岗位";
   }
 
   const job = jobMap.value.get(jobPostingId);
-  return job
-    ? `${job.company_name} · ${job.job_title}`
-    : `JobPosting #${jobPostingId}`;
+  return job ? `${job.company_name} · ${job.job_title}` : `岗位 #${jobPostingId}`;
 }
 
 function formatRawId(label: string, value: number | null): string {
@@ -602,7 +610,7 @@ function formatRawId(label: string, value: number | null): string {
 }
 
 function getArtifactContextSummary(artifact: GeneratedArtifactListItem): string {
-  return `${getResumeLabel(artifact.resume_id)} -> ${getJobLabel(
+  return `${getResumeLabel(artifact.resume_id)} → ${getJobLabel(
     artifact.job_posting_id,
   )}`;
 }
@@ -650,7 +658,7 @@ async function fetchArtifactDetail(artifactId: number) {
     selectedArtifact.value = await getArtifact(artifactId);
   } catch (error) {
     selectedArtifact.value = null;
-    ElMessage.error(getErrorMessage(error, "GeneratedArtifact 详情加载失败"));
+    ElMessage.error(getErrorMessage(error, "材料详情加载失败"));
   } finally {
     detailLoading.value = false;
   }
@@ -662,7 +670,7 @@ async function fetchArtifactFeedbackHistory(artifactId: number) {
     feedbackEvents.value = await listArtifactFeedback(artifactId, { limit: 50 });
   } catch (error) {
     feedbackEvents.value = [];
-    ElMessage.error(getErrorMessage(error, "ArtifactFeedback 历史加载失败"));
+    ElMessage.error(getErrorMessage(error, "反馈历史加载失败"));
   } finally {
     feedbackLoading.value = false;
   }
@@ -710,7 +718,7 @@ async function fetchArtifacts(options?: {
       resetFeedbackForm();
     }
   } catch (error) {
-    ElMessage.error(getErrorMessage(error, "GeneratedArtifact 列表加载失败"));
+    ElMessage.error(getErrorMessage(error, "材料列表加载失败"));
   } finally {
     artifactsLoading.value = false;
   }
@@ -729,7 +737,7 @@ async function fetchReferences() {
   } else {
     resumes.value = [];
     ElMessage.error(
-      getErrorMessage(resumeResult.reason, "Resume 选项加载失败"),
+      getErrorMessage(resumeResult.reason, "简历选项加载失败"),
     );
   }
 
@@ -738,7 +746,7 @@ async function fetchReferences() {
   } else {
     jobs.value = [];
     ElMessage.error(
-      getErrorMessage(jobResult.reason, "JobPosting 选项加载失败"),
+      getErrorMessage(jobResult.reason, "岗位选项加载失败"),
     );
   }
 
@@ -751,7 +759,7 @@ async function selectArtifact(artifactId: number) {
 
 async function handleGenerateCoverLetter() {
   if (!canGenerateCoverLetter.value) {
-    ElMessage.warning("请先选择可用的 Resume、JobPosting 和 language_mode");
+    ElMessage.warning("请先选择可用的简历、岗位和语言模式");
     return;
   }
 
@@ -772,14 +780,14 @@ async function handleGenerateCoverLetter() {
     const created = await generateCoverLetter(payload);
     const createdId = extractArtifactId(created);
 
-    ElMessage.success("Cover Letter 生成成功");
+    ElMessage.success("求职信已生成");
 
     await fetchArtifacts({
       nextSelectedId: createdId,
       fallbackCriteria: createdId ? undefined : fallbackCriteria,
     });
   } catch (error) {
-    ElMessage.error(getErrorMessage(error, "生成 Cover Letter 失败"));
+    ElMessage.error(getErrorMessage(error, "生成求职信失败"));
   } finally {
     coverLetterPending.value = false;
   }
@@ -787,7 +795,7 @@ async function handleGenerateCoverLetter() {
 
 async function handleGenerateInterviewPrep() {
   if (!canGenerateInterviewPrep.value) {
-    ElMessage.warning("请先选择可用的 Resume 和 JobPosting");
+    ElMessage.warning("请先选择可用的简历和岗位");
     return;
   }
 
@@ -807,14 +815,14 @@ async function handleGenerateInterviewPrep() {
     const created = await generateInterviewPrep(payload);
     const createdId = extractArtifactId(created);
 
-    ElMessage.success("Interview Prep 生成成功");
+    ElMessage.success("面试准备已生成");
 
     await fetchArtifacts({
       nextSelectedId: createdId,
       fallbackCriteria: createdId ? undefined : fallbackCriteria,
     });
   } catch (error) {
-    ElMessage.error(getErrorMessage(error, "生成 Interview Prep 失败"));
+    ElMessage.error(getErrorMessage(error, "生成面试准备失败"));
   } finally {
     interviewPrepPending.value = false;
   }
@@ -822,12 +830,12 @@ async function handleGenerateInterviewPrep() {
 
 async function handleSubmitFeedback() {
   if (!selectedArtifactId.value) {
-    ElMessage.warning("请先选择一个 GeneratedArtifact");
+    ElMessage.warning("请先选择一条材料记录");
     return;
   }
 
   if (!feedbackForm.value.feedback_type) {
-    ElMessage.warning("请先选择 feedback_type");
+    ElMessage.warning("请先选择反馈类型");
     return;
   }
 
@@ -839,11 +847,11 @@ async function handleSubmitFeedback() {
       note: feedbackForm.value.note.trim() || null,
     });
 
-    ElMessage.success("ArtifactFeedback 记录成功");
+    ElMessage.success("反馈已记录");
     resetFeedbackForm();
     await fetchArtifactFeedbackHistory(selectedArtifactId.value);
   } catch (error) {
-    ElMessage.error(getErrorMessage(error, "提交 ArtifactFeedback 失败"));
+    ElMessage.error(getErrorMessage(error, "提交反馈失败"));
   } finally {
     feedbackSubmitPending.value = false;
   }
