@@ -2,7 +2,7 @@
 
 ## Current Stage
 
-This repository is in step 25: frontend Chinese copy consolidation and list-area containment cleanup.
+This repository is in step 26: product-oriented homepage and navigation refactor.
 
 ## Scope Rules
 
@@ -25,6 +25,7 @@ This repository is in step 25: frontend Chinese copy consolidation and list-area
 - Current scope adds the minimal frontend product skeleton for Workflow Workspace and AI Copilot Layer without changing backend behavior.
 - Step 24 added a minimal user scope via dev-only current-user headers, isolated pytest data from demo data, and made recent-first / limit rules explicit in backend lists.
 - Step 25 focuses only on frontend Chinese copy cleanup and multi-page list containment; it does not modify backend user scope, models, schemas, APIs, or tests.
+- Step 26 focuses only on product-oriented homepage and navigation refactor; it turns the frontend entry from a system explanation console into a user task entry while keeping existing routes, workflow pages, backend APIs, and user scope logic unchanged.
 - Do not add a full evaluation system, feedback aggregation, dashboards, automatic regeneration, or status mutation from feedback in this stage.
 - Do not add LangChain, LangGraph, RAG, batch parsing, async queues, streaming, or other AI workflows in this stage.
 

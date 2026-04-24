@@ -1,17 +1,26 @@
 <template>
   <header class="app-header">
-    <div>
-      <p class="eyebrow">{{ route.meta.eyebrow }}</p>
-      <h1>{{ route.meta.title }}</h1>
+    <div class="header-copy">
+      <p class="eyebrow">{{ routeEyebrow }}</p>
+      <h1>{{ routeTitle }}</h1>
+      <p v-if="routeDescription" class="header-description">{{ routeDescription }}</p>
     </div>
+
     <div class="header-controls">
-      <div class="header-status">
-        <span class="status-dot"></span>
-        <span>当前为最小用户隔离演示，不是正式登录系统。</span>
+      <div class="header-pills">
+        <article class="header-pill">
+          <span>当前工作区</span>
+          <strong>{{ currentUserOption.label }}</strong>
+        </article>
+
+        <article class="header-pill header-pill--subtle">
+          <span>当前模式</span>
+          <strong>演示环境</strong>
+        </article>
       </div>
 
       <label class="scope-switch">
-        <span>当前用户</span>
+        <span>切换工作区视角</span>
         <select v-model="selectedUser" @change="handleUserChange">
           <option
             v-for="option in DEV_USER_OPTIONS"
@@ -21,7 +30,9 @@
             {{ option.label }}
           </option>
         </select>
-        <small>{{ currentUserOption.description }}</small>
+        <small>
+          {{ currentUserOption.description }} 当前仅用于最小用户隔离演示，并非正式登录账号。
+        </small>
       </label>
     </div>
   </header>
@@ -46,6 +57,18 @@ const currentUserOption = computed(() => {
     DEV_USER_OPTIONS.find((option) => option.username === selectedUser.value) ??
     DEV_USER_OPTIONS[0]
   );
+});
+
+const routeTitle = computed(() => {
+  return typeof route.meta.title === "string" ? route.meta.title : "工作台";
+});
+
+const routeEyebrow = computed(() => {
+  return typeof route.meta.eyebrow === "string" ? route.meta.eyebrow : "主工作区";
+});
+
+const routeDescription = computed(() => {
+  return typeof route.meta.description === "string" ? route.meta.description : "";
 });
 
 function handleUserChange() {
