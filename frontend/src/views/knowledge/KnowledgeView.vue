@@ -2,261 +2,238 @@
   <div class="page-stack">
     <section class="hero-card knowledge-hero">
       <div>
-        <p class="eyebrow">AI 协作层</p>
-        <h2>把 JobPilot 的 workflow 资产组织成未来可接 RAG Runtime 的知识入口。</h2>
+        <p class="eyebrow">资料入口</p>
+        <h2>需要补资料时，先来这里找 AI 参考依据。</h2>
         <p>
-          知识库不是普通文档管理页，也不假装已经接通真实向量检索。它的定位是为 Assistant 与未来
-          analyze / generate 类工作流提供最小充分上下文，并保留引用与可追溯性的设计意识。
+          这里更像一个资料中心，而不是 retrieval 设计稿。你可以先按岗位资料、公司资料、面试题、
+          项目素材、历史材料和历史反馈来找补充依据，然后再回到 Assistant 或工作流页继续推进任务。
         </p>
       </div>
       <div class="hero-panel knowledge-hero__panel">
-        <span>知识层概览</span>
-        <div class="knowledge-summary-list">
-          <article>
-            <strong>私有知识</strong>
-            <small>Resume / JobPosting / MatchResult / GeneratedArtifact / ApplicationRecord</small>
-          </article>
-          <article>
-            <strong>通用知识</strong>
-            <small>岗位说明、公司资料、面试题、项目经验素材、方法论文档</small>
-          </article>
-          <article>
-            <strong>检索增强</strong>
-            <small>当前仅保留未来运行时结构</small>
-          </article>
-          <article>
-            <strong>上下文注入</strong>
-            <small>为 Assistant 与工具调用提供补充上下文</small>
-          </article>
-          <article>
-            <strong>引用与追踪</strong>
-            <small>当前未接真实引用、索引、召回或 trace</small>
+        <span>什么时候需要来这里</span>
+        <div class="knowledge-hero-list">
+          <article
+            v-for="cue in heroCues"
+            :key="cue.title"
+            class="knowledge-hero-list__item"
+          >
+            <strong>{{ cue.title }}</strong>
+            <small>{{ cue.description }}</small>
           </article>
         </div>
       </div>
     </section>
 
-    <div class="stats-grid knowledge-stats">
+    <div class="stats-grid">
       <article
-        v-for="status in statusSurface"
-        :key="status.label"
-        class="stat-card knowledge-status-card"
+        v-for="stat in knowledgeStats"
+        :key="stat.label"
+        class="stat-card"
       >
-        <p>{{ status.label }}</p>
-        <strong>{{ status.value }}</strong>
-        <span>{{ status.detail }}</span>
+        <p>{{ stat.label }}</p>
+        <strong>{{ stat.value }}</strong>
+        <span>{{ stat.detail }}</span>
       </article>
     </div>
 
     <SectionCard
-      title="知识来源"
-      subtitle="这里展示未来会进入检索层的知识源分类。当前只完成高保真入口，不做真实上传、索引或文件管理。"
-      eyebrow="知识目录"
+      title="先按资料类型找"
+      subtitle="先给用户能理解的资料入口，再说明这些资料未来会怎么被 AI 消费。"
+      eyebrow="资料入口"
     >
-      <div class="split-grid knowledge-source-grid">
-        <article class="knowledge-bucket">
-          <div class="knowledge-bucket__header">
-                <div>
-                  <span>私有知识</span>
-                  <h3>私有工作流知识</h3>
-                </div>
-            <el-button text type="primary" @click="notifyShell('私有知识接入')">
-              了解入口
-            </el-button>
-          </div>
-
-          <div class="knowledge-card-grid">
-            <button
-              v-for="source in privateKnowledgeSources"
-              :key="source.name"
-              class="knowledge-source-card"
-              type="button"
-              @click="notifyShell(`${source.name} 知识源`)"
-            >
-              <div class="knowledge-source-card__header">
-                <div>
-                  <span>{{ source.group }}</span>
-                  <h3>{{ source.name }}</h3>
-                </div>
-                <small>{{ source.status }}</small>
-              </div>
-              <p>{{ source.description }}</p>
-              <small>{{ source.futureInput }}</small>
-            </button>
-          </div>
-        </article>
-
-        <article class="knowledge-bucket">
-          <div class="knowledge-bucket__header">
-                <div>
-                  <span>通用知识</span>
-                  <h3>通用求职知识</h3>
-                </div>
-            <el-button text type="primary" @click="notifyShell('通用知识接入')">
-              了解入口
-            </el-button>
-          </div>
-
-          <div class="knowledge-card-grid">
-            <button
-              v-for="source in generalKnowledgeSources"
-              :key="source.name"
-              class="knowledge-source-card"
-              type="button"
-              @click="notifyShell(`${source.name} 知识源`)"
-            >
-              <div class="knowledge-source-card__header">
-                <div>
-                  <span>{{ source.group }}</span>
-                  <h3>{{ source.name }}</h3>
-                </div>
-                <small>{{ source.status }}</small>
-              </div>
-              <p>{{ source.description }}</p>
-              <small>{{ source.futureInput }}</small>
-            </button>
-          </div>
-        </article>
-      </div>
-    </SectionCard>
-
-    <SectionCard
-      title="检索流程 / Knowledge Pipeline"
-      subtitle="这个流程表达未来 RAG 在 JobPilot 里的工作方式；当前并未接通真实上传、切分、embedding 或召回运行时。"
-      eyebrow="未来运行时"
-    >
-      <div class="retrieval-flow">
+      <div class="knowledge-type-grid">
         <button
-          v-for="step in retrievalFlow"
-          :key="step.step"
-          class="retrieval-step"
+          v-for="type in referenceTypes"
+          :key="type.key"
+          class="knowledge-type-card"
+          :class="{ active: selectedReferenceKey === type.key }"
           type="button"
-          @click="notifyShell(`${step.title} 流程预览`)"
+          @click="selectReference(type.key)"
         >
-          <span>{{ step.step }}</span>
-          <h3>{{ step.title }}</h3>
-          <p>{{ step.description }}</p>
+          <div class="knowledge-type-card__header">
+            <div>
+              <span>{{ type.label }}</span>
+              <h3>{{ type.title }}</h3>
+            </div>
+            <el-tag size="small" effect="plain">
+              {{ type.category }}
+            </el-tag>
+          </div>
+          <p>{{ type.description }}</p>
+          <small>{{ type.whenToUse }}</small>
         </button>
       </div>
     </SectionCard>
 
     <div class="split-grid">
       <SectionCard
-        title="上下文注入"
-        subtitle="Knowledge 不替代 workflow 对象，而是为 Assistant 和未来工具调用提供检索增强上下文。"
-        eyebrow="注入层"
+        title="当前资料工作面板"
+        subtitle="先看这类资料为什么重要、什么时候需要、回哪个页面最有帮助。"
+        eyebrow="主工作区"
       >
-        <div class="explain-grid">
-          <article
-            v-for="item in contextInjectionCards"
-            :key="item.title"
-            class="knowledge-explain-card"
-          >
-            <span>{{ item.label }}</span>
-            <h3>{{ item.title }}</h3>
-            <p>{{ item.description }}</p>
-          </article>
+        <div class="knowledge-work-panel">
+          <div class="work-panel-callout">
+            <span>{{ activeReference.category }}</span>
+            <strong>{{ activeReference.title }}</strong>
+            <p>{{ activeReference.whenToUse }}</p>
+          </div>
+
+          <div class="inline-note-grid">
+            <article class="inline-note-card">
+              <span>它会帮助你</span>
+              <h3>{{ activeReference.assistantValue }}</h3>
+              <p>补上这类资料后，Assistant 的建议会更具体，也更容易落回真实工作页。</p>
+            </article>
+            <article class="inline-note-card">
+              <span>最常配合</span>
+              <h3>{{ activeReference.workflowPage }}</h3>
+              <p>{{ activeReference.workflowHint }}</p>
+            </article>
+          </div>
+
+          <div class="knowledge-chip-list">
+            <span
+              v-for="item in activeReference.includes"
+              :key="item"
+              class="knowledge-chip"
+            >
+              {{ item }}
+            </span>
+          </div>
+
+          <div class="knowledge-link-row">
+            <RouterLink class="knowledge-link" :to="activeReference.route">
+              去 {{ activeReference.workflowPage }}
+            </RouterLink>
+            <RouterLink class="knowledge-link" to="/assistant">
+              回 AI 助手继续提问
+            </RouterLink>
+          </div>
         </div>
       </SectionCard>
 
       <SectionCard
-        title="引用 / 追踪意识"
-        subtitle="未来 RAG 不应只返回结果，还应保留命中来源、片段摘要和注入依据。"
-        eyebrow="追踪层"
+        title="什么时候需要来这里补资料"
+        subtitle="把知识入口变成服务工作流的补充站，而不是单独的概念页面。"
+        eyebrow="使用场景"
       >
-        <div class="explain-grid">
+        <div class="inline-note-grid">
           <article
-            v-for="item in citationCards"
-            :key="item.title"
-            class="knowledge-explain-card"
+            v-for="scene in activeReference.referenceScenes"
+            :key="scene.title"
+            class="inline-note-card"
           >
-            <span>{{ item.label }}</span>
-            <h3>{{ item.title }}</h3>
-            <p>{{ item.description }}</p>
+            <span>{{ scene.label }}</span>
+            <h3>{{ scene.title }}</h3>
+            <p>{{ scene.description }}</p>
           </article>
         </div>
       </SectionCard>
     </div>
 
     <SectionCard
-      title="状态面板"
-      subtitle="这是产品入口的状态面板，不是实时监控。它帮助用户理解哪些 Knowledge 能力仍处于 planned / prototype 状态。"
-      eyebrow="系统入口"
+      title="这些资料会从哪里来"
+      subtitle="继续保留私有资料和通用资料两类来源，但先用用户听得懂的入口组织它们。"
+      eyebrow="资料来源"
     >
-      <div class="status-surface">
-        <button
-          v-for="panel in statusPanels"
-          :key="panel.title"
-          class="status-panel-card"
-          type="button"
-          @click="notifyShell(panel.action)"
-        >
-          <div class="status-panel-card__header">
+      <div class="split-grid knowledge-source-grid">
+        <article class="knowledge-bucket">
+          <div class="knowledge-bucket__header">
             <div>
-              <span>{{ panel.label }}</span>
-              <h3>{{ panel.title }}</h3>
+              <span>来自当前求职工作</span>
+              <h3>私有资料</h3>
             </div>
-            <el-tag effect="plain">{{ panel.state }}</el-tag>
+            <el-button text type="primary" @click="notifyShell('私有资料入口')">
+              了解入口
+            </el-button>
           </div>
-          <p>{{ panel.description }}</p>
-        </button>
+
+          <div class="knowledge-source-card-grid">
+            <button
+              v-for="source in privateSources"
+              :key="source.title"
+              class="knowledge-source-card"
+              type="button"
+              @click="notifyShell(source.title)"
+            >
+              <div class="knowledge-source-card__header">
+                <div>
+                  <span>{{ source.label }}</span>
+                  <h3>{{ source.title }}</h3>
+                </div>
+                <small>{{ source.state }}</small>
+              </div>
+              <p>{{ source.description }}</p>
+            </button>
+          </div>
+        </article>
+
+        <article class="knowledge-bucket">
+          <div class="knowledge-bucket__header">
+            <div>
+              <span>作为补充参考</span>
+              <h3>通用资料</h3>
+            </div>
+            <el-button text type="primary" @click="notifyShell('通用资料入口')">
+              了解入口
+            </el-button>
+          </div>
+
+          <div class="knowledge-source-card-grid">
+            <button
+              v-for="source in generalSources"
+              :key="source.title"
+              class="knowledge-source-card"
+              type="button"
+              @click="notifyShell(source.title)"
+            >
+              <div class="knowledge-source-card__header">
+                <div>
+                  <span>{{ source.label }}</span>
+                  <h3>{{ source.title }}</h3>
+                </div>
+                <small>{{ source.state }}</small>
+              </div>
+              <p>{{ source.description }}</p>
+            </button>
+          </div>
+        </article>
       </div>
     </SectionCard>
 
     <div class="split-grid">
       <SectionCard
-        title="与 AI 助手的关系"
-        subtitle="AI 助手会消费 Knowledge 返回的检索结果，但两者都建立在工作流工作台已有的真实对象之上。"
-        eyebrow="助手协同"
+        title="这些资料会怎样服务 AI 助手"
+        subtitle="Knowledge 不单独抢主语，而是帮助 Assistant 和工作流页回答得更具体。"
+        eyebrow="和 Assistant 的关系"
       >
-        <div class="assistant-binding">
-          <article class="binding-card">
-            <span>工作流工作台</span>
-            <h3>提供真实对象和状态</h3>
-            <p>Jobs / Resumes / Matches / Artifacts / Applications 继续承接确定性对象、状态和动作入口。</p>
+        <div class="knowledge-assistant-grid">
+          <article
+            v-for="bridge in assistantBridges"
+            :key="bridge.title"
+            class="knowledge-bridge-card"
+          >
+            <span>{{ bridge.label }}</span>
+            <h3>{{ bridge.title }}</h3>
+            <p>{{ bridge.description }}</p>
           </article>
-          <article class="binding-card">
-            <span>知识层</span>
-            <h3>提供额外可检索上下文</h3>
-            <p>未来它会围绕私有知识与通用知识返回检索片段，供 Assistant 和工具调用使用。</p>
-          </article>
-            <article class="binding-card">
-              <span>助手层</span>
-              <h3>消费检索结果并组织任务</h3>
-              <p>AI 助手不直接替代工作页，而是在这些对象和 Knowledge 结果之上提供理解、建议和后续工具入口。</p>
-            </article>
-        </div>
-
-        <div class="binding-actions">
-          <RouterLink class="knowledge-link" to="/assistant">
-            前往 /assistant 查看 Copilot 壳
-          </RouterLink>
-          <el-button @click="notifyShell('Knowledge 与 Assistant 绑定')">
-            了解协同入口
-          </el-button>
         </div>
       </SectionCard>
 
       <SectionCard
-        title="当前边界"
-        subtitle="页面需要明确表达当前阶段的工程边界，避免把产品壳误解成已经接通的 RAG 系统。"
-        eyebrow="边界说明"
+        title="补充说明"
+        subtitle="把 retrieval flow、引用依据和运行时状态降级到后半段，只保留必要认知。"
+        eyebrow="次级说明"
       >
-        <div class="boundary-stack">
-          <article class="boundary-card">
-            <span>尚未接通</span>
-            <h3>未接真实上传、索引、embedding 或向量检索</h3>
-            <p>本步不实现知识持久化、索引任务、召回链路、检索结果面板或引用注入运行时。</p>
-          </article>
-          <article class="boundary-card">
-            <span>仅产品壳</span>
-            <h3>只完成高保真入口壳</h3>
-            <p>页面强调的是产品结构、工作流关系和上下文意识，不会伪造已存在的检索结果或后台任务。</p>
-          </article>
-          <article class="boundary-card">
-            <span>未来方向</span>
-            <h3>为 RAG、Trace、Eval 预留清晰入口</h3>
-            <p>后续可以在这个入口上继续接入真实 Knowledge Runtime，而不必推翻现在的页面组织方式。</p>
+        <div class="knowledge-assistant-grid">
+          <article
+            v-for="note in secondaryNotes"
+            :key="note.title"
+            class="knowledge-bridge-card"
+          >
+            <span>{{ note.label }}</span>
+            <h3>{{ note.title }}</h3>
+            <p>{{ note.description }}</p>
           </article>
         </div>
       </SectionCard>
@@ -265,261 +242,363 @@
 </template>
 
 <script setup lang="ts">
+import { computed, ref } from "vue";
 import { ElMessage } from "element-plus";
 
 import SectionCard from "@/components/SectionCard.vue";
 
-interface KnowledgeSourceCard {
-  group: string;
-  name: string;
-  status: string;
-  description: string;
-  futureInput: string;
-}
-
-interface RetrievalStep {
-  step: string;
+interface HeroCue {
   title: string;
   description: string;
 }
 
-interface ExplainCard {
-  label: string;
-  title: string;
-  description: string;
-}
-
-interface StatusCard {
+interface KnowledgeStat {
   label: string;
   value: string;
   detail: string;
 }
 
-interface StatusPanel {
+interface ReferenceScene {
+  label: string;
+  title: string;
+  description: string;
+}
+
+interface ReferenceType {
+  key: string;
+  label: string;
+  title: string;
+  category: string;
+  description: string;
+  whenToUse: string;
+  assistantValue: string;
+  workflowPage: string;
+  workflowHint: string;
+  route: string;
+  includes: string[];
+  referenceScenes: ReferenceScene[];
+}
+
+interface KnowledgeSource {
   label: string;
   title: string;
   state: string;
   description: string;
-  action: string;
 }
 
-const privateKnowledgeSources: KnowledgeSourceCard[] = [
+interface BridgeCard {
+  label: string;
+  title: string;
+  description: string;
+}
+
+const heroCues: HeroCue[] = [
   {
-    group: "工作流对象",
-    name: "Resume",
-    status: "未来检索来源",
-    description: "从当前简历、解析结果和历史版本中抽取可复用上下文，服务简历建议和材料生成。",
-    futureInput: "未来来源：从 workflow 对象直接抽取 + 用户私有资料导入",
+    title: "岗位信息还不够完整",
+    description: "当你只拿到一段 JD，想补公司背景、岗位语境或相关面试题时，先来这里找依据。",
   },
   {
-    group: "工作流对象",
-    name: "JobPosting",
-    status: "仅产品壳",
-    description: "围绕岗位原文、结构化 JD 和风险点，为岗位解读、匹配分析和面试准备提供上下文。",
-    futureInput: "未来来源：从 workflow 对象直接抽取",
+    title: "简历或材料需要更多素材",
+    description: "当你知道要改，但不知道该拿哪些项目片段、历史材料或反馈来支撑表达时，先来补资料。",
   },
   {
-    group: "分析层",
-    name: "MatchResult",
-    status: "尚未索引",
-    description: "沉淀优势、差距、缺失项和建议，作为复盘和后续生成的中间知识层。",
-    futureInput: "未来来源：从历史分析记录沉淀",
-  },
-  {
-    group: "材料层",
-    name: "GeneratedArtifact",
-    status: "尚未索引",
-    description: "把 Cover Letter、Interview Prep 和后续材料版本变成可检索的经验资产。",
-    futureInput: "未来来源：从生成记录与用户修改后的材料沉淀",
-  },
-  {
-    group: "跟踪层",
-    name: "ApplicationRecord",
-    status: "未来检索来源",
-    description: "将投递阶段、下一步动作与跟进节奏纳入长期上下文，帮助生成策略建议。",
-    futureInput: "未来来源：从 workflow 对象与事件时间线抽取",
-  },
-  {
-    group: "历史层",
-    name: "Feedback / Workflow history",
-    status: "仅产品壳",
-    description: "采纳、拒绝、编辑后使用和阶段流转记录，会成为未来个性化与复盘的重要输入。",
-    futureInput: "未来来源：从反馈事件与 workflow history 沉淀",
+    title: "想让 AI 回答更具体",
+    description: "当 Assistant 的建议开始变空时，通常意味着需要补充岗位、公司、项目或历史材料依据。",
   },
 ];
 
-const generalKnowledgeSources: KnowledgeSourceCard[] = [
+const knowledgeStats: KnowledgeStat[] = [
   {
-    group: "通用知识",
-    name: "岗位说明",
-    status: "未来检索来源",
-    description: "沉淀不同岗位方向的职责拆解、能力模型和常见判断框架。",
-    futureInput: "未来接入：资料导入或结构化整理",
+    label: "资料入口类型",
+    value: "6",
+    detail: "岗位资料、公司资料、面试题、项目素材、历史材料、历史反馈",
   },
   {
-    group: "通用知识",
-    name: "公司资料",
-    status: "未接入",
-    description: "为投递策略、岗位理解和面试准备提供公司背景、业务方向和团队语境。",
-    futureInput: "未来接入：外部资料整理与知识沉淀",
+    label: "最常见用途",
+    value: "补依据",
+    detail: "给 Assistant 和工作流页补充上下文，而不是单独管理概念",
   },
   {
-    group: "通用知识",
-    name: "面试题",
-    status: "仅产品壳",
-    description: "围绕岗位方向和能力模型组织常见面试题、追问方向与回答要点。",
-    futureInput: "未来接入：问答素材库与领域资料沉淀",
-  },
-  {
-    group: "通用知识",
-    name: "项目经验素材",
-    status: "未来检索来源",
-    description: "沉淀项目片段、STAR 表达素材和能力证明片段，用于简历与面试回答增强。",
-    futureInput: "未来接入：用户私有项目素材导入",
-  },
-  {
-    group: "通用知识",
-    name: "方法论文档 / 求职方法论",
-    status: "规划中",
-    description: "把通用求职方法论、表达策略和结构化框架变成可检索辅助材料。",
-    futureInput: "未来接入：方法文档与知识策展",
+    label: "当前形态",
+    value: "资料中心壳",
+    detail: "先完成资料入口和使用场景表达，不接真实 RAG 运行时",
   },
 ];
 
-const retrievalFlow: RetrievalStep[] = [
+const referenceTypes: ReferenceType[] = [
   {
-    step: "01",
-    title: "选择知识源",
-    description: "从私有 workflow 资产和通用求职资料中选择适合当前任务的知识入口。",
+    key: "job-docs",
+    label: "资料 01",
+    title: "岗位资料",
+    category: "岗位理解",
+    description: "围绕岗位原文、岗位背景和要求拆解，帮助你先判断这份岗位值不值得推进。",
+    whenToUse: "当岗位要求看起来很多、很散，或你想先判断投入优先级时。",
+    assistantValue: "让 AI 更会拆 JD、找重点、做推进判断",
+    workflowPage: "目标岗位工作页",
+    workflowHint: "Jobs 页负责岗位对象和解析结果，这里负责补充理解这份岗位所需的外部依据。",
+    route: "/jobs",
+    includes: ["岗位原文", "结构化 JD", "岗位语境", "相关职责拆解"],
+    referenceScenes: [
+      {
+        label: "配合 Jobs",
+        title: "收拢目标岗位之后",
+        description: "先回到岗位工作页确认岗位对象，再来补岗位资料和岗位背景，帮助你做推进判断。",
+      },
+      {
+        label: "配合 Matches",
+        title: "对照前想先看岗位重点",
+        description: "在做岗位对照前先把岗位关键要求和岗位语境弄清楚，匹配分析会更有方向。",
+      },
+    ],
   },
   {
-    step: "02",
-    title: "切分与索引",
-    description: "未来会进行 chunking、embedding 和索引构建；当前只保留这一步的产品槽位。",
+    key: "company-docs",
+    label: "资料 02",
+    title: "公司资料",
+    category: "公司理解",
+    description: "围绕业务方向、团队语境和公司背景，帮助你判断投递、跟进和准备面试时的重点。",
+    whenToUse: "当你想理解公司在做什么、团队为什么需要这个岗位，或面试前需要补语境时。",
+    assistantValue: "让 AI 更会判断投递策略、面试语境和后续跟进措辞",
+    workflowPage: "投递进展工作页",
+    workflowHint: "Applications 页负责阶段和时间线，这里帮你补公司层面的判断依据。",
+    route: "/applications",
+    includes: ["公司业务背景", "团队方向", "招聘语境", "面试前背景资料"],
+    referenceScenes: [
+      {
+        label: "配合 Applications",
+        title: "判断要不要继续跟进",
+        description: "结合投递阶段和公司资料，AI 更容易帮你判断接下来是继续推进、等待还是转向。",
+      },
+      {
+        label: "配合 Assistant",
+        title: "准备更贴语境的提问",
+        description: "当你想让 AI 帮你组织更贴公司的问题和回答时，先补公司资料会更有效。",
+      },
+    ],
   },
   {
-    step: "03",
-    title: "检索候选片段",
-    description: "根据任务目标、当前对象和用户意图召回候选知识片段，而不是盲目堆全文。",
+    key: "interview-bank",
+    label: "资料 03",
+    title: "面试题",
+    category: "面试准备",
+    description: "围绕岗位方向整理常见问题、追问路径和回答组织方式，帮助你更早进入准备状态。",
+    whenToUse: "当你已经决定推进这个岗位，准备把材料和面试重点一起收拢时。",
+    assistantValue: "让 AI 更会基于岗位和材料继续追问，而不是只生成泛化问题",
+    workflowPage: "求职材料工作页",
+    workflowHint: "Artifacts 页负责材料和面试准备对象，这里补题库和追问素材。",
+    route: "/artifacts",
+    includes: ["常见面试题", "追问方向", "回答结构", "场景化问答提示"],
+    referenceScenes: [
+      {
+        label: "配合 Artifacts",
+        title: "准备面试问题和回答骨架",
+        description: "先在材料页确认当前面试准备，再来这里补面试题和追问方向。",
+      },
+      {
+        label: "配合 Assistant",
+        title: "让 AI 帮你模拟追问",
+        description: "有了题目和背景资料后，Assistant 更适合围绕当前岗位做面试追问。",
+      },
+    ],
   },
   {
-    step: "04",
-    title: "组装上下文",
-    description: "将检索片段与当前 Resume / JobPosting / MatchResult 等 workflow 对象组合成最小充分上下文。",
+    key: "project-assets",
+    label: "资料 04",
+    title: "项目素材",
+    category: "表达补强",
+    description: "沉淀项目片段、能力证明和 STAR 素材，帮助简历、材料和面试回答都更有内容。",
+    whenToUse: "当你知道自己该写什么方向，但手里缺能证明能力的具体项目片段时。",
+    assistantValue: "让 AI 更会帮你提炼项目亮点、组织经历和准备回答素材",
+    workflowPage: "简历准备工作页",
+    workflowHint: "Resumes 页负责主简历和版本，这里补能支撑表达的项目素材。",
+    route: "/resumes",
+    includes: ["项目片段", "量化结果", "STAR 素材", "能力证明细节"],
+    referenceScenes: [
+      {
+        label: "配合 Resumes",
+        title: "贴岗调整主简历时",
+        description: "先在简历页看当前版本，再来补项目素材，让改写更有可落地内容。",
+      },
+      {
+        label: "配合 Artifacts",
+        title: "准备求职信或面试回答时",
+        description: "同一批项目素材也能继续服务材料生成和面试准备，不需要每次从头重想。",
+      },
+    ],
   },
   {
-    step: "05",
-    title: "注入 Assistant / Tool Call",
-    description: "把补充上下文交给 Assistant 或未来工具调用，而不是直接替代确定性工作页。",
+    key: "history-materials",
+    label: "资料 05",
+    title: "历史材料",
+    category: "经验复用",
+    description: "回看以前写过的简历版本、求职信和准备材料，减少重复起稿和重复思考。",
+    whenToUse: "当你不想从空白开始写，而是想先看看过去哪些表达还能复用时。",
+    assistantValue: "让 AI 更会复用已有表达、对比版本差异和延续已有材料",
+    workflowPage: "求职材料工作页",
+    workflowHint: "Artifacts 页负责当前材料，这里补过去写过的内容和可复用的表达。",
+    route: "/artifacts",
+    includes: ["历史简历版本", "历史求职信", "历史面试准备", "历史表达片段"],
+    referenceScenes: [
+      {
+        label: "配合 Artifacts",
+        title: "继续打磨已有材料",
+        description: "当你已经有一版材料时，先看历史材料能不能复用，再决定需要新写什么。",
+      },
+      {
+        label: "配合 Assistant",
+        title: "避免 AI 每次都从零开始",
+        description: "把历史材料带进去，AI 会更像在现有基础上修改，而不是重新生成一套新内容。",
+      },
+    ],
   },
   {
-    step: "06",
-    title: "输出结果并保留依据",
-    description: "未来应保留命中来源、片段摘要和注入依据，形成 citations / trace 能力。",
+    key: "history-feedback",
+    label: "资料 06",
+    title: "历史反馈",
+    category: "复盘判断",
+    description: "整理投递、材料和修改过程中的历史反馈，帮助你判断哪些问题反复出现、哪些方向更值得继续改。",
+    whenToUse: "当你想复盘过去的采纳情况、面试反馈或投递节奏，而不是只看当前状态时。",
+    assistantValue: "让 AI 更会复盘策略、识别重复问题和判断下一步优先级",
+    workflowPage: "投递进展工作页",
+    workflowHint: "Applications 页负责时间线和阶段，这里补历史反馈，帮助你做节奏和策略判断。",
+    route: "/applications",
+    includes: ["历史采纳记录", "修改反馈", "投递节奏反馈", "阶段变化线索"],
+    referenceScenes: [
+      {
+        label: "配合 Applications",
+        title: "回看最近的推进节奏",
+        description: "当你只看当前阶段还不够时，历史反馈能帮助你更完整地判断下一步。",
+      },
+      {
+        label: "配合 Matches",
+        title: "复盘为什么总卡在同一类岗位",
+        description: "把历史反馈和对照结果放在一起看，能更早发现真正需要补的短板。",
+      },
+    ],
   },
 ];
 
-const contextInjectionCards: ExplainCard[] = [
+const privateSources: KnowledgeSource[] = [
   {
-    label: "对象优先",
-    title: "先使用 workflow 对象，再补检索上下文",
-    description: "Knowledge 不会直接替代 Resume、JobPosting、MatchResult 等当前对象，而是在它们之上补充外部依据。",
+    label: "工作流资料",
+    title: "当前岗位与 JD",
+    state: "来自工作页",
+    description: "岗位原文、解析结果和岗位判断会成为后续补资料和 AI 协作的重要起点。",
   },
   {
-    label: "助手协同",
-    title: "为 Assistant 提供检索增强上下文",
-    description: "未来 Assistant 会消费检索片段，让场景建议、复盘和面试辅助更贴当前任务而不是泛化回答。",
+    label: "工作流资料",
+    title: "当前简历与版本",
+    state: "来自工作页",
+    description: "主简历、版本历史和解析结果能帮助资料入口更贴当前简历准备任务。",
   },
   {
-    label: "工具协同",
-    title: "为未来 Analyze / Generate 工具提供额外依据",
-    description: "面试准备、材料生成和复盘建议都可能利用 Knowledge 片段作为额外辅助上下文。",
-  },
-];
-
-const citationCards: ExplainCard[] = [
-  {
-    label: "检索追踪",
-    title: "保留命中的知识来源",
-    description: "未来应记录命中来源、来源类别和片段摘要，避免结果来源不可解释。",
+    label: "分析资料",
+    title: "最近匹配分析",
+    state: "来自工作页",
+    description: "把优势、差距和建议沉淀成参考依据，服务复盘、材料和面试准备。",
   },
   {
-    label: "注入依据",
-    title: "保留注入上下文的依据",
-    description: "不仅要知道检索到了什么，还要知道哪些内容真的被注入到 Assistant 或工具调用里。",
+    label: "材料资料",
+    title: "历史材料与修改记录",
+    state: "逐步沉淀",
+    description: "求职信、面试准备和修改痕迹会让资料入口更像可复用的经验区。",
   },
   {
-    label: "结果关联",
-    title: "保留结果与上下文的关联",
-    description: "未来 citations / trace 应帮助用户理解某条建议、某份材料或某次回答是基于哪些知识片段形成的。",
+    label: "进展资料",
+    title: "投递时间线与阶段变化",
+    state: "来自工作页",
+    description: "投递阶段、事件记录和节奏变化能成为判断下一步动作的重要背景资料。",
   },
 ];
 
-const statusSurface: StatusCard[] = [
+const generalSources: KnowledgeSource[] = [
   {
-    label: "知识运行时",
-    value: "原型壳",
-    detail: "当前只做高保真入口壳，不接真实检索运行时",
+    label: "补充资料",
+    title: "公司资料",
+    state: "资料入口",
+    description: "补充业务背景、团队方向和岗位语境，帮助你理解岗位和准备跟进或面试。",
   },
   {
-    label: "知识来源",
-    value: "2",
-    detail: "私有知识 + 通用知识",
+    label: "补充资料",
+    title: "面试题与追问",
+    state: "资料入口",
+    description: "帮助你把岗位要求进一步转成面试准备，不需要先理解 retrieval 流程。",
   },
   {
-    label: "设计重点",
-    value: "RAG",
-    detail: "强调检索增强、上下文注入与引用意识，而不是存文档",
+    label: "补充资料",
+    title: "项目素材",
+    state: "资料入口",
+    description: "把项目片段和能力证明整理起来，供简历、材料和面试回答继续复用。",
+  },
+  {
+    label: "补充资料",
+    title: "历史方法与表达框架",
+    state: "后续扩展",
+    description: "未来可沉淀常见表达框架和求职方法，但当前先保持为资料入口认知。",
   },
 ];
 
-const statusPanels: StatusPanel[] = [
+const assistantBridges: BridgeCard[] = [
   {
-    label: "实时检索",
-    title: "检索运行时",
-    state: "未接入",
-    description: "当前未接向量检索、关键词召回或 rerank 运行时。",
-    action: "检索运行时",
+    label: "岗位判断",
+    title: "岗位资料 + 公司资料",
+    description: "让 Assistant 在看岗位时不只复述 JD，而是能结合背景和语境一起判断值不值得推进。",
   },
   {
-    label: "索引任务",
-    title: "索引任务",
-    state: "未启用",
-    description: "当前没有真实 indexing jobs、chunk pipeline 或 embedding 任务。",
-    action: "索引任务",
+    label: "简历调整",
+    title: "项目素材 + 历史材料",
+    description: "让 Assistant 更会从已有经历和已有表达里找可复用内容，而不是每次都从零写建议。",
   },
   {
-    label: "上传入口",
-    title: "上传入口",
-    state: "仅产品壳",
-    description: "未来可以在这里承接知识导入入口；本步不做真实上传。",
-    action: "上传入口",
+    label: "匹配复盘",
+    title: "岗位资料 + 历史反馈",
+    description: "把岗位重点和过去卡点一起带回 AI，复盘会更接近真实问题，而不是抽象讨论。",
   },
   {
-    label: "知识源同步",
-    title: "知识源同步",
-    state: "未接入",
-    description: "当前不会把 workflow 对象自动同步进知识索引层。",
-    action: "知识源同步",
+    label: "面试准备",
+    title: "面试题 + 项目素材",
+    description: "让 Assistant 能围绕当前岗位和你的真实经历继续追问，形成更像面试准备的体验。",
   },
   {
-    label: "引用视图",
-    title: "引用视图",
-    state: "规划中",
-    description: "未来会展示引用依据和检索片段；本步只保留设计意识。",
-    action: "引用视图",
-  },
-  {
-    label: "助手绑定",
-    title: "Assistant 绑定",
-    state: "规划中",
-    description: "Assistant 与 Knowledge 的联动关系已经表达，但尚未建立真实数据流。",
-    action: "Assistant 绑定",
+    label: "投递跟进",
+    title: "公司资料 + 历史反馈",
+    description: "帮助 Assistant 更好地判断什么时候跟进、跟进时重点说什么，以及何时调整策略。",
   },
 ];
+
+const secondaryNotes: BridgeCard[] = [
+  {
+    label: "检索流程",
+    title: "Retrieval flow 暂时退到后面",
+    description: "未来可以继续接入检索、切分、索引和召回，但本步先不把这些概念放在页面主视觉。",
+  },
+  {
+    label: "引用依据",
+    title: "Citations / trace 继续保留为次级认知",
+    description: "后续真实接入后再展示命中来源和引用依据；当前只保留“资料会成为参考依据”的产品认知。",
+  },
+  {
+    label: "当前边界",
+    title: "本步不接真实 RAG、上传、索引或运行时状态",
+    description: "这里只完成资料入口、使用场景和与 Assistant 的关系表达，不改后端和 API。",
+  },
+];
+
+const selectedReferenceKey = ref(referenceTypes[0].key);
+
+const activeReference = computed(() => {
+  return (
+    referenceTypes.find((reference) => reference.key === selectedReferenceKey.value) ??
+    referenceTypes[0]
+  );
+});
+
+function selectReference(key: string) {
+  selectedReferenceKey.value = key;
+}
 
 function notifyShell(feature: string) {
-  ElMessage.info(`${feature} 当前为产品壳，后续会接入 Knowledge Runtime。`);
+  ElMessage.info(`${feature} 当前还是资料入口产品壳，后续才会接真实 Knowledge Runtime。`);
 }
 </script>
 
@@ -528,109 +607,44 @@ function notifyShell(feature: string) {
   min-height: 260px;
 }
 
-.knowledge-summary-list,
-.knowledge-card-grid,
-.retrieval-flow,
-.explain-grid,
-.status-surface,
-.assistant-binding,
-.boundary-stack {
+.knowledge-hero-list,
+.knowledge-type-grid,
+.knowledge-chip-list,
+.knowledge-source-card-grid,
+.knowledge-assistant-grid {
   display: grid;
   gap: 14px;
 }
 
-.knowledge-summary-list article,
+.knowledge-hero-list__item,
+.knowledge-type-card,
 .knowledge-bucket,
 .knowledge-source-card,
-.retrieval-step,
-.knowledge-explain-card,
-.status-panel-card,
-.binding-card,
-.boundary-card {
+.knowledge-bridge-card {
   border: 1px solid var(--line);
   border-radius: 20px;
   background: rgba(255, 253, 246, 0.74);
 }
 
-.knowledge-summary-list article {
+.knowledge-hero-list__item {
   display: grid;
   gap: 6px;
   padding: 12px 14px;
 }
 
-.knowledge-summary-list strong {
-  font-size: 14px;
+.knowledge-hero-list__item small {
+  color: #d8eadf;
+  line-height: 1.6;
 }
 
-.knowledge-summary-list small,
-.knowledge-source-card small,
-.retrieval-step span,
-.knowledge-bucket__header span,
-.knowledge-explain-card span,
-.binding-card span,
-.boundary-card span {
-  color: var(--warm);
-  font-weight: 800;
-  letter-spacing: 0.06em;
+.knowledge-type-grid,
+.knowledge-source-card-grid,
+.knowledge-assistant-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.knowledge-stats .knowledge-status-card:hover,
-.knowledge-source-card:hover,
-.retrieval-step:hover,
-.status-panel-card:hover {
-  border-color: rgba(34, 107, 74, 0.42);
-  background: #f7fbf4;
-  transform: translateY(-2px);
-}
-
-.knowledge-status-card,
-.knowledge-source-card,
-.retrieval-step,
-.status-panel-card {
-  transition:
-    transform 0.2s ease,
-    border-color 0.2s ease,
-    background 0.2s ease,
-    box-shadow 0.2s ease;
-}
-
-.knowledge-source-grid {
-  align-items: start;
-}
-
-.knowledge-bucket {
-  display: grid;
-  gap: 16px;
-  padding: 18px;
-}
-
-.knowledge-bucket__header,
-.knowledge-source-card__header,
-.status-panel-card__header,
-.binding-actions {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 14px;
-}
-
-.knowledge-bucket__header h3,
-.knowledge-source-card__header h3,
-.retrieval-step h3,
-.knowledge-explain-card h3,
-.status-panel-card__header h3,
-.binding-card h3,
-.boundary-card h3 {
-  margin: 6px 0 0;
-}
-
-.knowledge-card-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.knowledge-source-card,
-.retrieval-step,
-.status-panel-card {
+.knowledge-type-card,
+.knowledge-source-card {
   display: grid;
   gap: 10px;
   width: 100%;
@@ -638,43 +652,82 @@ function notifyShell(feature: string) {
   color: inherit;
   text-align: left;
   cursor: pointer;
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
+.knowledge-type-card:hover,
+.knowledge-type-card.active,
+.knowledge-source-card:hover,
+.knowledge-link:hover {
+  border-color: rgba(34, 107, 74, 0.42);
+  background: #f7fbf4;
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(52, 45, 29, 0.08);
+}
+
+.knowledge-type-card__header,
+.knowledge-source-card__header,
+.knowledge-bucket__header,
+.knowledge-link-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.knowledge-type-card span,
+.knowledge-source-card span,
+.knowledge-bucket__header span,
+.knowledge-bridge-card span,
+.knowledge-chip {
+  color: var(--warm);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.knowledge-type-card h3,
+.knowledge-source-card h3,
+.knowledge-bucket__header h3,
+.knowledge-bridge-card h3 {
+  margin: 6px 0 0;
+}
+
+.knowledge-type-card p,
+.knowledge-type-card small,
 .knowledge-source-card p,
-.retrieval-step p,
-.knowledge-explain-card p,
-.status-panel-card p,
-.binding-card p,
-.boundary-card p {
+.knowledge-source-card small,
+.knowledge-bridge-card p {
   margin: 0;
-  color: #314038;
+  color: var(--muted);
   line-height: 1.7;
 }
 
-.retrieval-flow {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.retrieval-step span {
-  font-size: 12px;
-}
-
-.explain-grid,
-.assistant-binding,
-.boundary-stack {
-  grid-template-columns: 1fr;
-}
-
-.knowledge-explain-card,
-.binding-card,
-.boundary-card {
+.knowledge-work-panel {
   display: grid;
-  gap: 10px;
-  padding: 16px;
+  gap: 16px;
 }
 
-.status-surface {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.knowledge-chip-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.knowledge-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #f8f5eb;
+}
+
+.knowledge-link-row {
+  flex-wrap: wrap;
 }
 
 .knowledge-link {
@@ -694,31 +747,43 @@ function notifyShell(feature: string) {
     background 0.2s ease;
 }
 
-.knowledge-link:hover {
-  border-color: rgba(34, 107, 74, 0.42);
-  background: #eef6ee;
-  transform: translateY(-1px);
+.knowledge-source-grid {
+  align-items: start;
+}
+
+.knowledge-bucket {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.knowledge-bridge-card {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
 }
 
 @media (max-width: 1180px) {
-  .knowledge-card-grid,
-  .retrieval-flow,
-  .status-surface {
+  .knowledge-type-grid,
+  .knowledge-source-card-grid,
+  .knowledge-assistant-grid,
+  .knowledge-chip-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 720px) {
-  .knowledge-card-grid,
-  .retrieval-flow,
-  .status-surface {
+  .knowledge-type-grid,
+  .knowledge-source-card-grid,
+  .knowledge-assistant-grid,
+  .knowledge-chip-list {
     grid-template-columns: 1fr;
   }
 
-  .knowledge-bucket__header,
+  .knowledge-type-card__header,
   .knowledge-source-card__header,
-  .status-panel-card__header,
-  .binding-actions {
+  .knowledge-bucket__header,
+  .knowledge-link-row {
     flex-direction: column;
     align-items: flex-start;
   }
