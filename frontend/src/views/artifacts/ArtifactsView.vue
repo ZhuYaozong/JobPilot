@@ -148,9 +148,10 @@
 
           <div class="detail-field">
             <span>content_text</span>
-            <pre v-if="selectedArtifact.content_text" class="text-block">{{
-              selectedArtifact.content_text
-            }}</pre>
+            <MarkdownBlock
+              v-if="selectedArtifact.content_text"
+              :content="selectedArtifact.content_text"
+            />
             <p v-else class="detail-placeholder">当前没有 content_text。</p>
           </div>
 
@@ -419,6 +420,7 @@ import {
 } from "@/api/artifacts";
 import EmptyStateCard from "@/components/EmptyStateCard.vue";
 import JsonBlock from "@/components/JsonBlock.vue";
+import MarkdownBlock from "@/components/MarkdownBlock.vue";
 import SectionCard from "@/components/SectionCard.vue";
 import type { JobPostingListItem } from "@/types/job_posting";
 import type { ResumeListItem } from "@/types/resume";
