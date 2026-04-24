@@ -64,6 +64,9 @@
               </el-button>
               <RouterLink class="inline-link" to="/matches">和简历匹配</RouterLink>
               <RouterLink class="inline-link" to="/applications">加入投递跟进</RouterLink>
+              <el-button type="danger" plain :loading="deletePending" @click="handleDeleteJob">
+                删除岗位
+              </el-button>
             </div>
           </div>
 
@@ -154,9 +157,9 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 
-import { createJob, getJob, listJobs, parseJob } from "@/api/jobs";
+import { createJob, deleteJob, getJob, listJobs, parseJob } from "@/api/jobs";
 import EmptyStateCard from "@/components/EmptyStateCard.vue";
 import JsonBlock from "@/components/JsonBlock.vue";
 import SectionCard from "@/components/SectionCard.vue";
@@ -170,6 +173,7 @@ const jobsLoading = ref(false);
 const detailLoading = ref(false);
 const createPending = ref(false);
 const parsePending = ref(false);
+const deletePending = ref(false);
 const selectedJobId = ref<number | null>(null);
 const selectedJob = ref<JobPosting | null>(null);
 
@@ -311,6 +315,41 @@ async function handleParseJob() {
     ElMessage.error(getErrorMessage(error, "解析 JD 失败"));
   } finally {
     parsePending.value = false;
+  }
+}
+
+async function handleDeleteJob() {
+  if (!selectedJobId.value || !selectedJob.value) {
+    ElMessage.warning("请先选择一条岗位");
+    return;
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      "删除后会一并移除该岗位相关的匹配分析、投递记录、求职材料和简历版本引用。此操作不可恢复。",
+      `删除岗位：${selectedJob.value.company_name} · ${selectedJob.value.job_title}？`,
+      {
+        type: "warning",
+        confirmButtonText: "删除",
+        cancelButtonText: "取消",
+        confirmButtonClass: "el-button--danger",
+      },
+    );
+  } catch {
+    return;
+  }
+
+  deletePending.value = true;
+  try {
+    await deleteJob(selectedJobId.value);
+    ElMessage.success("岗位已删除");
+    selectedJobId.value = null;
+    selectedJob.value = null;
+    await fetchJobs();
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, "删除岗位失败"));
+  } finally {
+    deletePending.value = false;
   }
 }
 

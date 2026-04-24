@@ -33,6 +33,10 @@ export async function updateResume(resumeId: number, payload: ResumeUpdate) {
   return response.data;
 }
 
+export async function deleteResume(resumeId: number) {
+  await apiClient.delete(`/api/v1/resumes/${resumeId}`);
+}
+
 export async function parseResume(resumeId: number) {
   const response = await apiClient.post<Resume>(
     `/api/v1/resumes/${resumeId}/parse`,

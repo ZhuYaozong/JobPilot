@@ -33,6 +33,10 @@ export async function updateMatch(matchId: number, payload: MatchResultUpdate) {
   return response.data;
 }
 
+export async function deleteMatch(matchId: number) {
+  await apiClient.delete(`/api/v1/matches/${matchId}`);
+}
+
 export async function analyzeMatch(payload: MatchAnalysisRequest) {
   const response = await apiClient.post<MatchResult>(
     "/api/v1/matches/analyze",

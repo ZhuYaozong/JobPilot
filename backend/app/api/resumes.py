@@ -7,6 +7,7 @@ from app.db.session import get_db
 from app.models.resume import Resume
 from app.schemas.resume import ResumeCreate, ResumeListItem, ResumeRead, ResumeUpdate
 from app.services.resume_parsing_service import parse_resume
+from app.services.resource_deletion_service import delete_resume_tree
 from app.services.user_scope_service import get_resume_for_user_or_404
 
 router = APIRouter(prefix="/api/v1/resumes", tags=["resumes"])
@@ -79,3 +80,13 @@ async def update_resume(
     await db.commit()
     await db.refresh(resume)
     return resume
+
+
+@router.delete("/{resume_id}", status_code=204)
+async def delete_resume(
+    resume_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUserDep = None,
+) -> None:
+    resume = await get_resume_for_user_or_404(db, resume_id, current_user)
+    await delete_resume_tree(db, resume, current_user)

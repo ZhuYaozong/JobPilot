@@ -13,6 +13,7 @@ from app.schemas.match_result import (
     MatchResultUpdate,
 )
 from app.services.match_analysis_service import analyze_match
+from app.services.resource_deletion_service import delete_match_result_tree
 from app.services.user_scope_service import (
     ensure_resume_and_job_exist_for_user,
     get_match_result_for_user_or_404,
@@ -94,3 +95,13 @@ async def update_match(
     await db.commit()
     await db.refresh(match)
     return match
+
+
+@router.delete("/{match_id}", status_code=204)
+async def delete_match(
+    match_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUserDep = None,
+) -> None:
+    match = await get_match_result_for_user_or_404(db, match_id, current_user)
+    await delete_match_result_tree(db, match)

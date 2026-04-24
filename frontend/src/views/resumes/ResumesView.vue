@@ -63,6 +63,9 @@
                 解析简历
               </el-button>
               <RouterLink class="inline-link" to="/matches">去匹配岗位</RouterLink>
+              <el-button type="danger" plain :loading="deletePending" @click="handleDeleteResume">
+                删除简历
+              </el-button>
             </div>
           </div>
 
@@ -166,10 +169,11 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 
 import {
   createResume,
+  deleteResume,
   getResume,
   listResumeVersions,
   listResumes,
@@ -192,6 +196,7 @@ const detailLoading = ref(false);
 const versionsLoading = ref(false);
 const createPending = ref(false);
 const parsePending = ref(false);
+const deletePending = ref(false);
 const selectedResumeId = ref<number | null>(null);
 const selectedResume = ref<Resume | null>(null);
 
@@ -340,6 +345,42 @@ async function handleParseResume() {
     ElMessage.error(getErrorMessage(error, "解析简历失败"));
   } finally {
     parsePending.value = false;
+  }
+}
+
+async function handleDeleteResume() {
+  if (!selectedResumeId.value || !selectedResume.value) {
+    ElMessage.warning("请先选择一份简历");
+    return;
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      "删除后会一并移除这份简历相关的匹配分析、投递记录、求职材料和版本记录。此操作不可恢复。",
+      `删除简历：${selectedResume.value.title}？`,
+      {
+        type: "warning",
+        confirmButtonText: "删除",
+        cancelButtonText: "取消",
+        confirmButtonClass: "el-button--danger",
+      },
+    );
+  } catch {
+    return;
+  }
+
+  deletePending.value = true;
+  try {
+    await deleteResume(selectedResumeId.value);
+    ElMessage.success("简历已删除");
+    selectedResumeId.value = null;
+    selectedResume.value = null;
+    resumeVersions.value = [];
+    await fetchResumes();
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, "删除简历失败"));
+  } finally {
+    deletePending.value = false;
   }
 }
 

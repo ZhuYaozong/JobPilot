@@ -71,6 +71,9 @@
               <span>当前阶段</span>
               <strong>{{ formatApplicationStage(selectedApplication.current_stage) }}</strong>
             </div>
+            <el-button type="danger" plain :loading="deletePending" @click="handleDeleteApplication">
+              删除投递
+            </el-button>
           </div>
 
           <article class="work-panel-callout">
@@ -234,10 +237,11 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 
 import {
   createApplication,
+  deleteApplication,
   getApplication,
   listApplicationEvents,
   listApplications,
@@ -300,6 +304,7 @@ const eventsLoading = ref(false);
 const referencesLoading = ref(false);
 const createPending = ref(false);
 const transitionPending = ref(false);
+const deletePending = ref(false);
 
 const selectedApplicationId = ref<number | null>(null);
 const selectedApplication = ref<ApplicationRecord | null>(null);
@@ -613,6 +618,43 @@ async function handleTransitionApplication() {
     ElMessage.error(getErrorMessage(error, "更新阶段失败"));
   } finally {
     transitionPending.value = false;
+  }
+}
+
+async function handleDeleteApplication() {
+  if (!selectedApplicationId.value || !selectedApplication.value) {
+    ElMessage.warning("请先选择一条投递记录");
+    return;
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      "删除后会一并移除这条投递的时间线和关联求职材料，不会删除原始简历或岗位。",
+      `删除投递：${getJobLabel(selectedApplication.value.job_posting_id)}？`,
+      {
+        type: "warning",
+        confirmButtonText: "删除",
+        cancelButtonText: "取消",
+        confirmButtonClass: "el-button--danger",
+      },
+    );
+  } catch {
+    return;
+  }
+
+  deletePending.value = true;
+  try {
+    await deleteApplication(selectedApplicationId.value);
+    ElMessage.success("投递记录已删除");
+    selectedApplicationId.value = null;
+    selectedApplication.value = null;
+    selectedJobDetail.value = null;
+    applicationEvents.value = [];
+    await fetchApplications();
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, "删除投递记录失败"));
+  } finally {
+    deletePending.value = false;
   }
 }
 

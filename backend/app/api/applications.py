@@ -11,6 +11,7 @@ from app.schemas.application_record import (
     ApplicationRecordRead,
     ApplicationRecordUpdate,
 )
+from app.services.resource_deletion_service import delete_application_record_tree
 from app.services.user_scope_service import (
     ensure_resume_and_job_exist_for_user,
     get_application_record_for_user_or_404,
@@ -91,3 +92,17 @@ async def update_application(
     await db.commit()
     await db.refresh(application)
     return application
+
+
+@router.delete("/{application_id}", status_code=204)
+async def delete_application(
+    application_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUserDep = None,
+) -> None:
+    application = await get_application_record_for_user_or_404(
+        db,
+        application_id,
+        current_user,
+    )
+    await delete_application_record_tree(db, application, current_user)

@@ -124,6 +124,62 @@ def create_artifact(
     return response.json()
 
 
+def create_resume_version(
+    client: TestClient,
+    username: str,
+    resume_id: int,
+    job_id: int | None,
+    label: str,
+) -> dict:
+    response = client.post(
+        "/api/v1/resume-versions",
+        headers=make_headers(username),
+        json={
+            "resume_id": resume_id,
+            "job_posting_id": job_id,
+            "version_no": 1,
+            "version_label": label,
+            "content": "Version content",
+            "content_format": "markdown",
+            "source_type": "manual",
+        },
+    )
+    assert response.status_code == 201
+    return response.json()
+
+
+def create_artifact_feedback(
+    client: TestClient,
+    username: str,
+    artifact_id: int,
+) -> dict:
+    response = client.post(
+        f"/api/v1/artifacts/{artifact_id}/feedback",
+        headers=make_headers(username),
+        json={"feedback_type": "saved_for_later", "note": "Looks useful"},
+    )
+    assert response.status_code == 201
+    return response.json()
+
+
+def transition_application(
+    client: TestClient,
+    username: str,
+    application_id: int,
+) -> dict:
+    response = client.post(
+        f"/api/v1/applications/{application_id}/transition",
+        headers=make_headers(username),
+        json={
+            "target_stage": "applied",
+            "next_action": "Follow up",
+            "note": "Submitted application",
+        },
+    )
+    assert response.status_code == 200
+    return response.json()
+
+
 def test_default_pytest_user_scope_does_not_leak_into_demo(
     client: TestClient,
     test_marker: str,
@@ -448,3 +504,154 @@ def test_created_at_recent_first_rules_for_matches_and_artifacts(
     assert artifacts.status_code == 200
     assert artifacts.json()[0]["id"] == second_artifact["id"]
     assert first_artifact["id"] != second_artifact["id"]
+
+
+def test_delete_application_removes_timeline_and_linked_artifacts(
+    client: TestClient,
+    test_marker: str,
+) -> None:
+    username = f"delete-application-{test_marker}"
+    resume = create_resume(client, username, f"{test_marker} resume", f"{test_marker}-resume")
+    job = create_job(client, username, f"{test_marker} company", "Application Delete Job")
+    application = create_application(client, username, resume["id"], job["id"], "Delete me")
+    artifact = create_artifact(
+        client,
+        username,
+        resume["id"],
+        job["id"],
+        application["id"],
+        f"{test_marker} application artifact",
+    )
+    create_artifact_feedback(client, username, artifact["id"])
+    transition_application(client, username, application["id"])
+
+    cross_scope_delete = client.delete(
+        f"/api/v1/applications/{application['id']}",
+        headers=make_headers(f"other-{test_marker}"),
+    )
+    assert cross_scope_delete.status_code == 404
+
+    response = client.delete(
+        f"/api/v1/applications/{application['id']}",
+        headers=make_headers(username),
+    )
+    assert response.status_code == 204
+    assert response.content == b""
+
+    assert client.get(
+        f"/api/v1/applications/{application['id']}",
+        headers=make_headers(username),
+    ).status_code == 404
+    assert client.get(
+        f"/api/v1/artifacts/{artifact['id']}",
+        headers=make_headers(username),
+    ).status_code == 404
+    assert client.get(f"/api/v1/resumes/{resume['id']}", headers=make_headers(username)).status_code == 200
+    assert client.get(f"/api/v1/jobs/{job['id']}", headers=make_headers(username)).status_code == 200
+
+
+def test_delete_match_keeps_resume_and_job(
+    client: TestClient,
+    test_marker: str,
+) -> None:
+    username = f"delete-match-{test_marker}"
+    resume = create_resume(client, username, f"{test_marker} resume", f"{test_marker}-resume")
+    job = create_job(client, username, f"{test_marker} company", "Match Delete Job")
+    match = create_match(client, username, resume["id"], job["id"], 70)
+
+    response = client.delete(
+        f"/api/v1/matches/{match['id']}",
+        headers=make_headers(username),
+    )
+    assert response.status_code == 204
+
+    assert client.get(f"/api/v1/matches/{match['id']}", headers=make_headers(username)).status_code == 404
+    assert client.get(f"/api/v1/resumes/{resume['id']}", headers=make_headers(username)).status_code == 200
+    assert client.get(f"/api/v1/jobs/{job['id']}", headers=make_headers(username)).status_code == 200
+
+
+def test_delete_resume_cascades_owned_business_records(
+    client: TestClient,
+    test_marker: str,
+) -> None:
+    username = f"delete-resume-{test_marker}"
+    resume = create_resume(client, username, f"{test_marker} resume", f"{test_marker}-resume")
+    job = create_job(client, username, f"{test_marker} company", "Resume Delete Job")
+    application = create_application(client, username, resume["id"], job["id"], "Delete resume")
+    match = create_match(client, username, resume["id"], job["id"], 81)
+    version = create_resume_version(
+        client,
+        username,
+        resume["id"],
+        job["id"],
+        f"{test_marker} version",
+    )
+    artifact = create_artifact(
+        client,
+        username,
+        resume["id"],
+        job["id"],
+        application["id"],
+        f"{test_marker} resume artifact",
+    )
+    create_artifact_feedback(client, username, artifact["id"])
+    transition_application(client, username, application["id"])
+
+    response = client.delete(
+        f"/api/v1/resumes/{resume['id']}",
+        headers=make_headers(username),
+    )
+    assert response.status_code == 204
+
+    for path in [
+        f"/api/v1/resumes/{resume['id']}",
+        f"/api/v1/applications/{application['id']}",
+        f"/api/v1/matches/{match['id']}",
+        f"/api/v1/resume-versions/{version['id']}",
+        f"/api/v1/artifacts/{artifact['id']}",
+    ]:
+        assert client.get(path, headers=make_headers(username)).status_code == 404
+
+    assert client.get(f"/api/v1/jobs/{job['id']}", headers=make_headers(username)).status_code == 200
+
+
+def test_delete_job_cascades_owned_business_records(
+    client: TestClient,
+    test_marker: str,
+) -> None:
+    username = f"delete-job-{test_marker}"
+    resume = create_resume(client, username, f"{test_marker} resume", f"{test_marker}-resume")
+    job = create_job(client, username, f"{test_marker} company", "Job Delete Job")
+    application = create_application(client, username, resume["id"], job["id"], "Delete job")
+    match = create_match(client, username, resume["id"], job["id"], 82)
+    version = create_resume_version(
+        client,
+        username,
+        resume["id"],
+        job["id"],
+        f"{test_marker} version",
+    )
+    artifact = create_artifact(
+        client,
+        username,
+        resume["id"],
+        job["id"],
+        application["id"],
+        f"{test_marker} job artifact",
+    )
+    create_artifact_feedback(client, username, artifact["id"])
+    transition_application(client, username, application["id"])
+
+    response = client.delete(f"/api/v1/jobs/{job['id']}", headers=make_headers(username))
+    assert response.status_code == 204
+
+    for path in [
+        f"/api/v1/jobs/{job['id']}",
+        f"/api/v1/applications/{application['id']}",
+        f"/api/v1/matches/{match['id']}",
+        f"/api/v1/resume-versions/{version['id']}",
+        f"/api/v1/artifacts/{artifact['id']}",
+    ]:
+        assert client.get(path, headers=make_headers(username)).status_code == 404
+
+    assert client.get(f"/api/v1/resumes/{resume['id']}", headers=make_headers(username)).status_code == 200

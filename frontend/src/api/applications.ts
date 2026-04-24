@@ -45,6 +45,10 @@ export async function updateApplication(
   return response.data;
 }
 
+export async function deleteApplication(applicationId: number) {
+  await apiClient.delete(`/api/v1/applications/${applicationId}`);
+}
+
 export async function transitionApplication(
   applicationId: number,
   payload: ApplicationTransitionRequest,

@@ -94,6 +94,9 @@
               <span>总体匹配度</span>
               <strong>{{ formatScore(selectedMatch.overall_score) }}</strong>
             </div>
+            <el-button type="danger" plain :loading="deletePending" @click="handleDeleteMatch">
+              删除分析
+            </el-button>
           </div>
 
           <article class="work-panel-callout">
@@ -168,7 +171,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 
 import {
   generateCoverLetter,
@@ -176,7 +179,7 @@ import {
   listArtifacts,
 } from "@/api/artifacts";
 import { listJobs } from "@/api/jobs";
-import { analyzeMatch, getMatch, listMatches } from "@/api/matches";
+import { analyzeMatch, deleteMatch, getMatch, listMatches } from "@/api/matches";
 import { listResumes } from "@/api/resumes";
 import EmptyStateCard from "@/components/EmptyStateCard.vue";
 import SectionCard from "@/components/SectionCard.vue";
@@ -218,6 +221,7 @@ const artifactsLoading = ref(false);
 const analyzePending = ref(false);
 const coverLetterPending = ref(false);
 const interviewPrepPending = ref(false);
+const deletePending = ref(false);
 
 const selectedMatchId = ref<number | null>(null);
 const selectedMatch = ref<MatchResultDetail | null>(null);
@@ -497,6 +501,41 @@ async function handleGenerateInterviewPrep() {
     ElMessage.error(getErrorMessage(error, "生成面试准备失败"));
   } finally {
     interviewPrepPending.value = false;
+  }
+}
+
+async function handleDeleteMatch() {
+  if (!selectedMatchId.value || !selectedMatch.value) {
+    ElMessage.warning("请先选择一条匹配分析");
+    return;
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      "删除后只移除这条匹配分析，不会删除对应简历、岗位或已生成材料。",
+      "删除这条匹配分析？",
+      {
+        type: "warning",
+        confirmButtonText: "删除",
+        cancelButtonText: "取消",
+        confirmButtonClass: "el-button--danger",
+      },
+    );
+  } catch {
+    return;
+  }
+
+  deletePending.value = true;
+  try {
+    await deleteMatch(selectedMatchId.value);
+    ElMessage.success("匹配分析已删除");
+    selectedMatchId.value = null;
+    selectedMatch.value = null;
+    await fetchMatches();
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, "删除匹配分析失败"));
+  } finally {
+    deletePending.value = false;
   }
 }
 

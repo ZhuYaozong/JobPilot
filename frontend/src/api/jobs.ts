@@ -32,6 +32,10 @@ export async function updateJob(jobId: number, payload: JobPostingUpdate) {
   return response.data;
 }
 
+export async function deleteJob(jobId: number) {
+  await apiClient.delete(`/api/v1/jobs/${jobId}`);
+}
+
 export async function parseJob(jobId: number) {
   const response = await apiClient.post<JobPosting>(
     `/api/v1/jobs/${jobId}/parse`,
