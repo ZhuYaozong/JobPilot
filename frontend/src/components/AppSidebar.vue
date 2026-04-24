@@ -17,18 +17,26 @@
     </section>
 
     <nav class="nav-groups nav-groups--single" aria-label="主导航">
-      <RouterLink
-        v-for="item in navItems"
-        :key="item.to"
-        class="nav-link"
-        :to="item.to"
+      <section
+        v-for="group in navGroups"
+        :key="group.title"
+        class="nav-section"
+        :class="{ 'nav-section--primary': group.primary }"
       >
-        <span class="nav-icon">{{ item.icon }}</span>
-        <span class="nav-copy">
-          <strong>{{ item.label }}</strong>
-          <small>{{ item.hint }}</small>
-        </span>
-      </RouterLink>
+        <p class="nav-title">{{ group.title }}</p>
+        <RouterLink
+          v-for="item in group.items"
+          :key="item.to"
+          class="nav-link"
+          :to="item.to"
+        >
+          <span class="nav-icon">{{ item.icon }}</span>
+          <span class="nav-copy">
+            <strong>{{ item.label }}</strong>
+            <small>{{ item.hint }}</small>
+          </span>
+        </RouterLink>
+      </section>
     </nav>
   </aside>
 </template>
@@ -47,13 +55,30 @@ interface SidebarNavItem {
 
 const currentUser = computed(() => getCurrentDevUserOption());
 
-const navItems: SidebarNavItem[] = [
-  { to: "/", icon: "首", label: "首页", hint: "我的求职状态" },
-  { to: "/resumes", icon: "简", label: "简历管理", hint: "管理简历与版本" },
-  { to: "/jobs", icon: "岗", label: "岗位管理", hint: "收集岗位与 JD" },
-  { to: "/matches", icon: "配", label: "岗位与简历匹配度", hint: "分析匹配并生成材料" },
-  { to: "/applications", icon: "投", label: "投递跟进", hint: "记录投递进度" },
-  { to: "/assistant", icon: "AI", label: "AI 助手", hint: "对话、复盘与模拟面试" },
-  { to: "/knowledge", icon: "知", label: "知识库管理", hint: "管理资料与知识库" },
+interface SidebarNavGroup {
+  title: string;
+  primary?: boolean;
+  items: SidebarNavItem[];
+}
+
+const navGroups: SidebarNavGroup[] = [
+  {
+    title: "工作台",
+    primary: true,
+    items: [
+      { to: "/", icon: "首", label: "首页", hint: "我的求职状态" },
+      { to: "/assistant", icon: "AI", label: "AI 助手", hint: "对话、复盘与模拟面试" },
+      { to: "/knowledge", icon: "知", label: "知识库管理", hint: "管理资料与知识库" },
+    ],
+  },
+  {
+    title: "求职流程",
+    items: [
+      { to: "/resumes", icon: "简", label: "简历管理", hint: "管理简历与版本" },
+      { to: "/jobs", icon: "岗", label: "岗位管理", hint: "收集岗位与 JD" },
+      { to: "/matches", icon: "配", label: "岗位与简历匹配度", hint: "分析匹配并生成材料" },
+      { to: "/applications", icon: "投", label: "投递跟进", hint: "记录投递进度" },
+    ],
+  },
 ];
 </script>

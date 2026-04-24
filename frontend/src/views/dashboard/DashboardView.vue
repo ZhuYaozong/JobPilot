@@ -1,6 +1,7 @@
 <template>
   <div class="page-stack">
     <SectionCard
+      class="dashboard-hero"
       :title="`你好，${currentUser.label}，今天继续推进求职进度`"
       :subtitle="heroSuggestion.description"
       eyebrow="今日建议动作"
@@ -336,6 +337,30 @@ onMounted(fetchOverview);
 </script>
 
 <style scoped>
+.dashboard-hero {
+  position: relative;
+  overflow: hidden;
+  border-color: rgba(15, 118, 110, 0.16);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(231, 246, 244, 0.88) 54%, rgba(232, 240, 255, 0.8));
+}
+
+.dashboard-hero :deep(.section-card__header) {
+  align-items: center;
+  margin-bottom: 22px;
+}
+
+.dashboard-hero :deep(h2) {
+  max-width: 780px;
+  font-size: clamp(26px, 3vw, 38px);
+  line-height: 1.18;
+}
+
+.dashboard-hero :deep(.muted) {
+  max-width: 760px;
+  font-size: 15px;
+}
+
 .dashboard-status-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -356,14 +381,18 @@ onMounted(fetchOverview);
 .recent-card {
   display: grid;
   gap: 10px;
-  padding: 16px;
+  padding: 18px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 10px;
   background: #ffffff;
 }
 
 .next-step-card span {
-  color: var(--warm);
+  width: fit-content;
+  padding: 4px 8px;
+  border-radius: 999px;
+  color: var(--accent-strong);
+  background: var(--accent-soft);
   font-size: 12px;
   font-weight: 800;
 }
@@ -399,6 +428,10 @@ onMounted(fetchOverview);
   gap: 4px;
   padding: 10px 0;
   border-top: 1px solid var(--line);
+}
+
+.recent-list strong {
+  color: #0f172a;
 }
 
 .recent-list p:first-child {
