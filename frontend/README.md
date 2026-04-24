@@ -36,6 +36,7 @@ npm run build
 
 ```powershell
 VITE_API_BASE_URL=/
+VITE_API_TIMEOUT_MS=30000
 ```
 
 开发环境默认推荐使用同源代理：`npm run dev` 时，Vite 会把 `/api` 和 `/health` 转发到 `http://localhost:8000`，这样不需要改后端 CORS 配置。若后续已有同源网关或后端开启了跨域，也仍然支持把 `VITE_API_BASE_URL` 改成完整地址，例如 `http://localhost:8000`。
