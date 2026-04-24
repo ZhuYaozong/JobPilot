@@ -10,6 +10,7 @@ from app.main import app
 @pytest.fixture(scope="session")
 def client() -> TestClient:
     with TestClient(app) as test_client:
+        test_client.headers.update({"X-User-Name": "test"})
         yield test_client
 
 

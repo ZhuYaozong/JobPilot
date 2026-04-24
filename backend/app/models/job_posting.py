@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -12,6 +12,7 @@ class JobPosting(Base):
     __tablename__ = "job_postings"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     company_name: Mapped[str] = mapped_column(String(255))
     job_title: Mapped[str] = mapped_column(String(255))
     city: Mapped[str | None] = mapped_column(String(100))

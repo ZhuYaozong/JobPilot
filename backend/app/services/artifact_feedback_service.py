@@ -3,8 +3,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.artifact_feedback_event import ArtifactFeedbackEvent
-from app.models.generated_artifact import GeneratedArtifact
+from app.models.user import User
 from app.schemas.artifact_feedback import ArtifactFeedbackCreate
+from app.services.user_scope_service import get_generated_artifact_for_user_or_404
 
 ALLOWED_FEEDBACK_TYPES = {
     "accepted",
@@ -12,16 +13,6 @@ ALLOWED_FEEDBACK_TYPES = {
     "rejected",
     "saved_for_later",
 }
-
-
-async def ensure_artifact_exists(
-    db: AsyncSession,
-    artifact_id: int,
-) -> GeneratedArtifact:
-    artifact = await db.get(GeneratedArtifact, artifact_id)
-    if artifact is None:
-        raise HTTPException(status_code=404, detail="Generated artifact not found")
-    return artifact
 
 
 def ensure_feedback_type_allowed(feedback_type: str) -> None:
@@ -33,8 +24,11 @@ async def create_artifact_feedback(
     db: AsyncSession,
     artifact_id: int,
     payload: ArtifactFeedbackCreate,
+    current_user: User | None = None,
 ) -> ArtifactFeedbackEvent:
-    await ensure_artifact_exists(db, artifact_id)
+    if current_user is None:
+        raise HTTPException(status_code=500, detail="Current user scope is required")
+    await get_generated_artifact_for_user_or_404(db, artifact_id, current_user)
     ensure_feedback_type_allowed(payload.feedback_type)
 
     feedback = ArtifactFeedbackEvent(
@@ -53,8 +47,11 @@ async def list_artifact_feedback(
     artifact_id: int,
     limit: int,
     offset: int,
+    current_user: User | None = None,
 ) -> list[ArtifactFeedbackEvent]:
-    await ensure_artifact_exists(db, artifact_id)
+    if current_user is None:
+        raise HTTPException(status_code=500, detail="Current user scope is required")
+    await get_generated_artifact_for_user_or_404(db, artifact_id, current_user)
 
     statement = (
         select(ArtifactFeedbackEvent)

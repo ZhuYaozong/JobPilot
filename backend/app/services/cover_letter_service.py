@@ -2,7 +2,6 @@ import json
 from typing import Any
 
 from fastapi import HTTPException
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.llm.client import LLMClient, LLMClientError, LLMConfigError
@@ -11,9 +10,16 @@ from app.models.generated_artifact import GeneratedArtifact
 from app.models.job_posting import JobPosting
 from app.models.match_result import MatchResult
 from app.models.resume import Resume
+from app.models.user import User
 from app.schemas.cover_letter_generation import (
     CoverLetterGenerateRequest,
     CoverLetterGenerationMeta,
+)
+from app.services.user_scope_service import (
+    get_application_record_for_user_or_404,
+    get_job_posting_for_user_or_404,
+    get_latest_match_result_for_user,
+    get_resume_for_user_or_404,
 )
 
 SUPPORTED_LANGUAGE_MODES = {"zh", "bilingual"}
@@ -90,45 +96,31 @@ def validate_generated_cover_letter(content_text: str, language_mode: str) -> st
     return text
 
 
-async def get_latest_match_result(
-    db: AsyncSession,
-    resume_id: int,
-    job_posting_id: int,
-) -> MatchResult | None:
-    statement = (
-        select(MatchResult)
-        .where(
-            MatchResult.resume_id == resume_id,
-            MatchResult.job_posting_id == job_posting_id,
-        )
-        .order_by(MatchResult.created_at.desc(), MatchResult.id.desc())
-        .limit(1)
-    )
-    result = await db.execute(statement)
-    return result.scalar_one_or_none()
-
-
 async def generate_cover_letter(
     db: AsyncSession,
     payload: CoverLetterGenerateRequest,
     llm_client: LLMClient | None = None,
+    current_user: User | None = None,
 ) -> GeneratedArtifact:
+    if current_user is None:
+        raise HTTPException(status_code=500, detail="Current user scope is required")
     if payload.language_mode not in SUPPORTED_LANGUAGE_MODES:
         raise HTTPException(status_code=400, detail="Unsupported language_mode")
 
-    resume = await db.get(Resume, payload.resume_id)
-    if resume is None:
-        raise HTTPException(status_code=404, detail="Resume not found")
-
-    job = await db.get(JobPosting, payload.job_posting_id)
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job posting not found")
+    resume = await get_resume_for_user_or_404(db, payload.resume_id, current_user)
+    job = await get_job_posting_for_user_or_404(
+        db,
+        payload.job_posting_id,
+        current_user,
+    )
 
     application: ApplicationRecord | None = None
     if payload.application_record_id is not None:
-        application = await db.get(ApplicationRecord, payload.application_record_id)
-        if application is None:
-            raise HTTPException(status_code=404, detail="Application record not found")
+        application = await get_application_record_for_user_or_404(
+            db,
+            payload.application_record_id,
+            current_user,
+        )
         if (
             application.resume_id != payload.resume_id
             or application.job_posting_id != payload.job_posting_id
@@ -144,7 +136,12 @@ async def generate_cover_letter(
     if not job.parsed_json:
         raise HTTPException(status_code=400, detail="Job posting needs parsing first")
 
-    match = await get_latest_match_result(db, payload.resume_id, payload.job_posting_id)
+    match = await get_latest_match_result_for_user(
+        db,
+        current_user,
+        payload.resume_id,
+        payload.job_posting_id,
+    )
     if match is None:
         raise HTTPException(status_code=400, detail="Match analysis is required first")
 
@@ -166,6 +163,7 @@ async def generate_cover_letter(
     )
 
     artifact = GeneratedArtifact(
+        user_id=current_user.id,
         artifact_type="cover_letter",
         resume_id=resume.id,
         job_posting_id=job.id,

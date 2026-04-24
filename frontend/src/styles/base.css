@@ -135,6 +135,12 @@ textarea {
   font-size: clamp(28px, 4vw, 42px);
 }
 
+.header-controls {
+  display: grid;
+  justify-items: end;
+  gap: 10px;
+}
+
 .header-status {
   display: inline-flex;
   align-items: center;
@@ -144,6 +150,38 @@ textarea {
   border-radius: 999px;
   color: var(--muted);
   background: rgba(255, 253, 246, 0.78);
+}
+
+.scope-switch {
+  display: grid;
+  gap: 6px;
+  min-width: 240px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 253, 246, 0.86);
+}
+
+.scope-switch span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.scope-switch select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--ink);
+  background: #fffdf6;
+}
+
+.scope-switch small {
+  color: var(--muted);
+  line-height: 1.5;
 }
 
 .status-dot {

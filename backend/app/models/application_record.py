@@ -10,6 +10,7 @@ class ApplicationRecord(Base):
     __tablename__ = "application_records"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     resume_id: Mapped[int] = mapped_column(ForeignKey("resumes.id"), index=True)
     job_posting_id: Mapped[int] = mapped_column(
         ForeignKey("job_postings.id"),

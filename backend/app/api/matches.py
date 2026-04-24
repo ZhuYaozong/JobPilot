@@ -1,11 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import CurrentUserDep, ListLimit, ListOffset
 from app.db.session import get_db
-from app.models.job_posting import JobPosting
 from app.models.match_result import MatchResult
-from app.models.resume import Resume
 from app.schemas.match_analysis import MatchAnalysisRequest
 from app.schemas.match_result import (
     MatchResultCreate,
@@ -14,45 +13,28 @@ from app.schemas.match_result import (
     MatchResultUpdate,
 )
 from app.services.match_analysis_service import analyze_match
+from app.services.user_scope_service import (
+    ensure_resume_and_job_exist_for_user,
+    get_match_result_for_user_or_404,
+)
 
 router = APIRouter(prefix="/api/v1/matches", tags=["matches"])
-
-
-async def get_match_or_404(db: AsyncSession, match_id: int) -> MatchResult:
-    # 统一处理不存在的匹配记录，保持和现有模块相同的 404 风格。
-    match = await db.get(MatchResult, match_id)
-    if match is None:
-        raise HTTPException(status_code=404, detail="Match result not found")
-    return match
-
-
-async def ensure_resume_and_job_exist(
-    db: AsyncSession,
-    resume_id: int,
-    job_posting_id: int,
-) -> None:
-    # 创建匹配记录前只检查外键是否存在，不做复杂联表加载。
-    resume = await db.get(Resume, resume_id)
-    if resume is None:
-        raise HTTPException(status_code=404, detail="Resume not found")
-
-    job = await db.get(JobPosting, job_posting_id)
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job posting not found")
 
 
 @router.post("", response_model=MatchResultRead, status_code=201)
 async def create_match(
     payload: MatchResultCreate,
     db: AsyncSession = Depends(get_db),
+    current_user: CurrentUserDep = None,
 ) -> MatchResult:
-    await ensure_resume_and_job_exist(
+    await ensure_resume_and_job_exist_for_user(
         db,
         resume_id=payload.resume_id,
         job_posting_id=payload.job_posting_id,
+        current_user=current_user,
     )
 
-    match = MatchResult(**payload.model_dump())
+    match = MatchResult(user_id=current_user.id, **payload.model_dump())
     db.add(match)
     await db.commit()
     await db.refresh(match)
@@ -61,13 +43,16 @@ async def create_match(
 
 @router.get("", response_model=list[MatchResultListItem])
 async def list_matches(
-    limit: int = Query(default=20, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    limit: ListLimit = 20,
+    offset: ListOffset = 0,
     db: AsyncSession = Depends(get_db),
+    current_user: CurrentUserDep = None,
 ) -> list[MatchResult]:
+    # MatchResult 列表明确采用 created_at recent-first，因为匹配分析天然按生成时间查看最近结果。
     statement = (
         select(MatchResult)
-        .order_by(MatchResult.created_at.desc())
+        .where(MatchResult.user_id == current_user.id)
+        .order_by(MatchResult.created_at.desc(), MatchResult.id.desc())
         .limit(limit)
         .offset(offset)
     )
@@ -79,16 +64,18 @@ async def list_matches(
 async def analyze_match_result(
     payload: MatchAnalysisRequest,
     db: AsyncSession = Depends(get_db),
+    current_user: CurrentUserDep = None,
 ) -> MatchResult:
-    return await analyze_match(db, payload)
+    return await analyze_match(db, payload, current_user=current_user)
 
 
 @router.get("/{match_id}", response_model=MatchResultRead)
 async def read_match(
     match_id: int,
     db: AsyncSession = Depends(get_db),
+    current_user: CurrentUserDep = None,
 ) -> MatchResult:
-    return await get_match_or_404(db, match_id)
+    return await get_match_result_for_user_or_404(db, match_id, current_user)
 
 
 @router.patch("/{match_id}", response_model=MatchResultRead)
@@ -96,8 +83,9 @@ async def update_match(
     match_id: int,
     payload: MatchResultUpdate,
     db: AsyncSession = Depends(get_db),
+    current_user: CurrentUserDep = None,
 ) -> MatchResult:
-    match = await get_match_or_404(db, match_id)
+    match = await get_match_result_for_user_or_404(db, match_id, current_user)
     update_data = payload.model_dump(exclude_unset=True)
 
     for field, value in update_data.items():

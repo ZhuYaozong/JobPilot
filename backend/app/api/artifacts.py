@@ -1,12 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import CurrentUserDep, ListLimit, ListOffset
 from app.db.session import get_db
-from app.models.application_record import ApplicationRecord
 from app.models.generated_artifact import GeneratedArtifact
-from app.models.job_posting import JobPosting
-from app.models.resume import Resume
+from app.models.user import User
 from app.schemas.artifact_feedback import (
     ArtifactFeedbackCreate,
     ArtifactFeedbackListItem,
@@ -26,19 +25,14 @@ from app.services.artifact_feedback_service import (
 )
 from app.services.cover_letter_service import generate_cover_letter
 from app.services.interview_prep_service import generate_interview_prep
+from app.services.user_scope_service import (
+    get_application_record_for_user_or_404,
+    get_generated_artifact_for_user_or_404,
+    get_job_posting_for_user_or_404,
+    get_resume_for_user_or_404,
+)
 
 router = APIRouter(prefix="/api/v1/artifacts", tags=["artifacts"])
-
-
-async def get_artifact_or_404(
-    db: AsyncSession,
-    artifact_id: int,
-) -> GeneratedArtifact:
-    # 统一处理不存在的产物记录，保持和现有模块相同的 404 风格。
-    artifact = await db.get(GeneratedArtifact, artifact_id)
-    if artifact is None:
-        raise HTTPException(status_code=404, detail="Generated artifact not found")
-    return artifact
 
 
 def ensure_artifact_has_business_link(
@@ -58,27 +52,27 @@ async def ensure_business_links_exist(
     resume_id: int | None,
     job_posting_id: int | None,
     application_record_id: int | None,
+    current_user: User,
 ) -> None:
     if resume_id is not None:
-        resume = await db.get(Resume, resume_id)
-        if resume is None:
-            raise HTTPException(status_code=404, detail="Resume not found")
+        await get_resume_for_user_or_404(db, resume_id, current_user)
 
     if job_posting_id is not None:
-        job = await db.get(JobPosting, job_posting_id)
-        if job is None:
-            raise HTTPException(status_code=404, detail="Job posting not found")
+        await get_job_posting_for_user_or_404(db, job_posting_id, current_user)
 
     if application_record_id is not None:
-        application = await db.get(ApplicationRecord, application_record_id)
-        if application is None:
-            raise HTTPException(status_code=404, detail="Application record not found")
+        await get_application_record_for_user_or_404(
+            db,
+            application_record_id,
+            current_user,
+        )
 
 
 @router.post("", response_model=GeneratedArtifactRead, status_code=201)
 async def create_artifact(
     payload: GeneratedArtifactCreate,
     db: AsyncSession = Depends(get_db),
+    current_user: CurrentUserDep = None,
 ) -> GeneratedArtifact:
     ensure_artifact_has_business_link(
         payload.resume_id,
@@ -90,9 +84,10 @@ async def create_artifact(
         resume_id=payload.resume_id,
         job_posting_id=payload.job_posting_id,
         application_record_id=payload.application_record_id,
+        current_user=current_user,
     )
 
-    artifact = GeneratedArtifact(**payload.model_dump())
+    artifact = GeneratedArtifact(user_id=current_user.id, **payload.model_dump())
     db.add(artifact)
     await db.commit()
     await db.refresh(artifact)
@@ -101,13 +96,16 @@ async def create_artifact(
 
 @router.get("", response_model=list[GeneratedArtifactListItem])
 async def list_artifacts(
-    limit: int = Query(default=20, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    limit: ListLimit = 20,
+    offset: ListOffset = 0,
     db: AsyncSession = Depends(get_db),
+    current_user: CurrentUserDep = None,
 ) -> list[GeneratedArtifact]:
+    # GeneratedArtifact 列表明确采用 created_at recent-first，优先展示最近生成或写入的材料。
     statement = (
         select(GeneratedArtifact)
-        .order_by(GeneratedArtifact.created_at.desc())
+        .where(GeneratedArtifact.user_id == current_user.id)
+        .order_by(GeneratedArtifact.created_at.desc(), GeneratedArtifact.id.desc())
         .limit(limit)
         .offset(offset)
     )
@@ -123,8 +121,9 @@ async def list_artifacts(
 async def generate_cover_letter_artifact(
     payload: CoverLetterGenerateRequest,
     db: AsyncSession = Depends(get_db),
+    current_user: CurrentUserDep = None,
 ) -> GeneratedArtifact:
-    return await generate_cover_letter(db, payload)
+    return await generate_cover_letter(db, payload, current_user=current_user)
 
 
 @router.post(
@@ -135,8 +134,9 @@ async def generate_cover_letter_artifact(
 async def generate_interview_prep_artifact(
     payload: InterviewPrepGenerateRequest,
     db: AsyncSession = Depends(get_db),
+    current_user: CurrentUserDep = None,
 ) -> GeneratedArtifact:
-    return await generate_interview_prep(db, payload)
+    return await generate_interview_prep(db, payload, current_user=current_user)
 
 
 @router.post(
@@ -148,26 +148,29 @@ async def create_feedback_for_artifact(
     artifact_id: int,
     payload: ArtifactFeedbackCreate,
     db: AsyncSession = Depends(get_db),
+    current_user: CurrentUserDep = None,
 ):
-    return await create_artifact_feedback(db, artifact_id, payload)
+    return await create_artifact_feedback(db, artifact_id, payload, current_user)
 
 
 @router.get("/{artifact_id}/feedback", response_model=list[ArtifactFeedbackListItem])
 async def list_feedback_for_artifact(
     artifact_id: int,
-    limit: int = Query(default=20, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    limit: ListLimit = 20,
+    offset: ListOffset = 0,
     db: AsyncSession = Depends(get_db),
+    current_user: CurrentUserDep = None,
 ):
-    return await list_artifact_feedback(db, artifact_id, limit, offset)
+    return await list_artifact_feedback(db, artifact_id, limit, offset, current_user)
 
 
 @router.get("/{artifact_id}", response_model=GeneratedArtifactRead)
 async def read_artifact(
     artifact_id: int,
     db: AsyncSession = Depends(get_db),
+    current_user: CurrentUserDep = None,
 ) -> GeneratedArtifact:
-    return await get_artifact_or_404(db, artifact_id)
+    return await get_generated_artifact_for_user_or_404(db, artifact_id, current_user)
 
 
 @router.patch("/{artifact_id}", response_model=GeneratedArtifactRead)
@@ -175,8 +178,9 @@ async def update_artifact(
     artifact_id: int,
     payload: GeneratedArtifactUpdate,
     db: AsyncSession = Depends(get_db),
+    current_user: CurrentUserDep = None,
 ) -> GeneratedArtifact:
-    artifact = await get_artifact_or_404(db, artifact_id)
+    artifact = await get_generated_artifact_for_user_or_404(db, artifact_id, current_user)
     update_data = payload.model_dump(exclude_unset=True)
 
     resume_id = update_data.get("resume_id", artifact.resume_id)
@@ -199,6 +203,7 @@ async def update_artifact(
         application_record_id=(
             application_record_id if "application_record_id" in update_data else None
         ),
+        current_user=current_user,
     )
 
     for field, value in update_data.items():

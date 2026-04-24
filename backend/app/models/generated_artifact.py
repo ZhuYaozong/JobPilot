@@ -12,6 +12,7 @@ class GeneratedArtifact(Base):
     __tablename__ = "generated_artifacts"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     artifact_type: Mapped[str] = mapped_column(String(50))
     resume_id: Mapped[int | None] = mapped_column(ForeignKey("resumes.id"), index=True)
     job_posting_id: Mapped[int | None] = mapped_column(

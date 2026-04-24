@@ -3,17 +3,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.application_event import ApplicationEvent
 from app.models.application_record import ApplicationRecord
+from app.models.user import User
 from app.schemas.application_event import ApplicationTransitionRequest
+from app.services.user_scope_service import get_application_record_for_user_or_404
 
 
 async def transition_application_stage(
     db: AsyncSession,
     application_id: int,
     payload: ApplicationTransitionRequest,
+    current_user: User | None = None,
 ) -> ApplicationRecord:
-    application = await db.get(ApplicationRecord, application_id)
-    if application is None:
-        raise HTTPException(status_code=404, detail="Application record not found")
+    if current_user is None:
+        raise HTTPException(status_code=500, detail="Current user scope is required")
+    application = await get_application_record_for_user_or_404(
+        db,
+        application_id,
+        current_user,
+    )
 
     old_stage = application.current_stage
     application.current_stage = payload.target_stage

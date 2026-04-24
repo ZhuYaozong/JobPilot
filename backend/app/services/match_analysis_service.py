@@ -10,7 +10,9 @@ from app.llm.json_utils import load_llm_json
 from app.models.job_posting import JobPosting
 from app.models.match_result import MatchResult
 from app.models.resume import Resume
+from app.models.user import User
 from app.schemas.match_analysis import MatchAnalysisRequest, MatchAnalysisResult
+from app.services.user_scope_service import ensure_resume_and_job_exist_for_user
 
 
 def build_match_analysis_prompt(resume: Resume, job: JobPosting) -> str:
@@ -42,14 +44,16 @@ async def analyze_match(
     db: AsyncSession,
     payload: MatchAnalysisRequest,
     llm_client: LLMClient | None = None,
+    current_user: User | None = None,
 ) -> MatchResult:
-    resume = await db.get(Resume, payload.resume_id)
-    if resume is None:
-        raise HTTPException(status_code=404, detail="Resume not found")
-
-    job = await db.get(JobPosting, payload.job_posting_id)
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job posting not found")
+    if current_user is None:
+        raise HTTPException(status_code=500, detail="Current user scope is required")
+    resume, job = await ensure_resume_and_job_exist_for_user(
+        db,
+        payload.resume_id,
+        payload.job_posting_id,
+        current_user,
+    )
 
     if not resume.parsed_json:
         raise HTTPException(status_code=400, detail="Resume needs parsing first")
@@ -79,6 +83,7 @@ async def analyze_match(
         ) from exc
 
     match = MatchResult(
+        user_id=current_user.id,
         resume_id=resume.id,
         job_posting_id=job.id,
         overall_score=result.overall_score,

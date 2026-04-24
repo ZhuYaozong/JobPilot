@@ -7,6 +7,7 @@
         <p>
           当前前端已经接入真实 workflow 页面。首页不直接执行 parse、analyze、generate 或 transition，
           而是帮助你快速看清最近记录、当前主线进度，以及下一步该进入哪个工作页。
+          recent 卡片会跟随当前 dev user 作用域一起切换。
         </p>
       </div>
       <div class="hero-panel">
