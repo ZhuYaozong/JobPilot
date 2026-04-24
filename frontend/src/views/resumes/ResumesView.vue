@@ -1,53 +1,21 @@
 <template>
   <div class="page-stack">
     <SectionCard
-      title="整理可继续投递的主简历"
-      subtitle="这里先帮你把常用简历放进工作区，查看解析结果和版本，再决定下一步怎么贴岗位。"
-      eyebrow="简历准备工作页"
+      title="我的简历"
+      subtitle="管理常用简历、AI 提取信息和版本记录。"
+      eyebrow="简历管理"
     >
-      <div class="stats-grid">
-        <StatCard
-          label="已整理简历"
-          :value="String(resumes.length)"
-          :detail="resumes.length ? '主简历准备好后，后续贴岗调整会更顺。' : '先放进一份主简历，后续版本管理才有基础。'"
-        />
-        <StatCard
-          label="当前焦点"
-          :value="selectedResume ? selectedResume.title : '待选择'"
-          :detail="selectedResume ? formatParseStatus(selectedResume.parse_status) : '从左侧选择一份简历，先看是否准备好贴岗。'"
-        />
-        <StatCard
-          label="版本情况"
-          :value="selectedResume ? `${resumeVersions.length} 条` : '待查看'"
-          :detail="selectedResume ? selectedResumeAction.description : '版本列表会帮助你快速回看历史调整。'"
-        />
-      </div>
-
-      <div class="task-guide-grid">
-        <article class="task-guide-card">
-          <span>任务一</span>
-          <h3>先整理一份主简历</h3>
-          <p>把最常用的简历原文放进来，先形成可回看、可解析、可继续调整的基础版本。</p>
-        </article>
-        <article class="task-guide-card">
-          <span>任务二</span>
-          <h3>看解析结果是否够用</h3>
-          <p>解析结果会帮助你后续做岗位匹配、准备材料，也能更快发现简历信息是否完整。</p>
-        </article>
-        <article class="task-guide-card">
-          <span>任务三</span>
-          <h3>回看版本，准备贴岗调整</h3>
-          <p>进入岗位匹配前，先确认当前简历版本是否就是你想继续推进的那一份。</p>
-        </article>
+      <template #aside>
+        <a class="inline-link" href="#new-resume">新增简历</a>
+      </template>
+      <div class="compact-grid">
+        <p class="soft-note">已准备 {{ resumes.length }} 份简历。</p>
+        <p class="soft-note">当前选中：{{ selectedResume ? selectedResume.title : "还未选择简历" }}</p>
       </div>
     </SectionCard>
 
     <div class="resource-workspace">
-      <SectionCard
-        class="resource-panel resource-panel--list"
-        title="我的简历"
-        subtitle="从这里回到最近整理过的简历，继续准备下一步。"
-      >
+      <SectionCard class="resource-panel resource-panel--list" title="简历列表" subtitle="选择一份简历查看详情。">
         <div class="resource-list-shell">
           <div v-if="resumesLoading" class="panel-loading">正在加载简历...</div>
           <div v-else-if="resumes.length" class="resource-list">
@@ -64,29 +32,25 @@
                 <el-tag size="small" effect="plain">{{ formatParseStatus(resume.parse_status) }}</el-tag>
               </div>
               <p>{{ formatSourceType(resume.source_type) }}</p>
-              <small>{{ resume.content_hash.slice(0, 12) }}...</small>
               <small>{{ formatDateTime(resume.updated_at) }}</small>
             </button>
           </div>
           <EmptyStateCard
             v-else
             eyebrow="开始整理简历"
-            title="还没有主简历"
-            description="先把一份常用简历放进来，后面的解析、版本回看和贴岗调整都会更顺。"
+            title="还没有简历"
+            description="先粘贴一份常用简历，后续就能解析、匹配岗位和生成材料。"
           />
         </div>
       </SectionCard>
 
-      <SectionCard
-        title="当前简历工作面板"
-        subtitle="先看这份简历的状态、原文和版本，再决定是否继续解析或进入贴岗准备。"
-      >
+      <SectionCard title="简历详情" subtitle="查看简历原文、AI 提取信息和版本记录。">
         <div v-if="detailLoading" class="panel-loading">正在加载简历内容...</div>
         <EmptyStateCard
           v-else-if="!selectedResume"
           eyebrow="选择简历"
-          title="先选一份你想继续整理的简历"
-          description="选中后就能直接看解析结果、版本记录和原始内容。"
+          title="先选一份简历"
+          description="选中后可以查看原文、解析结果和版本记录。"
         />
         <div v-else class="detail-stack">
           <div class="detail-actions">
@@ -94,13 +58,12 @@
               <h3>{{ selectedResume.title }}</h3>
               <p>{{ formatSourceType(selectedResume.source_type) }}</p>
             </div>
-            <el-button
-              type="primary"
-              :loading="parsePending"
-              @click="handleParseResume"
-            >
-              解析简历
-            </el-button>
+            <div class="panel-actions">
+              <el-button type="primary" :loading="parsePending" @click="handleParseResume">
+                解析简历
+              </el-button>
+              <RouterLink class="inline-link" to="/matches">去匹配岗位</RouterLink>
+            </div>
           </div>
 
           <article class="work-panel-callout">
@@ -118,133 +81,85 @@
               <strong>{{ formatParseStatus(selectedResume.parse_status) }}</strong>
             </article>
             <article>
-              <span>版本数量</span>
+              <span>版本记录</span>
               <strong>{{ resumeVersions.length }} 条</strong>
             </article>
           </div>
 
-          <div class="inline-note-grid">
-            <article class="inline-note-card">
-              <span>来源链接</span>
-              <h3>原始文件位置</h3>
-              <a
-                v-if="selectedResume.source_file_url"
-                class="detail-link"
-                :href="selectedResume.source_file_url"
-                target="_blank"
-                rel="noreferrer"
-              >
-                {{ selectedResume.source_file_url }}
-              </a>
-              <p v-else>这份简历还没有保留来源文件链接。</p>
-            </article>
-
-            <article class="inline-note-card">
-              <span>内容指纹</span>
-              <h3>内容哈希</h3>
-              <p class="detail-code">{{ selectedResume.content_hash }}</p>
-            </article>
-          </div>
+          <article v-if="selectedResume.source_file_url" class="inline-note-card">
+            <span>来源链接</span>
+            <h3>原始文件位置</h3>
+            <a class="detail-link" :href="selectedResume.source_file_url" target="_blank" rel="noreferrer">
+              {{ selectedResume.source_file_url }}
+            </a>
+          </article>
 
           <div class="detail-field">
-            <span>原始简历内容</span>
+            <span>简历原文</span>
             <pre class="text-block">{{ selectedResume.raw_text }}</pre>
           </div>
 
-          <JsonBlock
-            title="简历拆解结果"
-            caption="结构化简历内容"
-            :value="selectedResume.parsed_json"
-            empty-text="还没完成简历解析；准备进入匹配或材料环节前，可以先点上方按钮解析。"
-          />
+          <details class="debug-toggle">
+            <summary>查看 AI 提取的信息</summary>
+            <JsonBlock
+              title="AI 提取的信息"
+              caption="解析结果"
+              :value="selectedResume.parsed_json"
+              empty-text="还没完成简历解析；准备进入匹配或材料环节前，可以先点上方按钮解析。"
+            />
+          </details>
 
           <div class="detail-field">
             <div class="detail-field__header">
-              <span>可回看的简历版本</span>
+              <span>版本记录</span>
               <small>{{ resumeVersions.length }} 条</small>
             </div>
-            <div v-if="versionsLoading" class="panel-loading panel-loading--inline">
-              正在加载版本列表...
-            </div>
+            <div v-if="versionsLoading" class="panel-loading panel-loading--inline">正在加载版本列表...</div>
             <div v-else-if="resumeVersions.length" class="version-list">
-              <article
-                v-for="version in resumeVersions"
-                :key="version.id"
-                class="version-item"
-              >
+              <article v-for="version in resumeVersions" :key="version.id" class="version-item">
                 <div>
                   <strong>{{ version.version_label }}</strong>
-                  <p>
-                    v{{ version.version_no }} · {{ formatSourceType(version.source_type) }} ·
-                    {{ version.content_format }}
-                  </p>
+                  <p>v{{ version.version_no }} · {{ formatSourceType(version.source_type) }} · {{ version.content_format }}</p>
                 </div>
                 <small>{{ formatDateTime(version.updated_at) }}</small>
               </article>
             </div>
-            <p v-else class="detail-placeholder">当前还没有版本记录，可以先从这份主简历继续整理。</p>
+            <p v-else class="detail-placeholder">当前还没有版本记录。</p>
           </div>
         </div>
       </SectionCard>
     </div>
 
     <SectionCard
-      title="下一步：补一份主简历"
-      subtitle="先把常用简历放进工作区，后面再继续解析、回看版本和做贴岗调整。"
-      eyebrow="下一步动作区"
+      id="new-resume"
+      title="新增简历"
+      subtitle="粘贴简历原文，保存后可以继续解析和匹配岗位。"
+      eyebrow="粘贴简历"
     >
-      <div class="analyze-stack">
-        <div class="analyze-hint">
-          <p>先把你最常用的一份简历放进来，后续所有贴岗调整都会更清晰。</p>
-          <p>内容指纹会在提交时自动生成，你只需要专注补齐标题、原文和来源信息。</p>
+      <el-form label-position="top" class="create-form-grid" @submit.prevent>
+        <el-form-item label="简历标题" required>
+          <el-input v-model="createForm.title" placeholder="例如 Java 后端简历 v1" />
+        </el-form-item>
+
+        <el-form-item label="来源类型">
+          <el-input v-model="createForm.source_type" placeholder="默认 upload" />
+        </el-form-item>
+
+        <el-form-item class="create-form-grid__wide" label="来源文件链接">
+          <el-input v-model="createForm.source_file_url" placeholder="https://example.com/resume.md" />
+        </el-form-item>
+
+        <el-form-item class="create-form-grid__wide" label="简历原文" required>
+          <el-input v-model="createForm.raw_text" type="textarea" :rows="8" placeholder="粘贴简历原文" />
+        </el-form-item>
+
+        <div class="create-form-grid__wide create-form-actions">
+          <p class="create-form-hint">创建后会自动刷新列表，并选中这份新简历。</p>
+          <el-button type="primary" :loading="createPending" :disabled="!canCreateResume" @click="handleCreateResume">
+            保存简历
+          </el-button>
         </div>
-
-        <el-form label-position="top" class="create-form-grid" @submit.prevent>
-          <el-form-item label="简历标题" required>
-            <el-input
-              v-model="createForm.title"
-              placeholder="例如 Java 后端简历 v1"
-            />
-          </el-form-item>
-
-          <el-form-item label="来源类型">
-            <el-input
-              v-model="createForm.source_type"
-              placeholder="默认 upload"
-            />
-          </el-form-item>
-
-          <el-form-item class="create-form-grid__wide" label="来源文件链接">
-            <el-input
-              v-model="createForm.source_file_url"
-              placeholder="https://example.com/resume.md"
-            />
-          </el-form-item>
-
-          <el-form-item class="create-form-grid__wide" label="简历原文" required>
-            <el-input
-              v-model="createForm.raw_text"
-              type="textarea"
-              :rows="8"
-              placeholder="粘贴简历原文"
-            />
-          </el-form-item>
-
-          <div class="create-form-grid__wide create-form-actions">
-            <p class="create-form-hint">
-              创建后会自动刷新列表，并把焦点切到这份新简历上。
-            </p>
-            <el-button
-              type="primary"
-              :loading="createPending"
-              :disabled="!canCreateResume"
-              @click="handleCreateResume"
-            >
-              保存简历
-            </el-button>
-          </div>
-        </el-form>
-      </div>
+      </el-form>
     </SectionCard>
   </div>
 </template>
@@ -253,10 +168,6 @@
 import { computed, onMounted, ref } from "vue";
 import { ElMessage } from "element-plus";
 
-import EmptyStateCard from "@/components/EmptyStateCard.vue";
-import JsonBlock from "@/components/JsonBlock.vue";
-import SectionCard from "@/components/SectionCard.vue";
-import StatCard from "@/components/StatCard.vue";
 import {
   createResume,
   getResume,
@@ -264,6 +175,9 @@ import {
   listResumes,
   parseResume,
 } from "@/api/resumes";
+import EmptyStateCard from "@/components/EmptyStateCard.vue";
+import JsonBlock from "@/components/JsonBlock.vue";
+import SectionCard from "@/components/SectionCard.vue";
 import type { Resume, ResumeCreate, ResumeListItem } from "@/types/resume";
 import type { ResumeVersionListItem } from "@/types/resume_version";
 import { formatDateTime } from "@/utils/format";
@@ -289,36 +203,27 @@ const createForm = ref({
 });
 
 const canCreateResume = computed(() => {
-  return Boolean(
-    createForm.value.title.trim() && createForm.value.raw_text.trim(),
-  );
+  return Boolean(createForm.value.title.trim() && createForm.value.raw_text.trim());
 });
 
 const selectedResumeAction = computed(() => {
   if (!selectedResume.value) {
     return {
       title: "先选一份简历再继续",
-      description: "选中简历后，这里会告诉你当前更适合先做什么。",
+      description: "选中简历后，可以解析、查看版本，并进入岗位匹配。",
     };
   }
 
   if (selectedResume.value.parse_status !== "parsed") {
     return {
-      title: "这份简历还适合先做解析",
-      description: "解析完成后，你会更容易进入岗位对照、材料准备和后续贴岗调整。",
-    };
-  }
-
-  if (!resumeVersions.value.length) {
-    return {
-      title: "这份简历已经可用于继续推进",
-      description: "你可以直接去做岗位匹配，或者先保留当前版本作为后续贴岗参考。",
+      title: "建议先解析这份简历",
+      description: "解析完成后，匹配分析和材料生成会更稳定。",
     };
   }
 
   return {
-    title: "当前简历已经具备继续贴岗的基础",
-    description: "可以结合版本记录回看历史，再决定进入匹配分析还是继续打磨表达。",
+    title: "这份简历可以用于岗位匹配",
+    description: "下一步可以进入匹配页，选择目标岗位生成匹配分析和求职材料。",
   };
 });
 
@@ -376,8 +281,7 @@ async function fetchResumes(nextSelectedId?: number | null) {
 
     const targetId =
       nextSelectedId ??
-      (selectedResumeId.value &&
-      data.some((resume) => resume.id === selectedResumeId.value)
+      (selectedResumeId.value && data.some((resume) => resume.id === selectedResumeId.value)
         ? selectedResumeId.value
         : data[0]?.id ?? null);
 

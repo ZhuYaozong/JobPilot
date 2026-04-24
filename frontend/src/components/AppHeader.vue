@@ -4,44 +4,30 @@
       <p class="eyebrow">{{ routeEyebrow }}</p>
       <h1>{{ routeTitle }}</h1>
       <p v-if="routeDescription" class="header-description">{{ routeDescription }}</p>
-
-      <article class="header-route-tip">
-        <span>当前页适合做什么</span>
-        <strong>{{ routePrimaryAction }}</strong>
-        <small>{{ routeSupportHint }}</small>
-      </article>
     </div>
 
     <div class="header-controls">
-      <div class="header-pills">
-        <article class="header-pill">
-          <span>当前工作区</span>
-          <strong>{{ currentUserOption.label }}</strong>
-          <small>{{ currentUserOption.description }}</small>
-        </article>
-
-        <article class="header-pill header-pill--subtle">
-          <span>页面分区</span>
-          <strong>{{ routeEyebrow }}</strong>
-          <small>{{ routeSupportHint }}</small>
-        </article>
-      </div>
-
-      <label class="scope-switch">
-        <span>切换演示工作区</span>
-        <select v-model="selectedUser" @change="handleUserChange">
-          <option
-            v-for="option in DEV_USER_OPTIONS"
-            :key="option.username"
-            :value="option.username"
-          >
-            {{ option.label }}
-          </option>
-        </select>
-        <small>
-          当前仅用于 demo / sandbox 视角切换，保留最小用户隔离演示，不代表正式登录账号。
-        </small>
-      </label>
+      <details class="user-menu">
+        <summary>
+          <span class="header-avatar">{{ currentUserOption.label.slice(0, 1) }}</span>
+          <span>
+            <strong>{{ currentUserOption.label }}</strong>
+            <small>{{ currentUserOption.description }}</small>
+          </span>
+        </summary>
+        <label>
+          <span>工作区</span>
+          <select v-model="selectedUser" @change="handleUserChange">
+            <option
+              v-for="option in DEV_USER_OPTIONS"
+              :key="option.username"
+              :value="option.username"
+            >
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
+      </details>
     </div>
   </header>
 </template>
@@ -77,18 +63,6 @@ const routeEyebrow = computed(() => {
 
 const routeDescription = computed(() => {
   return typeof route.meta.description === "string" ? route.meta.description : "";
-});
-
-const routePrimaryAction = computed(() => {
-  return typeof route.meta.primaryAction === "string"
-    ? route.meta.primaryAction
-    : "先看最近数据，再开始下一步动作。";
-});
-
-const routeSupportHint = computed(() => {
-  return typeof route.meta.supportHint === "string"
-    ? route.meta.supportHint
-    : "从任务入口继续，不必先理解系统结构。";
 });
 
 function handleUserChange() {

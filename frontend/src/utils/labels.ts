@@ -72,12 +72,14 @@ export function formatFeedbackType(value: string | null | undefined): string {
 
 export function formatApplicationStage(value: string | null | undefined): string {
   return formatLabel(value, {
-    saved: "已收藏",
+    saved: "待投递",
     applied: "已投递",
     screening: "筛选中",
+    assessment: "笔试/测评",
     interview: "面试中",
-    offer: "已拿到 Offer",
-    rejected: "未通过",
+    offer: "Offer",
+    rejected: "已拒绝",
+    withdrawn: "已放弃",
   });
 }
 
@@ -86,6 +88,7 @@ export function formatApplicationEventType(
 ): string {
   return formatLabel(value, {
     stage_transition: "阶段流转",
+    stage_changed: "阶段流转",
     created: "创建记录",
     updated: "更新记录",
   });

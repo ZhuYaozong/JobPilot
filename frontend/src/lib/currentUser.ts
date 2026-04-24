@@ -9,13 +9,13 @@ export interface DevUserOption {
 export const DEV_USER_OPTIONS: DevUserOption[] = [
   {
     username: "demo",
-    label: "演示 demo",
-    description: "面向演示数据的默认工作台视角。",
+    label: "朱耀宗",
+    description: "求职进行中",
   },
   {
     username: "sandbox",
-    label: "沙箱 sandbox",
-    description: "独立沙箱视角，用来验证最小用户隔离。",
+    label: "Demo 用户",
+    description: "备用工作区",
   },
 ];
 
