@@ -52,8 +52,16 @@ def build_user_defaults(username: str) -> dict[str, object]:
     return {
         "username": username,
         "display_name": (display_name or f"User {username}")[:MAX_DISPLAY_NAME_LENGTH],
-        "is_test_user": False,
+        "is_test_user": is_generated_test_username(username),
     }
+
+
+def is_generated_test_username(username: str) -> bool:
+    return (
+        "pytest" in username
+        or username.startswith("step")
+        or username.startswith("ordering-")
+    )
 
 
 async def get_or_create_user_by_username(
