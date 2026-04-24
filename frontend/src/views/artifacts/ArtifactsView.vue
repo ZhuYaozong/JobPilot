@@ -1,91 +1,102 @@
 <template>
   <div class="page-stack">
     <SectionCard
-      title="AI 材料"
-      subtitle="当前页面已接入真实材料接口，支持列表、详情、求职信 / 面试准备生成与反馈记录闭环。"
-      eyebrow="工作流工作台"
+      title="把分析结论推进成可投材料"
+      subtitle="这里承接求职信、面试准备和采用反馈，帮助你把岗位判断真正推进成可用内容。"
+      eyebrow="求职材料工作页"
     >
-      <div class="api-note">
-        <strong>已对齐接口</strong>
-        <span>GET /api/v1/artifacts</span>
-        <span>GET /api/v1/artifacts/{artifact_id}</span>
-        <span>POST /api/v1/artifacts/generate-cover-letter</span>
-        <span>POST /api/v1/artifacts/generate-interview-prep</span>
-        <span>GET /api/v1/artifacts/{artifact_id}/feedback</span>
-        <span>POST /api/v1/artifacts/{artifact_id}/feedback</span>
+      <div class="stats-grid">
+        <StatCard
+          label="已准备材料"
+          :value="String(artifacts.length)"
+          :detail="artifacts.length ? '可以从最近材料继续打磨，不必重复生成。' : '先生成一份求职信或面试准备，再继续采用和修改。'"
+        />
+        <StatCard
+          label="当前焦点"
+          :value="selectedArtifact ? formatArtifactType(selectedArtifact.artifact_type) : '待选择'"
+          :detail="selectedArtifact ? selectedArtifact.title : '从左侧选一份材料，先判断要不要采用或继续修改。'"
+        />
+        <StatCard
+          label="采用反馈"
+          :value="selectedArtifact ? `${feedbackEvents.length} 条` : '待记录'"
+          :detail="selectedArtifact ? selectedArtifactAction.description : '反馈记录会帮助你判断这份材料是否值得继续打磨。'"
+        />
       </div>
 
-      <div class="artifact-guidance">
-        <p>
-          求职信 / 面试准备生成依赖已 parse 的
-          <strong>Resume</strong>、已 parse 的 <strong>JobPosting</strong>，以及同一组对象对应的
-          <strong>MatchResult</strong>。
-        </p>
-        <p>
-          ArtifactFeedback 当前只是事件记录层，不会自动重写
-          <strong>GeneratedArtifact.status</strong>。
-        </p>
-        <p>
-          本阶段不做模板系统、导出、自动重生成、评测聚合或 Agent / RAG / LangChain / LangGraph 接线。
-        </p>
+      <div class="task-guide-grid">
+        <article class="task-guide-card">
+          <span>任务一</span>
+          <h3>准备求职信</h3>
+          <p>把岗位、简历和匹配结论转成一份可投的求职信草稿，先形成可读版本。</p>
+        </article>
+        <article class="task-guide-card">
+          <span>任务二</span>
+          <h3>准备面试材料</h3>
+          <p>把最近分析推进成面试提纲和追问方向，帮助后续继续演练和复盘。</p>
+        </article>
+        <article class="task-guide-card">
+          <span>任务三</span>
+          <h3>记录采用还是继续修改</h3>
+          <p>看完材料后直接记录采用情况，帮助你判断是继续打磨，还是先推进投递。</p>
+        </article>
       </div>
     </SectionCard>
 
     <div class="resource-workspace">
       <SectionCard
         class="resource-panel resource-panel--list"
-        title="材料列表"
-        subtitle="左侧列表直接调用后端 /api/v1/artifacts，并复用简历 / 岗位轻量映射展示更友好的标签。"
+        title="最近准备的材料"
+        subtitle="从已有材料继续读、改和记录采用情况。"
       >
         <div class="resource-list-shell">
-        <div v-if="artifactsLoading" class="panel-loading">正在加载材料列表...</div>
-        <div v-else-if="artifacts.length" class="resource-list">
-          <button
-            v-for="artifact in artifacts"
-            :key="artifact.id"
-            class="resource-item"
-            :class="{ active: selectedArtifactId === artifact.id }"
-            type="button"
-            @click="selectArtifact(artifact.id)"
-          >
-            <div class="resource-item__header">
-              <strong>{{ artifact.title }}</strong>
-              <el-tag size="small" effect="plain">{{ formatArtifactStatus(artifact.status) }}</el-tag>
-            </div>
+          <div v-if="artifactsLoading" class="panel-loading">正在加载材料...</div>
+          <div v-else-if="artifacts.length" class="resource-list">
+            <button
+              v-for="artifact in artifacts"
+              :key="artifact.id"
+              class="resource-item"
+              :class="{ active: selectedArtifactId === artifact.id }"
+              type="button"
+              @click="selectArtifact(artifact.id)"
+            >
+              <div class="resource-item__header">
+                <strong>{{ artifact.title }}</strong>
+                <el-tag size="small" effect="plain">{{ formatArtifactStatus(artifact.status) }}</el-tag>
+              </div>
 
-            <div class="artifact-item__tags">
-              <el-tag size="small" type="success" effect="plain">
-                {{ formatArtifactType(artifact.artifact_type) }}
-              </el-tag>
-              <el-tag size="small" type="warning" effect="plain">
-                {{ formatGeneratorType(artifact.generator_type) }}
-              </el-tag>
-            </div>
+              <div class="artifact-item__tags">
+                <el-tag size="small" type="success" effect="plain">
+                  {{ formatArtifactType(artifact.artifact_type) }}
+                </el-tag>
+                <el-tag size="small" type="warning" effect="plain">
+                  {{ formatGeneratorType(artifact.generator_type) }}
+                </el-tag>
+              </div>
 
-            <p>{{ getResumeLabel(artifact.resume_id) }}</p>
-            <small>{{ getJobLabel(artifact.job_posting_id) }}</small>
-            <small>ID #{{ artifact.id }} · {{ formatDateTime(artifact.created_at) }}</small>
-          </button>
-        </div>
-        <EmptyStateCard
-          v-else
-          eyebrow="暂无材料"
-          title="还没有 AI 材料记录"
-          description="先在下方选择一组简历和岗位，生成第一份求职信或面试准备。"
-        />
+              <p>{{ getResumeLabel(artifact.resume_id) }}</p>
+              <small>{{ getJobLabel(artifact.job_posting_id) }}</small>
+              <small>{{ formatDateTime(artifact.created_at) }}</small>
+            </button>
+          </div>
+          <EmptyStateCard
+            v-else
+            eyebrow="开始准备材料"
+            title="还没有求职材料"
+            description="先在下方生成第一份求职信或面试准备，后面再决定采用、修改或继续打磨。"
+          />
         </div>
       </SectionCard>
 
       <SectionCard
-        title="材料详情"
-        subtitle="右侧展示正文内容、结构化 JSON 和反馈历史。"
+        title="当前材料工作面板"
+        subtitle="先看正文内容和上下文，再决定这份材料是采用、修改还是继续打磨。"
       >
-        <div v-if="detailLoading" class="panel-loading">正在加载材料详情...</div>
+        <div v-if="detailLoading" class="panel-loading">正在加载材料内容...</div>
         <EmptyStateCard
           v-else-if="!selectedArtifact"
           eyebrow="选择材料"
-          title="先从左侧选择一条材料记录"
-          description="选中后会展示材料类型、正文内容、content_json 与反馈历史。"
+          title="先选一份你想继续处理的材料"
+          description="选中后就能直接看正文、结构化补充和采用反馈。"
         />
         <div v-else class="detail-stack">
           <div class="detail-actions">
@@ -94,6 +105,11 @@
               <p>{{ getArtifactContextSummary(selectedArtifact) }}</p>
             </div>
           </div>
+
+          <article class="work-panel-callout">
+            <strong>{{ selectedArtifactAction.title }}</strong>
+            <p>{{ selectedArtifactAction.description }}</p>
+          </article>
 
           <div class="detail-tag-row">
             <el-tag effect="plain" type="success">
@@ -107,16 +123,16 @@
 
           <div class="detail-meta">
             <article>
-              <span>材料编号</span>
-              <strong>#{{ selectedArtifact.id }}</strong>
-            </article>
-            <article>
               <span>材料类型</span>
               <strong>{{ formatArtifactType(selectedArtifact.artifact_type) }}</strong>
             </article>
             <article>
-              <span>状态</span>
+              <span>当前状态</span>
               <strong>{{ formatArtifactStatus(selectedArtifact.status) }}</strong>
+            </article>
+            <article>
+              <span>反馈记录</span>
+              <strong>{{ feedbackEvents.length }} 条</strong>
             </article>
             <article>
               <span>生成方式</span>
@@ -134,41 +150,42 @@
 
           <div class="artifact-link-grid">
             <article>
-              <span>关联简历</span>
+              <span>对应简历</span>
               <strong>{{ getResumeLabel(selectedArtifact.resume_id) }}</strong>
               <p>{{ formatRawId("简历", selectedArtifact.resume_id) }}</p>
             </article>
             <article>
-              <span>关联岗位</span>
+              <span>对应岗位</span>
               <strong>{{ getJobLabel(selectedArtifact.job_posting_id) }}</strong>
               <p>{{ formatRawId("岗位", selectedArtifact.job_posting_id) }}</p>
             </article>
             <article>
-              <span>关联投递</span>
+              <span>投递关联</span>
               <strong>{{ formatRawId("投递记录", selectedArtifact.application_record_id) }}</strong>
+              <p>如果你准备推进投递，可以去投递页继续跟进。</p>
             </article>
           </div>
 
           <div class="detail-field">
-            <span>正文内容 content_text</span>
+            <span>正文草稿</span>
             <MarkdownBlock
               v-if="selectedArtifact.content_text"
               :content="selectedArtifact.content_text"
             />
-            <p v-else class="detail-placeholder">当前没有正文内容。</p>
+            <p v-else class="detail-placeholder">当前还没有正文内容。</p>
           </div>
 
           <JsonBlock
-            title="结构化内容 content_json"
-            caption="后端生成元数据或结构化内容"
+            title="结构化补充"
+            caption="生成时附带的补充信息"
             :value="selectedArtifact.content_json"
-            empty-text="当前没有结构化内容。"
+            empty-text="当前没有额外的结构化补充内容。"
           />
 
           <div class="detail-field">
             <div class="detail-field__header">
-              <span>反馈历史 ArtifactFeedback</span>
-              <small>{{ feedbackEvents.length }} 条事件</small>
+              <span>采用反馈</span>
+              <small>{{ feedbackEvents.length }} 条</small>
             </div>
 
             <div v-if="feedbackLoading" class="panel-loading panel-loading--inline">
@@ -184,11 +201,11 @@
                   <strong>{{ formatFeedbackType(feedback.feedback_type) }}</strong>
                   <small>{{ formatDateTime(feedback.created_at) }}</small>
                 </div>
-                <p>{{ feedback.note || "未填写备注。" }}</p>
+                <p>{{ feedback.note || "未填写补充说明。" }}</p>
               </article>
             </div>
             <p v-else class="detail-placeholder">
-              当前没有反馈记录，提交后会按最新时间展示在最前面。
+              当前还没有采用反馈，读完内容后就可以在下方记录。
             </p>
           </div>
         </div>
@@ -197,14 +214,14 @@
 
     <div class="two-column">
       <SectionCard
-        title="生成求职信"
-        subtitle="严格对齐 CoverLetterGenerateRequest；本步不接 application_record_id。"
+        title="下一步：准备求职信"
+        subtitle="先生成一份可投草稿，再决定继续润色还是进入投递。"
+        eyebrow="下一步动作区"
       >
         <div class="analyze-stack">
           <div class="analyze-hint">
-            <p>生成前请先在简历页 / 岗位页完成 parse。</p>
-            <p>同一组 Resume + JobPosting 还需要已有 MatchResult，否则后端会返回真实错误。</p>
-            <p>language_mode 当前只允许 zh 或 bilingual。</p>
+            <p>准备求职信前，通常先确保岗位、简历和匹配分析都已经具备。</p>
+            <p>如果对象还没准备好，页面会直接显示真实错误，你可以回对应页面补齐。</p>
           </div>
 
           <p v-if="generateUnavailableMessage" class="form-block-note">
@@ -257,7 +274,7 @@
 
             <div class="create-form-grid__wide create-form-actions">
               <p class="create-form-hint">
-                岗位选项列表没有 parse_status 字段；若岗位尚未 parse，后端会直接返回真实错误。
+                生成成功后会自动刷新材料列表，并切到最新求职信上。
               </p>
               <el-button
                 type="primary"
@@ -273,14 +290,14 @@
       </SectionCard>
 
       <SectionCard
-        title="生成面试准备"
-        subtitle="严格对齐 InterviewPrepGenerateRequest；当前只生成中文准备提纲。"
+        title="下一步：准备面试材料"
+        subtitle="把最近分析推进成可回看的面试提纲，方便后续演练和复盘。"
+        eyebrow="下一步动作区"
       >
         <div class="analyze-stack">
           <div class="analyze-hint">
-            <p>Interview Prep 使用同一组简历 / 岗位上下文。</p>
-            <p>若缺少 parse 结果、MatchResult 或 LLM 配置，页面会直接展示后端真实 detail。</p>
-            <p>本阶段不做批量生成、模板系统、流式输出或导出。</p>
+            <p>面试准备通常和求职信共享同一组岗位与简历上下文。</p>
+            <p>生成成功后，你就可以回到上方详情区继续阅读、采用或记录反馈。</p>
           </div>
 
           <p v-if="generateUnavailableMessage" class="form-block-note">
@@ -339,20 +356,21 @@
     </div>
 
     <SectionCard
-      title="记录材料反馈"
-      subtitle="反馈表单严格对齐 ArtifactFeedbackCreate；提交成功后只刷新当前选中材料的反馈历史。"
+      title="下一步：记录采用情况"
+      subtitle="读完内容后，直接记下采用、修改后采用或暂时保留，帮助你决定这份材料是否继续打磨。"
+      eyebrow="下一步动作区"
     >
       <div class="analyze-stack">
         <div class="analyze-hint">
-          <p>ArtifactFeedback 当前只是事件记录层，不会自动修改 artifact.status。</p>
-          <p>本阶段不做反馈聚合、评分报表、自动重生成或状态联动。</p>
+          <p>采用反馈更像轻量决策记录，用来帮助你回看这份材料是否真的可用。</p>
+          <p>如果暂时不想重刷整个页面，只记录当前材料的反馈也足够支持后续判断。</p>
         </div>
 
         <EmptyStateCard
           v-if="!selectedArtifact"
           eyebrow="选择材料"
-          title="先选择一条材料记录"
-          description="选中后才可以记录已采用、编辑后采用、已拒绝或稍后再看。"
+          title="先选一份你想记录反馈的材料"
+          description="选中后就能记录已采用、编辑后采用、已拒绝或稍后再看。"
         />
 
         <template v-else>
@@ -383,13 +401,13 @@
                 v-model="feedbackForm.note"
                 type="textarea"
                 :rows="4"
-                placeholder="可选补充：例如已手动润色后采用，或暂时保留待后续修改。"
+                placeholder="例如：已手动润色后采用，或先保留等下次继续改。"
               />
             </el-form-item>
 
             <div class="create-form-grid__wide create-form-actions">
               <p class="create-form-hint">
-                提交成功后不会重刷整个材料列表，只刷新当前选中材料的反馈历史。
+                提交后只会刷新当前材料的反馈历史，不会打断你继续阅读这份内容。
               </p>
               <el-button
                 type="primary"
@@ -425,6 +443,7 @@ import EmptyStateCard from "@/components/EmptyStateCard.vue";
 import JsonBlock from "@/components/JsonBlock.vue";
 import MarkdownBlock from "@/components/MarkdownBlock.vue";
 import SectionCard from "@/components/SectionCard.vue";
+import StatCard from "@/components/StatCard.vue";
 import type { JobPostingListItem } from "@/types/job_posting";
 import type { ResumeListItem } from "@/types/resume";
 import type {
@@ -580,6 +599,27 @@ const generateUnavailableMessage = computed(() => {
   }
 
   return "当前没有可用岗位选项，请先在岗位页创建并解析岗位。";
+});
+
+const selectedArtifactAction = computed(() => {
+  if (!selectedArtifact.value) {
+    return {
+      title: "先选一份材料再继续",
+      description: "选中材料后，这里会提示你当前更适合采用、修改还是继续打磨。",
+    };
+  }
+
+  if (!feedbackEvents.value.length) {
+    return {
+      title: "先通读内容，再记录采用判断",
+      description: "读完正文后，先判断是直接采用、修改后采用，还是暂时保留待后续继续打磨。",
+    };
+  }
+
+  return {
+    title: "这份材料已经有反馈记录",
+    description: "你可以结合已有反馈继续润色内容，或者回到投递页推进下一步动作。",
+  };
 });
 
 function toTimestamp(value: string): number {
@@ -863,29 +903,6 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.artifact-guidance {
-  display: grid;
-  gap: 10px;
-  margin-top: 18px;
-  padding: 16px 18px;
-  border: 1px solid rgba(34, 107, 74, 0.14);
-  border-radius: 20px;
-  background: linear-gradient(135deg, rgba(220, 238, 229, 0.75), rgba(255, 249, 233, 0.72));
-}
-
-.artifact-guidance p,
-.artifact-link-grid p,
-.feedback-item p,
-.form-block-note {
-  margin: 0;
-  color: var(--muted);
-  line-height: 1.65;
-}
-
-.artifact-guidance strong {
-  color: var(--ink);
-}
-
 .artifact-item__tags,
 .detail-tag-row {
   display: flex;
@@ -934,6 +951,13 @@ onMounted(async () => {
 .feedback-stack {
   display: grid;
   gap: 12px;
+}
+
+.feedback-item p,
+.form-block-note {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.65;
 }
 
 .feedback-item__header {

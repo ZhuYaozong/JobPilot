@@ -1,90 +1,103 @@
 <template>
   <div class="page-stack">
     <SectionCard
-      title="投递跟踪"
-      subtitle="当前页面已接入真实投递接口，支持列表、详情、创建、transition 与事件时间线闭环。"
-      eyebrow="工作流工作台"
+      title="把投递主线持续推进下去"
+      subtitle="这里承接当前阶段、下一步动作和时间线，帮助你知道今天该跟进哪条投递，而不是只看一条记录。"
+      eyebrow="投递进展工作页"
     >
-      <div class="api-note">
-        <strong>已对齐接口</strong>
-        <span>GET /api/v1/applications</span>
-        <span>GET /api/v1/applications/{application_id}</span>
-        <span>POST /api/v1/applications</span>
-        <span>GET /api/v1/applications/{application_id}/events</span>
-        <span>POST /api/v1/applications/{application_id}/transition</span>
+      <div class="stats-grid">
+        <StatCard
+          label="已跟进投递"
+          :value="String(applications.length)"
+          :detail="applications.length ? '可以从最近一条投递继续推进，不必重新回忆进度。' : '先建第一条投递记录，把岗位、简历和动作串起来。'"
+        />
+        <StatCard
+          label="当前阶段"
+          :value="selectedApplication ? formatApplicationStage(selectedApplication.current_stage) : '待选择'"
+          :detail="selectedApplication ? selectedApplicationAction.description : '选中投递后，这里会告诉你当前更适合先做什么。'"
+        />
+        <StatCard
+          label="时间线"
+          :value="selectedApplication ? `${applicationEvents.length} 条` : '待查看'"
+          :detail="selectedApplication ? '回看推进记录后，更容易判断今天该跟进什么。' : '选中一条投递后，就能看到完整的推进记录。'"
+        />
       </div>
 
-      <div class="applications-guidance">
-        <p>
-          当前只承接最小投递跟踪闭环：创建 <strong>ApplicationRecord</strong>、查看详情、执行
-          <strong>transition</strong>、查看 <strong>ApplicationEvent</strong> 时间线。
-        </p>
-        <p>
-          <strong>ApplicationEvent</strong> 由 transition 动作内部创建，本页不提供手工创建入口。
-        </p>
-        <p>
-          本阶段不做复杂状态机、提醒系统、自动跟进、报表、跨页编排或 Agent / RAG / LangChain / LangGraph 接线。
-        </p>
+      <div class="task-guide-grid">
+        <article class="task-guide-card">
+          <span>任务一</span>
+          <h3>先把当前阶段记清楚</h3>
+          <p>不管是刚收藏、已投递还是在面试中，先把阶段放进系统，后面才容易继续推进。</p>
+        </article>
+        <article class="task-guide-card">
+          <span>任务二</span>
+          <h3>给每条投递留一个下一步动作</h3>
+          <p>下一步动作和时间点会帮你避免“已经投了，但不知道接下来做什么”的空档。</p>
+        </article>
+        <article class="task-guide-card">
+          <span>任务三</span>
+          <h3>回看时间线再做流转</h3>
+          <p>推进阶段前先回看事件时间线，你会更容易判断今天应该跟进、等待还是更新状态。</p>
+        </article>
       </div>
     </SectionCard>
 
     <div class="resource-workspace">
       <SectionCard
         class="resource-panel resource-panel--list"
-        title="投递记录列表"
-        subtitle="左侧列表直接调用后端 /api/v1/applications，并复用简历 / 岗位轻量映射展示更友好的标签。"
+        title="最近跟进的投递"
+        subtitle="从这里回到最近处理过的投递，继续今天的跟进动作。"
       >
         <div class="resource-list-shell">
-        <div v-if="applicationsLoading" class="panel-loading">正在加载投递记录列表...</div>
-        <div v-else-if="applications.length" class="resource-list">
-          <button
-            v-for="application in applications"
-            :key="application.id"
-            class="resource-item"
-            :class="{ active: selectedApplicationId === application.id }"
-            type="button"
-            @click="selectApplication(application.id)"
-          >
-            <div class="resource-item__header">
-              <strong>投递 #{{ application.id }}</strong>
-              <el-tag size="small" effect="plain">{{ formatApplicationStage(application.current_stage) }}</el-tag>
-            </div>
-            <p>{{ getResumeLabel(application.resume_id) }}</p>
-            <small>{{ getJobLabel(application.job_posting_id) }}</small>
-            <small>{{ application.next_action || "暂无下一步动作" }}</small>
-            <small>
-              {{
-                application.next_action_at
-                  ? `待办时间：${formatDateTime(application.next_action_at)}`
-                  : `最近更新：${formatDateTime(application.updated_at)}`
-              }}
-            </small>
-          </button>
-        </div>
-        <EmptyStateCard
-          v-else
-          eyebrow="暂无投递记录"
-          title="还没有投递记录"
-          description="先在下方选择一组简历和岗位，创建第一条投递记录。"
-        />
+          <div v-if="applicationsLoading" class="panel-loading">正在加载投递进展...</div>
+          <div v-else-if="applications.length" class="resource-list">
+            <button
+              v-for="application in applications"
+              :key="application.id"
+              class="resource-item"
+              :class="{ active: selectedApplicationId === application.id }"
+              type="button"
+              @click="selectApplication(application.id)"
+            >
+              <div class="resource-item__header">
+                <strong>{{ getJobLabel(application.job_posting_id) }}</strong>
+                <el-tag size="small" effect="plain">{{ formatApplicationStage(application.current_stage) }}</el-tag>
+              </div>
+              <p>{{ getResumeLabel(application.resume_id) }}</p>
+              <small>{{ application.next_action || "暂无下一步动作" }}</small>
+              <small>
+                {{
+                  application.next_action_at
+                    ? `待办时间：${formatDateTime(application.next_action_at)}`
+                    : `最近更新：${formatDateTime(application.updated_at)}`
+                }}
+              </small>
+            </button>
+          </div>
+          <EmptyStateCard
+            v-else
+            eyebrow="开始投递跟进"
+            title="还没有投递记录"
+            description="先在下方建立第一条投递记录，后面就能持续记录阶段、待办和时间线。"
+          />
         </div>
       </SectionCard>
 
       <SectionCard
-        title="投递记录详情"
-        subtitle="右侧展示投递详情、当前阶段和 ApplicationEvent 时间线。"
+        title="当前投递工作面板"
+        subtitle="先看当前阶段、下一步动作和时间线，再决定今天要不要推进。"
       >
-        <div v-if="detailLoading" class="panel-loading">正在加载投递记录详情...</div>
+        <div v-if="detailLoading" class="panel-loading">正在加载投递内容...</div>
         <EmptyStateCard
           v-else-if="!selectedApplication"
-          eyebrow="选择投递记录"
-          title="先从左侧选择一条投递记录"
-          description="选中后会展示当前阶段、投递渠道、下一步动作、备注和事件时间线。"
+          eyebrow="选择投递"
+          title="先选一条你想继续跟进的投递"
+          description="选中后就能直接看阶段、待办动作和推进时间线。"
         />
         <div v-else class="detail-stack">
           <div class="detail-actions">
             <div class="detail-title">
-              <h3>投递 #{{ selectedApplication.id }}</h3>
+              <h3>{{ getJobLabel(selectedApplication.job_posting_id) }}</h3>
               <p>{{ getApplicationContextSummary(selectedApplication) }}</p>
             </div>
 
@@ -94,20 +107,26 @@
             </div>
           </div>
 
+          <article class="work-panel-callout">
+            <strong>{{ selectedApplicationAction.title }}</strong>
+            <p>{{ selectedApplicationAction.description }}</p>
+          </article>
+
           <div class="application-link-grid">
             <article>
-              <span>关联简历</span>
+              <span>对应简历</span>
               <strong>{{ getResumeLabel(selectedApplication.resume_id) }}</strong>
               <p>{{ formatRawId("简历", selectedApplication.resume_id) }}</p>
             </article>
             <article>
-              <span>关联岗位</span>
+              <span>对应岗位</span>
               <strong>{{ getJobLabel(selectedApplication.job_posting_id) }}</strong>
               <p>{{ formatRawId("岗位", selectedApplication.job_posting_id) }}</p>
             </article>
             <article>
               <span>投递渠道</span>
-              <strong>{{ selectedApplication.apply_channel || "-" }}</strong>
+              <strong>{{ selectedApplication.apply_channel || "待补充" }}</strong>
+              <p>保留这个信息有助于后续判断要从哪里继续跟进。</p>
             </article>
           </div>
 
@@ -125,39 +144,39 @@
               <strong>{{ formatDateTime(selectedApplication.next_action_at) }}</strong>
             </article>
             <article>
-              <span>创建时间</span>
-              <strong>{{ formatDateTime(selectedApplication.created_at) }}</strong>
+              <span>下一步</span>
+              <strong>{{ selectedApplication.next_action || "待补充" }}</strong>
             </article>
             <article>
               <span>最近更新</span>
               <strong>{{ formatDateTime(selectedApplication.updated_at) }}</strong>
             </article>
             <article>
-              <span>记录编号</span>
-              <strong>#{{ selectedApplication.id }}</strong>
+              <span>推进记录</span>
+              <strong>{{ applicationEvents.length }} 条</strong>
             </article>
           </div>
 
           <div class="detail-field">
             <span>下一步动作</span>
-            <p class="detail-code">{{ selectedApplication.next_action || "-" }}</p>
+            <p class="detail-code">{{ selectedApplication.next_action || "当前还没有下一步动作。" }}</p>
           </div>
 
           <div class="detail-field">
-            <span>备注 notes</span>
+            <span>跟进备注</span>
             <pre class="text-block">{{
-              selectedApplication.notes || "当前没有备注。"
+              selectedApplication.notes || "当前还没有备注。"
             }}</pre>
           </div>
 
           <div class="detail-field">
             <div class="detail-field__header">
-              <span>事件时间线 ApplicationEvent</span>
+              <span>推进时间线</span>
               <small>{{ applicationEvents.length }} 条事件</small>
             </div>
 
             <div v-if="eventsLoading" class="panel-loading panel-loading--inline">
-              正在加载事件时间线...
+              正在加载时间线...
             </div>
             <div v-else-if="sortedApplicationEvents.length" class="event-stack">
               <article
@@ -194,14 +213,14 @@
 
                 <JsonBlock
                   v-if="event.payload_json"
-                  title="附加数据 payload_json"
-                  caption="事件附加数据"
+                  title="附加说明"
+                  caption="本次推进携带的数据"
                   :value="event.payload_json"
                 />
               </article>
             </div>
             <p v-else class="detail-placeholder">
-              当前没有 ApplicationEvent 记录；执行 transition 后会在这里看到最新事件。
+              当前还没有推进记录；完成一次阶段更新后，这里就会开始累积时间线。
             </p>
           </div>
         </div>
@@ -210,14 +229,14 @@
 
     <div class="two-column">
       <SectionCard
-        title="新建投递记录"
-        subtitle="表单字段严格对齐 ApplicationRecordCreate；投递记录创建本身不依赖 parse。"
+        title="下一步：建立新的跟进记录"
+        subtitle="把岗位、简历、阶段和待办动作连起来，让这条投递真正进入可持续跟进状态。"
+        eyebrow="下一步动作区"
       >
         <div class="analyze-stack">
           <div class="analyze-hint">
-            <p>投递页负责把已有简历 / 岗位之后的投递状态记录下来。</p>
-            <p>简历选项会显示 parse_status，但这不是创建投递记录的前置硬校验。</p>
-            <p>若简历或岗位资源为空，创建面板会禁用提交。</p>
+            <p>创建记录时最重要的是把当前阶段和下一步动作写清楚，后面跟进会轻松很多。</p>
+            <p>如果暂时没有待办时间，也可以先留下动作描述，后面再回来补完整。</p>
           </div>
 
           <p v-if="createUnavailableMessage" class="form-block-note">
@@ -316,7 +335,7 @@
 
             <div class="create-form-grid__wide create-form-actions">
               <p class="create-form-hint">
-                时间字段会在提交前转换成后端可解析的 ISO 8601 字符串；留空时不会传非法空字符串。
+                创建成功后会刷新左侧列表，并自动切到这条新投递上继续跟进。
               </p>
               <el-button
                 type="primary"
@@ -324,7 +343,7 @@
                 :disabled="!canCreateApplication"
                 @click="handleCreateApplication"
               >
-                创建投递记录
+                建立投递记录
               </el-button>
             </div>
           </el-form>
@@ -332,26 +351,26 @@
       </SectionCard>
 
       <SectionCard
-        title="执行阶段流转"
-        subtitle="表单字段严格对齐 ApplicationTransitionRequest；当前只做最小流转闭环，不做复杂状态机。"
+        title="下一步：推进当前阶段"
+        subtitle="基于当前投递的进展和待办，更新阶段、补充备注，并把新动作写进时间线。"
+        eyebrow="下一步动作区"
       >
         <div class="analyze-stack">
           <div class="analyze-hint">
-            <p>transition 会更新当前投递记录的 stage，并由后端自动写入 ApplicationEvent。</p>
-            <p>target_stage 必填；operator_type 默认 user，但仍允许轻量编辑。</p>
-            <p>payload_json 使用简单 JSON 文本输入，提交前会做最小解析校验。</p>
+            <p>推进阶段前，先想清楚这次更新之后最重要的下一步动作是什么。</p>
+            <p>如果你已经知道下一次跟进时间，也可以一起补上，后面更容易维持节奏。</p>
           </div>
 
           <EmptyStateCard
             v-if="!selectedApplication"
-            eyebrow="选择投递记录"
-            title="先选择一条投递记录"
-            description="选中后才可以执行阶段流转，并刷新详情与事件时间线。"
+            eyebrow="选择投递"
+            title="先选一条你想推进的投递"
+            description="选中后才能更新阶段、补备注并把动作写进时间线。"
           />
 
           <template v-else>
             <p class="form-block-note">
-              当前流转对象：<strong>投递 #{{ selectedApplication.id }}</strong>
+              当前推进对象：<strong>{{ getJobLabel(selectedApplication.job_posting_id) }}</strong>
               <span class="form-block-note__sub">
                 {{ getApplicationContextSummary(selectedApplication) }}
               </span>
@@ -411,7 +430,7 @@
                   v-model="transitionForm.notes"
                   type="textarea"
                   :rows="3"
-                  placeholder="更新投递记录 notes；例如已完成面试、待补充材料等"
+                  placeholder="例如：已完成面试、待补充材料等"
                 />
               </el-form-item>
 
@@ -420,11 +439,11 @@
                   v-model="transitionForm.note"
                   type="textarea"
                   :rows="3"
-                  placeholder="例如从 saved 流转到 applied"
+                  placeholder="例如：从 saved 流转到 applied"
                 />
               </el-form-item>
 
-              <el-form-item class="create-form-grid__wide" label="附加数据 payload_json">
+              <el-form-item class="create-form-grid__wide" label="附加数据">
                 <el-input
                   v-model="transitionForm.payload_json_text"
                   type="textarea"
@@ -435,7 +454,7 @@
 
               <div class="create-form-grid__wide create-form-actions">
                 <p class="create-form-hint">
-                  transition 成功后会刷新当前详情、事件时间线，并同步更新左侧列表里的当前阶段和下一步动作。
+                  推进成功后会刷新当前详情、时间线和左侧列表里的阶段与下一步动作。
                 </p>
                 <el-button
                   type="primary"
@@ -443,7 +462,7 @@
                   :disabled="!canTransition"
                   @click="handleTransitionApplication"
                 >
-                  执行流转
+                  更新阶段
                 </el-button>
               </div>
             </el-form>
@@ -470,6 +489,7 @@ import { listResumes } from "@/api/resumes";
 import EmptyStateCard from "@/components/EmptyStateCard.vue";
 import JsonBlock from "@/components/JsonBlock.vue";
 import SectionCard from "@/components/SectionCard.vue";
+import StatCard from "@/components/StatCard.vue";
 import type { JobPostingListItem } from "@/types/job_posting";
 import type { ResumeListItem } from "@/types/resume";
 import type { JsonObject } from "@/types/common";
@@ -625,6 +645,27 @@ const createUnavailableMessage = computed(() => {
   }
 
   return "当前没有可用岗位选项，请先在岗位页创建岗位。";
+});
+
+const selectedApplicationAction = computed(() => {
+  if (!selectedApplication.value) {
+    return {
+      title: "先选一条投递再继续",
+      description: "选中投递后，这里会告诉你当前更适合先跟进、等待还是推进阶段。",
+    };
+  }
+
+  if (selectedApplication.value.next_action) {
+    return {
+      title: `先处理：${selectedApplication.value.next_action}`,
+      description: "这条投递已经有明确待办，优先完成它通常比新建更多记录更重要。",
+    };
+  }
+
+  return {
+    title: "这条投递还缺一个明确下一步",
+    description: "建议先补一个具体动作或待办时间，避免投递进入“已记录但没推进”的状态。",
+  };
 });
 
 function toTimestamp(value: string): number {
@@ -964,29 +1005,6 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.applications-guidance {
-  display: grid;
-  gap: 10px;
-  margin-top: 18px;
-  padding: 16px 18px;
-  border: 1px solid rgba(34, 107, 74, 0.14);
-  border-radius: 20px;
-  background: linear-gradient(135deg, rgba(220, 238, 229, 0.75), rgba(255, 249, 233, 0.72));
-}
-
-.applications-guidance p,
-.application-link-grid p,
-.event-item p,
-.form-block-note {
-  margin: 0;
-  color: var(--muted);
-  line-height: 1.65;
-}
-
-.applications-guidance strong {
-  color: var(--ink);
-}
-
 .application-link-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -999,6 +1017,14 @@ onMounted(async () => {
   border: 1px solid var(--line);
   border-radius: 18px;
   background: rgba(255, 253, 246, 0.72);
+}
+
+.application-link-grid p,
+.event-item p,
+.form-block-note {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.65;
 }
 
 .application-link-grid span,

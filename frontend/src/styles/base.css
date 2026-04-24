@@ -516,6 +516,69 @@ textarea {
   background: linear-gradient(135deg, #f9f0d9, #eef6ee);
 }
 
+.task-guide-grid,
+.inline-note-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.task-guide-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.inline-note-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.task-guide-card,
+.inline-note-card,
+.work-panel-callout {
+  border: 1px solid var(--line);
+  border-radius: 20px;
+}
+
+.task-guide-card,
+.inline-note-card {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  background: rgba(255, 253, 246, 0.72);
+}
+
+.task-guide-card span,
+.inline-note-card span {
+  color: var(--warm);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.task-guide-card h3,
+.inline-note-card h3 {
+  margin: 0;
+}
+
+.task-guide-card p,
+.inline-note-card p,
+.work-panel-callout p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.work-panel-callout {
+  display: grid;
+  gap: 8px;
+  padding: 16px 18px;
+  background: linear-gradient(135deg, rgba(220, 238, 229, 0.76), rgba(255, 249, 233, 0.72));
+}
+
+.work-panel-callout strong {
+  color: var(--ink);
+  font-size: 18px;
+  line-height: 1.35;
+}
+
 .stats-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
@@ -1015,7 +1078,8 @@ textarea {
   .nav-groups,
   .flow-strip,
   .stats-grid,
-  .knowledge-grid {
+  .knowledge-grid,
+  .task-guide-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -1059,6 +1123,8 @@ textarea {
   .module-grid,
   .flow-strip,
   .stats-grid,
+  .task-guide-grid,
+  .inline-note-grid,
   .array-sections,
   .detail-meta,
   .create-form-grid,
