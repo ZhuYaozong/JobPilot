@@ -107,6 +107,49 @@ textarea {
   line-height: 1.7;
 }
 
+.sidebar-focus {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 24px;
+  padding: 16px;
+  border: 1px solid rgba(34, 107, 74, 0.14);
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(220, 238, 229, 0.72), rgba(255, 249, 233, 0.76));
+}
+
+.sidebar-focus span,
+.sidebar-focus small,
+.nav-badge {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.sidebar-focus span {
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sidebar-focus strong {
+  color: var(--ink);
+  font-size: 18px;
+  line-height: 1.35;
+}
+
+.sidebar-focus small {
+  line-height: 1.6;
+}
+
+.sidebar-focus__link {
+  width: fit-content;
+  padding: 8px 12px;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .nav-groups {
   display: grid;
   gap: 26px;
@@ -131,6 +174,7 @@ textarea {
   flex-direction: column;
   gap: 4px;
   padding: 12px 14px;
+  border: 1px solid transparent;
   border-radius: 16px;
   color: #334139;
   transition:
@@ -143,7 +187,14 @@ textarea {
 .nav-link.router-link-active {
   color: var(--ink);
   background: var(--accent-soft);
+  border-color: rgba(34, 107, 74, 0.12);
   transform: translateY(-1px);
+}
+
+.nav-badge {
+  color: var(--warm);
+  font-weight: 800;
+  letter-spacing: 0.06em;
 }
 
 .nav-link strong {
@@ -180,6 +231,38 @@ textarea {
   line-height: 1.7;
 }
 
+.header-route-tip {
+  display: grid;
+  gap: 6px;
+  width: fit-content;
+  max-width: min(100%, 760px);
+  padding: 14px 16px;
+  border: 1px solid rgba(34, 107, 74, 0.16);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(220, 238, 229, 0.62), rgba(255, 249, 233, 0.72));
+}
+
+.header-route-tip span,
+.header-pill span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.header-route-tip strong {
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.header-route-tip small,
+.header-pill small {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
 .header-controls {
   display: grid;
   justify-items: end;
@@ -201,14 +284,6 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 18px;
   background: rgba(255, 253, 246, 0.78);
-}
-
-.header-pill span {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .header-pill strong {

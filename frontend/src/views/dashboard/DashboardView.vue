@@ -2,206 +2,90 @@
   <div class="page-stack">
     <section class="hero-card dashboard-hero">
       <div class="dashboard-hero__copy">
-        <p class="eyebrow">我的求职工作台</p>
-        <h2>你的 AI 求职工作台</h2>
-        <p>
-          围绕岗位、简历、匹配、材料与投递的一站式中文工作区，让你从首页就知道下一步该做什么。
-        </p>
+        <div class="dashboard-hero__lead">
+          <p class="eyebrow">今天先做什么</p>
+          <h2>{{ heroFocus.title }}</h2>
+          <p>{{ heroFocus.description }}</p>
+        </div>
 
         <div class="hero-actions">
-          <RouterLink class="hero-action hero-action--primary" to="/jobs">
-            去新建岗位
+          <RouterLink
+            v-for="action in heroActions"
+            :key="`${action.to}-${action.title}`"
+            class="hero-action"
+            :class="{ 'hero-action--primary': action.to === heroFocus.to }"
+            :to="action.to"
+          >
+            <span>{{ action.tag }}</span>
+            <strong>{{ action.title }}</strong>
+            <small>{{ action.action }}</small>
           </RouterLink>
-          <RouterLink class="hero-action" to="/resumes">
-            去整理简历
-          </RouterLink>
-          <RouterLink class="hero-action" to="/assistant">
-            打开 AI 助手
-          </RouterLink>
+        </div>
+
+        <div class="hero-priority-list">
+          <article
+            v-for="suggestion in nextStepSuggestions"
+            :key="suggestion.title"
+            class="priority-card"
+          >
+            <div class="priority-card__header">
+              <span>{{ suggestion.tag }}</span>
+              <strong>{{ suggestion.title }}</strong>
+            </div>
+            <p>{{ suggestion.description }}</p>
+          </article>
         </div>
       </div>
 
       <div class="hero-panel dashboard-hero__panel">
-        <span>当前工作焦点</span>
-        <strong>{{ heroFocus.title }}</strong>
-        <small>{{ heroFocus.description }}</small>
+        <div class="hero-panel__intro">
+          <span>工作台摘要</span>
+          <strong>{{ workspaceHeadline }}</strong>
+          <small>{{ workspaceSubheadline }}</small>
+        </div>
 
-        <div class="hero-highlight-grid">
+        <div class="hero-status-grid">
           <article
-            v-for="highlight in heroHighlights"
-            :key="highlight.label"
-            class="hero-highlight-card"
+            v-for="status in progressStatuses"
+            :key="status.label"
+            class="hero-status-card"
+            :class="{ 'hero-status-card--ready': status.ready }"
           >
-            <p>{{ highlight.label }}</p>
-            <strong>{{ highlight.value }}</strong>
-            <small>{{ highlight.detail }}</small>
+            <p>{{ status.label }}</p>
+            <strong>{{ status.value }}</strong>
+            <small>{{ status.detail }}</small>
           </article>
         </div>
       </div>
     </section>
 
     <SectionCard
-      title="今天先做什么"
-      subtitle="从这里直接进入岗位、简历、匹配、材料和投递主线。"
-      eyebrow="主任务"
+      title="主任务入口"
+      subtitle="首页先给动作入口，再进入具体工作页完成确定性的解析、生成和跟进。"
+      eyebrow="快捷开始"
     >
       <div class="task-grid">
         <RouterLink
-          v-for="task in mainTasks"
-          :key="task.to"
+          v-for="task in taskEntrances"
+          :key="`${task.to}-${task.title}`"
           class="task-card"
           :to="task.to"
         >
-          <span>{{ task.tag }}</span>
+          <div class="task-card__meta">
+            <span>{{ task.tag }}</span>
+            <small>{{ task.badge }}</small>
+          </div>
           <h3>{{ task.title }}</h3>
           <p>{{ task.description }}</p>
-          <small>{{ task.action }}</small>
+          <strong class="task-card__cta">{{ task.action }}</strong>
         </RouterLink>
       </div>
     </SectionCard>
 
     <div class="split-grid dashboard-main-grid">
       <SectionCard
-        title="最近处理"
-        subtitle="看看最近关注过的岗位、简历、分析、材料和投递，再决定继续推进哪一段。"
-        eyebrow="最近工作"
-      >
-        <div class="dashboard-grid">
-          <article class="overview-card">
-            <div class="overview-card__header">
-              <div>
-                <span>岗位</span>
-                <h3>最近关注的岗位</h3>
-              </div>
-              <RouterLink class="overview-link" to="/jobs">查看全部</RouterLink>
-            </div>
-
-            <div v-if="jobsLoading" class="panel-loading panel-loading--inline">
-              正在加载最近岗位...
-            </div>
-            <p v-else-if="jobsError" class="overview-error">{{ jobsError }}</p>
-            <div v-else-if="jobs.length" class="overview-list">
-              <article v-for="job in jobs" :key="job.id" class="overview-item">
-                <strong>{{ job.company_name }} · {{ job.job_title }}</strong>
-                <p>{{ job.city || "城市未填写" }}</p>
-                <small>{{ formatDateTime(job.updated_at) }}</small>
-              </article>
-            </div>
-            <p v-else class="overview-empty">还没有岗位记录，先去补一条目标岗位。</p>
-          </article>
-
-          <article class="overview-card">
-            <div class="overview-card__header">
-              <div>
-                <span>简历</span>
-                <h3>最近整理的简历</h3>
-              </div>
-              <RouterLink class="overview-link" to="/resumes">查看全部</RouterLink>
-            </div>
-
-            <div v-if="resumesLoading" class="panel-loading panel-loading--inline">
-              正在加载最近简历...
-            </div>
-            <p v-else-if="resumesError" class="overview-error">{{ resumesError }}</p>
-            <div v-else-if="resumes.length" class="overview-list">
-              <article v-for="resume in resumes" :key="resume.id" class="overview-item">
-                <strong>{{ resume.title }}</strong>
-                <p>{{ formatSourceType(resume.source_type) }} · {{ formatParseStatus(resume.parse_status) }}</p>
-                <small>{{ formatDateTime(resume.updated_at) }}</small>
-              </article>
-            </div>
-            <p v-else class="overview-empty">还没有简历记录，先整理一份常用简历。</p>
-          </article>
-
-          <article class="overview-card">
-            <div class="overview-card__header">
-              <div>
-                <span>匹配</span>
-                <h3>最近生成的分析</h3>
-              </div>
-              <RouterLink class="overview-link" to="/matches">查看全部</RouterLink>
-            </div>
-
-            <div v-if="matchesLoading" class="panel-loading panel-loading--inline">
-              正在加载最近匹配分析...
-            </div>
-            <p v-else-if="matchesError" class="overview-error">{{ matchesError }}</p>
-            <div v-else-if="matches.length" class="overview-list">
-              <article v-for="match in matches" :key="match.id" class="overview-item">
-                <strong>{{ getJobLabel(match.job_posting_id) }}</strong>
-                <p>{{ getResumeLabel(match.resume_id) }} · 匹配度 {{ formatScore(match.overall_score) }}</p>
-                <small>{{ formatDateTime(match.created_at) }}</small>
-              </article>
-            </div>
-            <p v-else class="overview-empty">还没有匹配分析，去做第一条岗位对照。</p>
-          </article>
-
-          <article class="overview-card">
-            <div class="overview-card__header">
-              <div>
-                <span>材料</span>
-                <h3>最近准备的材料</h3>
-              </div>
-              <RouterLink class="overview-link" to="/artifacts">查看全部</RouterLink>
-            </div>
-
-            <div v-if="artifactsLoading" class="panel-loading panel-loading--inline">
-              正在加载最近 AI 材料...
-            </div>
-            <p v-else-if="artifactsError" class="overview-error">{{ artifactsError }}</p>
-            <div v-else-if="artifacts.length" class="overview-list">
-              <article
-                v-for="artifact in artifacts"
-                :key="artifact.id"
-                class="overview-item"
-              >
-                <strong>{{ artifact.title }}</strong>
-                <p>{{ formatArtifactType(artifact.artifact_type) }} · {{ getJobLabel(artifact.job_posting_id) }}</p>
-                <small>{{ formatDateTime(artifact.created_at) }}</small>
-              </article>
-            </div>
-            <p v-else class="overview-empty">还没有材料记录，去准备第一份求职信或面试提纲。</p>
-          </article>
-
-          <article class="overview-card">
-            <div class="overview-card__header">
-              <div>
-                <span>投递</span>
-                <h3>最近跟进的投递</h3>
-              </div>
-              <RouterLink class="overview-link" to="/applications">查看全部</RouterLink>
-            </div>
-
-            <div v-if="applicationsLoading" class="panel-loading panel-loading--inline">
-              正在加载最近投递记录...
-            </div>
-            <p v-else-if="applicationsError" class="overview-error">{{ applicationsError }}</p>
-            <div v-else-if="applications.length" class="overview-list">
-              <article
-                v-for="application in applications"
-                :key="application.id"
-                class="overview-item"
-              >
-                <strong>{{ getJobLabel(application.job_posting_id) }}</strong>
-                <p>{{ formatApplicationStage(application.current_stage) }} · {{ getResumeLabel(application.resume_id) }}</p>
-                <small>{{ application.next_action || "暂无下一步动作" }}</small>
-                <small>
-                  {{
-                    application.next_action_at
-                      ? formatDateTime(application.next_action_at)
-                      : formatDateTime(application.updated_at)
-                  }}
-                </small>
-              </article>
-            </div>
-            <p v-else class="overview-empty">还没有投递记录，去建立第一条跟踪记录。</p>
-          </article>
-        </div>
-      </SectionCard>
-
-      <SectionCard
         title="待推进事项"
-        subtitle="基于当前已有记录生成的轻量行动建议，帮你快速决定下一步去哪一页。"
+        subtitle="把系统说明退后，把下一步待办前置，帮助你直接决定要打开哪个页面。"
         eyebrow="下一步"
       >
         <div class="suggestion-stack">
@@ -223,63 +107,183 @@
           </article>
         </div>
       </SectionCard>
-    </div>
 
-    <div class="split-grid dashboard-secondary-grid">
       <SectionCard
-        title="AI 快捷入口"
-        subtitle="先从任务出发，再进入 AI 辅助，而不是先理解系统结构。"
-        eyebrow="AI 入口"
+        title="轻量说明"
+        subtitle="必要说明仍然保留，但只放在辅助区，不再占首页主视觉。"
+        eyebrow="辅助信息"
       >
-        <div class="task-grid task-grid--compact">
-          <RouterLink
-            v-for="entry in aiQuickEntries"
-            :key="entry.title"
-            class="task-card task-card--accent"
-            :to="entry.to"
+        <div class="note-grid note-grid--compact">
+          <article
+            v-for="note in lightNotes"
+            :key="note.title"
+            class="note-card"
           >
-            <span>{{ entry.tag }}</span>
-            <h3>{{ entry.title }}</h3>
-            <p>{{ entry.description }}</p>
-            <small>{{ entry.action }}</small>
-          </RouterLink>
-        </div>
-      </SectionCard>
-
-      <SectionCard
-        title="求职主线"
-        subtitle="首页只做入口和近况摘要，确定性的解析、生成和流转仍留在对应工作页完成。"
-        eyebrow="主线概览"
-      >
-        <div class="flow-grid">
-          <article v-for="(step, index) in flowSteps" :key="step" class="flow-card">
-            <span>{{ index + 1 }}</span>
-            <strong>{{ step }}</strong>
+            <h3>{{ note.title }}</h3>
+            <p>{{ note.description }}</p>
           </article>
         </div>
       </SectionCard>
     </div>
 
     <SectionCard
-      title="使用提醒"
-      subtitle="这些说明仍然保留，但不再占首页主视觉。"
-      eyebrow="轻量说明"
+      title="最近工作"
+      subtitle="从最近处理过的岗位、简历、分析、材料和投递继续，而不是重新寻找页面。"
+      eyebrow="最近工作"
     >
-      <div class="note-grid">
-        <article class="note-card">
-          <h3>首页负责入口与概览</h3>
-          <p>首页不直接承载 parse、analyze、generate 或 transition 表单，复杂操作仍在各工作页完成。</p>
+      <div class="dashboard-grid">
+        <article class="overview-card">
+          <div class="overview-card__header">
+            <div>
+              <span>岗位</span>
+              <h3>最近关注的岗位</h3>
+            </div>
+            <RouterLink class="overview-link" to="/jobs">查看全部</RouterLink>
+          </div>
+
+          <div v-if="jobsLoading" class="panel-loading panel-loading--inline">
+            正在加载最近岗位...
+          </div>
+          <p v-else-if="jobsError" class="overview-error">{{ jobsError }}</p>
+          <div v-else-if="jobs.length" class="overview-list">
+            <article v-for="job in jobs" :key="job.id" class="overview-item">
+              <strong>{{ job.company_name }} · {{ job.job_title }}</strong>
+              <p>{{ job.city || "城市未填写" }}</p>
+              <small>{{ formatDateTime(job.updated_at) }}</small>
+            </article>
+          </div>
+          <p v-else class="overview-empty">还没有岗位记录，先去补一条目标岗位。</p>
         </article>
 
-        <article class="note-card">
-          <h3>当前为演示工作区</h3>
-          <p>右上角可在 demo / sandbox 之间切换，用于最小用户隔离演示，不代表正式登录系统。</p>
+        <article class="overview-card">
+          <div class="overview-card__header">
+            <div>
+              <span>简历</span>
+              <h3>最近整理的简历</h3>
+            </div>
+            <RouterLink class="overview-link" to="/resumes">查看全部</RouterLink>
+          </div>
+
+          <div v-if="resumesLoading" class="panel-loading panel-loading--inline">
+            正在加载最近简历...
+          </div>
+          <p v-else-if="resumesError" class="overview-error">{{ resumesError }}</p>
+          <div v-else-if="resumes.length" class="overview-list">
+            <article v-for="resume in resumes" :key="resume.id" class="overview-item">
+              <strong>{{ resume.title }}</strong>
+              <p>{{ formatSourceType(resume.source_type) }} · {{ formatParseStatus(resume.parse_status) }}</p>
+              <small>{{ formatDateTime(resume.updated_at) }}</small>
+            </article>
+          </div>
+          <p v-else class="overview-empty">还没有简历记录，先整理一份常用简历。</p>
         </article>
 
-        <article class="note-card">
-          <h3>最近处理来自真实页面数据</h3>
-          <p>首页显示的是各列表接口的近期窗口；如果某块加载失败，可以直接进入对应页面继续处理。</p>
+        <article class="overview-card">
+          <div class="overview-card__header">
+            <div>
+              <span>匹配</span>
+              <h3>最近生成的分析</h3>
+            </div>
+            <RouterLink class="overview-link" to="/matches">查看全部</RouterLink>
+          </div>
+
+          <div v-if="matchesLoading" class="panel-loading panel-loading--inline">
+            正在加载最近匹配分析...
+          </div>
+          <p v-else-if="matchesError" class="overview-error">{{ matchesError }}</p>
+          <div v-else-if="matches.length" class="overview-list">
+            <article v-for="match in matches" :key="match.id" class="overview-item">
+              <strong>{{ getJobLabel(match.job_posting_id) }}</strong>
+              <p>{{ getResumeLabel(match.resume_id) }} · 匹配度 {{ formatScore(match.overall_score) }}</p>
+              <small>{{ formatDateTime(match.created_at) }}</small>
+            </article>
+          </div>
+          <p v-else class="overview-empty">还没有匹配分析，去做第一条岗位对照。</p>
         </article>
+
+        <article class="overview-card">
+          <div class="overview-card__header">
+            <div>
+              <span>材料</span>
+              <h3>最近准备的材料</h3>
+            </div>
+            <RouterLink class="overview-link" to="/artifacts">查看全部</RouterLink>
+          </div>
+
+          <div v-if="artifactsLoading" class="panel-loading panel-loading--inline">
+            正在加载最近 AI 材料...
+          </div>
+          <p v-else-if="artifactsError" class="overview-error">{{ artifactsError }}</p>
+          <div v-else-if="artifacts.length" class="overview-list">
+            <article
+              v-for="artifact in artifacts"
+              :key="artifact.id"
+              class="overview-item"
+            >
+              <strong>{{ artifact.title }}</strong>
+              <p>{{ formatArtifactType(artifact.artifact_type) }} · {{ getJobLabel(artifact.job_posting_id) }}</p>
+              <small>{{ formatDateTime(artifact.created_at) }}</small>
+            </article>
+          </div>
+          <p v-else class="overview-empty">还没有材料记录，去准备第一份求职信或面试提纲。</p>
+        </article>
+
+        <article class="overview-card">
+          <div class="overview-card__header">
+            <div>
+              <span>投递</span>
+              <h3>最近跟进的投递</h3>
+            </div>
+            <RouterLink class="overview-link" to="/applications">查看全部</RouterLink>
+          </div>
+
+          <div v-if="applicationsLoading" class="panel-loading panel-loading--inline">
+            正在加载最近投递记录...
+          </div>
+          <p v-else-if="applicationsError" class="overview-error">{{ applicationsError }}</p>
+          <div v-else-if="applications.length" class="overview-list">
+            <article
+              v-for="application in applications"
+              :key="application.id"
+              class="overview-item"
+            >
+              <strong>{{ getJobLabel(application.job_posting_id) }}</strong>
+              <p>{{ formatApplicationStage(application.current_stage) }} · {{ getResumeLabel(application.resume_id) }}</p>
+              <small>{{ application.next_action || "暂无下一步动作" }}</small>
+              <small>
+                {{
+                  application.next_action_at
+                    ? formatDateTime(application.next_action_at)
+                    : formatDateTime(application.updated_at)
+                }}
+              </small>
+            </article>
+          </div>
+          <p v-else class="overview-empty">还没有投递记录，去建立第一条跟踪记录。</p>
+        </article>
+      </div>
+    </SectionCard>
+
+    <SectionCard
+      title="AI 快捷入口"
+      subtitle="把 AI 放回任务上下文里，围绕岗位、简历、匹配和材料继续推进。"
+      eyebrow="AI 入口"
+    >
+      <div class="task-grid task-grid--compact">
+        <RouterLink
+          v-for="entry in aiQuickEntries"
+          :key="entry.title"
+          class="task-card task-card--accent"
+          :to="entry.to"
+        >
+          <div class="task-card__meta">
+            <span>{{ entry.tag }}</span>
+            <small>{{ entry.badge }}</small>
+          </div>
+          <h3>{{ entry.title }}</h3>
+          <p>{{ entry.description }}</p>
+          <strong class="task-card__cta">{{ entry.action }}</strong>
+        </RouterLink>
       </div>
     </SectionCard>
   </div>
@@ -319,6 +323,7 @@ interface DashboardSuggestion {
 
 interface DashboardTaskEntry {
   tag: string;
+  badge: string;
   title: string;
   description: string;
   to: string;
@@ -329,54 +334,10 @@ const OVERVIEW_LIMIT = 3;
 const REFERENCE_LIMIT = 20;
 const currentWorkspace = getCurrentDevUserOption();
 
-const mainTasks: DashboardTaskEntry[] = [
-  {
-    tag: "岗位",
-    title: "新建岗位",
-    description: "先把目标岗位整理进工作区，后续的匹配和材料都会围绕它展开。",
-    to: "/jobs",
-    action: "去岗位页",
-  },
-  {
-    tag: "简历",
-    title: "整理简历",
-    description: "维护常用简历、解析结果和版本，给后续贴岗调整留出基础。",
-    to: "/resumes",
-    action: "去简历页",
-  },
-  {
-    tag: "匹配",
-    title: "生成匹配分析",
-    description: "把岗位和简历放在一起看，先搞清楚亮点、短板和优先级。",
-    to: "/matches",
-    action: "去匹配页",
-  },
-  {
-    tag: "材料",
-    title: "生成求职信",
-    description: "把分析结果转成可用材料，继续推进到真正可投递的阶段。",
-    to: "/artifacts",
-    action: "去 AI 材料页",
-  },
-  {
-    tag: "投递",
-    title: "跟进投递",
-    description: "记录当前阶段、下一步动作和时间点，避免投递之后失去节奏。",
-    to: "/applications",
-    action: "去投递页",
-  },
-  {
-    tag: "AI",
-    title: "打开 AI 助手",
-    description: "让 AI 围绕当前岗位、简历或材料帮你理解和复盘，而不是从空白聊天开始。",
-    to: "/assistant",
-    action: "去 AI 助手",
-  },
-];
-
 const aiQuickEntries: DashboardTaskEntry[] = [
   {
     tag: "岗位解读",
+    badge: "AI 入口",
     title: "让 AI 帮我看岗位",
     description: "围绕当前岗位梳理职责重点、风险点和投入优先级。",
     to: "/assistant",
@@ -384,6 +345,7 @@ const aiQuickEntries: DashboardTaskEntry[] = [
   },
   {
     tag: "简历优化",
+    badge: "AI 入口",
     title: "让 AI 帮我改简历",
     description: "从岗位目标出发，快速定位简历表达还可以怎么贴岗。",
     to: "/assistant",
@@ -391,6 +353,7 @@ const aiQuickEntries: DashboardTaskEntry[] = [
   },
   {
     tag: "匹配复盘",
+    badge: "AI 入口",
     title: "让 AI 帮我复盘匹配分析",
     description: "结合最近的匹配结论，重新看亮点、短板和接下来该补什么。",
     to: "/assistant",
@@ -398,20 +361,12 @@ const aiQuickEntries: DashboardTaskEntry[] = [
   },
   {
     tag: "面试准备",
+    badge: "材料入口",
     title: "让 AI 帮我准备面试",
     description: "直接进入材料页生成面试提纲，再回到 AI 助手继续追问和演练。",
     to: "/artifacts",
     action: "去准备面试",
   },
-];
-
-const flowSteps = [
-  "确定目标岗位",
-  "整理简历版本",
-  "查看匹配差距",
-  "准备求职材料",
-  "持续跟进投递",
-  "准备面试与复盘",
 ];
 
 const jobs = ref<JobPostingListItem[]>([]);
@@ -445,6 +400,12 @@ const jobMap = computed(() => {
     jobReferences.value.map((job) => [job.id, job]),
   );
 });
+
+const latestJob = computed(() => jobs.value[0] ?? null);
+const latestResume = computed(() => resumes.value[0] ?? null);
+const latestMatch = computed(() => matches.value[0] ?? null);
+const latestArtifact = computed(() => artifacts.value[0] ?? null);
+const latestApplication = computed(() => applications.value[0] ?? null);
 
 const nextStepSuggestions = computed<DashboardSuggestion[]>(() => {
   if (jobsError.value) {
@@ -486,6 +447,14 @@ const nextStepSuggestions = computed<DashboardSuggestion[]>(() => {
         to: "/assistant",
         cta: "去 AI 助手",
       },
+      {
+        tag: "简历",
+        title: "把简历准备动作排进今天",
+        description:
+          "岗位确定后，下一步通常是把常用简历同步整理出来，避免后面临时补内容。",
+        to: "/resumes",
+        cta: "去简历页",
+      },
     ];
   }
 
@@ -519,6 +488,14 @@ const nextStepSuggestions = computed<DashboardSuggestion[]>(() => {
           "先确认你最想投的岗位要求，再决定简历需要突出哪些经历和关键词。",
         to: "/jobs",
         cta: "去看岗位",
+      },
+      {
+        tag: "AI",
+        title: "让 AI 帮你先拆 JD",
+        description:
+          "如果你想先厘清岗位重点，可以先进入 AI 助手做一轮岗位理解，再回到简历页准备内容。",
+        to: "/assistant",
+        cta: "去 AI 助手",
       },
     ];
   }
@@ -554,6 +531,14 @@ const nextStepSuggestions = computed<DashboardSuggestion[]>(() => {
         to: "/assistant",
         cta: "去 AI 助手",
       },
+      {
+        tag: "材料",
+        title: "把材料准备排在分析之后",
+        description:
+          "先完成分析再准备材料，会更容易判断求职信和面试准备该突出什么。",
+        to: "/artifacts",
+        cta: "去材料页",
+      },
     ];
   }
 
@@ -587,6 +572,14 @@ const nextStepSuggestions = computed<DashboardSuggestion[]>(() => {
           "如果你想先确认该优先补什么，可以去 AI 助手继续围绕最近匹配结果做复盘。",
         to: "/assistant",
         cta: "去 AI 助手",
+      },
+      {
+        tag: "投递",
+        title: "投递跟进会在材料之后接上",
+        description:
+          "材料准备完成后，就可以把跟进节奏和下一步动作正式记录到投递页里。",
+        to: "/applications",
+        cta: "去投递页",
       },
     ];
   }
@@ -622,22 +615,26 @@ const nextStepSuggestions = computed<DashboardSuggestion[]>(() => {
         to: "/artifacts",
         cta: "去看材料",
       },
+      {
+        tag: "AI",
+        title: "让 AI 帮你做最后一轮复盘",
+        description:
+          "投递前最后一轮复盘更适合围绕具体岗位、简历和材料一起看。",
+        to: "/assistant",
+        cta: "去 AI 助手",
+      },
     ];
   }
-
-  const latestApplication = applications.value[0];
-  const latestArtifact = artifacts.value[0];
-  const latestMatch = matches.value[0];
 
   return [
     {
       tag: "投递",
-      title: latestApplication?.next_action
-        ? `继续：${latestApplication.next_action}`
+      title: latestApplication.value?.next_action
+        ? `继续：${latestApplication.value.next_action}`
         : "跟进最近一条投递",
-      description: latestApplication
-        ? `${getJobLabel(latestApplication.job_posting_id)} 当前处于「${formatApplicationStage(
-            latestApplication.current_stage,
+      description: latestApplication.value
+        ? `${getJobLabel(latestApplication.value.job_posting_id)} 当前处于「${formatApplicationStage(
+            latestApplication.value.current_stage,
           )}」，可以继续推进阶段和下一步动作。`
         : "回到投递页，继续推进当前求职主线。",
       to: "/applications",
@@ -646,17 +643,17 @@ const nextStepSuggestions = computed<DashboardSuggestion[]>(() => {
     {
       tag: "材料",
       title: "回看最近一份 AI 材料",
-      description: latestArtifact
-        ? `最近准备的是「${latestArtifact.title}」，可以继续检查内容和反馈，再决定是否迭代。`
+      description: latestArtifact.value
+        ? `最近准备的是「${latestArtifact.value.title}」，可以继续检查内容和反馈，再决定是否迭代。`
         : "进入 AI 材料页，继续查看最近的求职信或面试准备。",
       to: "/artifacts",
       cta: "去查看",
     },
     {
       tag: "AI",
-      title: latestMatch ? "让 AI 复盘最近匹配结论" : "打开 AI 助手继续推进",
-      description: latestMatch
-        ? `最近匹配分析已经生成，可以让 AI 继续围绕当前岗位和简历做复盘。`
+      title: latestMatch.value ? "让 AI 复盘最近匹配结论" : "打开 AI 助手继续推进",
+      description: latestMatch.value
+        ? "最近匹配分析已经生成，可以让 AI 继续围绕当前岗位和简历做复盘。"
         : "当主线对象已具备时，可以直接进入 AI 助手继续围绕当前任务提问。",
       to: "/assistant",
       cta: "去 AI 助手",
@@ -674,28 +671,196 @@ const heroFocus = computed(() => {
   };
 });
 
-const heroHighlights = computed(() => {
-  const latestApplication = applications.value[0];
+const heroActions = computed<DashboardTaskEntry[]>(() => {
+  const actions: DashboardTaskEntry[] = [
+    {
+      tag: heroFocus.value.tag,
+      badge: "优先动作",
+      title: heroFocus.value.title,
+      description: heroFocus.value.description,
+      to: heroFocus.value.to,
+      action: heroFocus.value.cta,
+    },
+  ];
 
+  if (nextStepSuggestions.value[1]) {
+    actions.push({
+      tag: nextStepSuggestions.value[1].tag,
+      badge: "继续推进",
+      title: nextStepSuggestions.value[1].title,
+      description: nextStepSuggestions.value[1].description,
+      to: nextStepSuggestions.value[1].to,
+      action: nextStepSuggestions.value[1].cta,
+    });
+  }
+
+  actions.push(aiQuickEntries[0]);
+
+  return actions.filter((action, index, collection) => {
+    return (
+      collection.findIndex((candidate) => {
+        return candidate.to === action.to && candidate.title === action.title;
+      }) === index
+    );
+  });
+});
+
+const workspaceHeadline = computed(() => {
+  if (latestApplication.value?.next_action) {
+    return "先推进最近一条投递待办";
+  }
+
+  if (!jobs.value.length) {
+    return "先收拢目标岗位";
+  }
+
+  if (!resumes.value.length) {
+    return "先整理一份可投简历";
+  }
+
+  if (!matches.value.length) {
+    return "先做一次岗位匹配分析";
+  }
+
+  if (!artifacts.value.length) {
+    return "先把分析推进成求职材料";
+  }
+
+  return "继续最近工作，不要从空白开始";
+});
+
+const workspaceSubheadline = computed(() => {
+  return `${currentWorkspace.label} 视角下展示最近工作与下一步入口，帮助你直接继续任务，而不是重新理解系统。`;
+});
+
+const progressStatuses = computed(() => {
   return [
     {
-      label: "当前工作区",
-      value: currentWorkspace.label,
-      detail: currentWorkspace.description,
+      label: "岗位准备",
+      value: jobReferences.value.length ? `${jobReferences.value.length} 个` : "待录入",
+      detail: latestJob.value
+        ? `最近：${latestJob.value.company_name} · ${latestJob.value.job_title}`
+        : "先录入一个目标岗位",
+      ready: Boolean(jobReferences.value.length),
     },
     {
-      label: "最近窗口",
-      value: `${jobs.value.length + resumes.value.length + matches.value.length + artifacts.value.length + applications.value.length} 条`,
-      detail: "首页只展示最近处理内容",
+      label: "简历准备",
+      value: resumeReferences.value.length ? `${resumeReferences.value.length} 份` : "待整理",
+      detail: latestResume.value ? `最近：${latestResume.value.title}` : "先维护一份常用简历",
+      ready: Boolean(resumeReferences.value.length),
     },
     {
-      label: "最近投递",
-      value: latestApplication
-        ? formatApplicationStage(latestApplication.current_stage)
+      label: "匹配分析",
+      value: matches.value.length ? `${matches.value.length} 条最近分析` : "待分析",
+      detail: latestMatch.value
+        ? `最近：${getJobLabel(latestMatch.value.job_posting_id)}`
+        : "岗位和简历齐备后优先做一条分析",
+      ready: Boolean(matches.value.length),
+    },
+    {
+      label: "投递跟进",
+      value: latestApplication.value
+        ? formatApplicationStage(latestApplication.value.current_stage)
         : "待开始",
-      detail: latestApplication
-        ? getJobLabel(latestApplication.job_posting_id)
-        : "建立投递记录后会显示这里",
+      detail: latestApplication.value
+        ? latestApplication.value.next_action || getJobLabel(latestApplication.value.job_posting_id)
+        : "材料准备后再建立第一条投递",
+      ready: Boolean(latestApplication.value),
+    },
+  ];
+});
+
+const taskEntrances = computed<DashboardTaskEntry[]>(() => {
+  return [
+    {
+      tag: "优先",
+      badge: "今天先做",
+      title: heroFocus.value.title,
+      description: heroFocus.value.description,
+      to: heroFocus.value.to,
+      action: heroFocus.value.cta,
+    },
+    {
+      tag: "岗位",
+      badge: jobs.value.length ? "继续最近" : "从这里开始",
+      title: jobs.value.length ? "继续整理岗位" : "录入目标岗位",
+      description: latestJob.value
+        ? `最近关注：${latestJob.value.company_name} · ${latestJob.value.job_title}`
+        : "先把最想投的岗位收进工作区，后续分析和材料都会围绕它展开。",
+      to: "/jobs",
+      action: jobs.value.length ? "打开岗位页" : "去新建岗位",
+    },
+    {
+      tag: "简历",
+      badge: resumes.value.length ? "继续最近" : "基础准备",
+      title: resumes.value.length ? "继续整理简历" : "整理一份常用简历",
+      description: latestResume.value
+        ? `最近整理：${latestResume.value.title}`
+        : "先准备一份常用简历，方便后续贴岗调整和版本管理。",
+      to: "/resumes",
+      action: resumes.value.length ? "打开简历页" : "去整理简历",
+    },
+    {
+      tag: "匹配",
+      badge: matches.value.length ? "继续复盘" : "决定下一步",
+      title: matches.value.length ? "回看最近匹配分析" : "做一条岗位匹配分析",
+      description: latestMatch.value
+        ? `最近分析：${getJobLabel(latestMatch.value.job_posting_id)}`
+        : "岗位和简历齐备后，先看差距、亮点和优先改动方向。",
+      to: "/matches",
+      action: matches.value.length ? "去看分析" : "去做分析",
+    },
+    {
+      tag: "材料",
+      badge: artifacts.value.length ? "继续打磨" : "推进可投内容",
+      title: artifacts.value.length ? "继续打磨最近材料" : "准备求职信或面试准备",
+      description: latestArtifact.value
+        ? `最近材料：${latestArtifact.value.title}`
+        : "把最近分析推进成求职信或面试准备，让判断真正落到材料里。",
+      to: "/artifacts",
+      action: artifacts.value.length ? "去看材料" : "去准备材料",
+    },
+    {
+      tag: "投递",
+      badge: applications.value.length ? "继续跟进" : "建立节奏",
+      title: applications.value.length ? "继续最近投递" : "建立第一条投递记录",
+      description: latestApplication.value
+        ? `${getJobLabel(latestApplication.value.job_posting_id)} · ${
+            latestApplication.value.next_action ||
+            formatApplicationStage(latestApplication.value.current_stage)
+          }`
+        : "用投递记录承接阶段、待办动作和时间点，避免主线中断。",
+      to: "/applications",
+      action: applications.value.length ? "去跟进投递" : "去建投递",
+    },
+  ];
+});
+
+const hasAnyOverviewError = computed(() => {
+  return Boolean(
+    jobsError.value ||
+      resumesError.value ||
+      matchesError.value ||
+      artifactsError.value ||
+      applicationsError.value,
+  );
+});
+
+const lightNotes = computed(() => {
+  return [
+    {
+      title: "首页只负责入口与概览",
+      description: "复杂的解析、生成和流转仍然放在对应工作页完成，首页只负责帮你决定先去哪一页。",
+    },
+    {
+      title: "当前仍保留演示工作区切换",
+      description: `${currentWorkspace.label} 视角可在右上角切换 demo / sandbox，但不改变现有后端和路由闭环。`,
+    },
+    {
+      title: hasAnyOverviewError.value ? "某些摘要加载失败时也能继续" : "最近工作来自真实页面数据",
+      description: hasAnyOverviewError.value
+        ? "如果某一块摘要暂时失败，可以直接进入对应页面继续处理，不会阻断已有工作流。"
+        : "首页摘要读取的是各列表接口的最近窗口，进入对应页面后可以继续完整处理。",
     },
   ];
 });
@@ -810,40 +975,48 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.dashboard-hero__copy {
+.dashboard-hero,
+.dashboard-hero__copy,
+.dashboard-hero__lead,
+.hero-actions,
+.hero-priority-list,
+.hero-status-grid,
+.dashboard-grid,
+.task-grid,
+.suggestion-stack,
+.overview-list,
+.note-grid {
   display: grid;
   gap: 14px;
+}
+
+.dashboard-hero {
+  align-items: stretch;
+}
+
+.dashboard-hero__lead {
+  gap: 12px;
+}
+
+.dashboard-hero__lead p:last-child {
+  margin: 0;
 }
 
 .dashboard-hero__panel {
   min-height: 100%;
 }
 
-.hero-actions,
-.hero-highlight-grid,
-.dashboard-grid,
-.task-grid,
-.suggestion-stack,
-.overview-list,
-.flow-grid,
-.note-grid {
-  display: grid;
-  gap: 14px;
-}
-
 .hero-actions {
-  grid-template-columns: repeat(3, minmax(0, max-content));
-  margin-top: 6px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .hero-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 46px;
-  padding: 0 18px;
+  display: grid;
+  gap: 6px;
+  min-height: 110px;
+  padding: 18px;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: 20px;
   color: var(--ink);
   background: rgba(255, 253, 246, 0.92);
   font-weight: 700;
@@ -859,43 +1032,109 @@ onMounted(async () => {
   background: #eef6ee;
 }
 
+.hero-action span,
+.priority-card span,
+.hero-status-card p,
+.task-card__meta span,
+.suggestion-card__header span,
+.overview-card__header span {
+  color: var(--warm);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.hero-action strong,
+.priority-card strong,
+.hero-status-card strong,
+.task-card h3,
+.overview-card__header h3,
+.suggestion-card__header h3,
+.note-card h3 {
+  margin: 0;
+}
+
+.hero-action small,
+.priority-card p,
+.hero-status-card small,
+.task-card p,
+.suggestion-card p,
+.overview-item p,
+.overview-item small,
+.overview-empty,
+.overview-error,
+.note-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
 .hero-action--primary {
   color: #fff;
   background: linear-gradient(135deg, var(--accent), #d18e1f);
   border-color: transparent;
 }
 
-.hero-highlight-grid {
+.hero-action--primary span,
+.hero-action--primary small {
+  color: rgba(255, 250, 240, 0.82);
+}
+
+.hero-priority-list {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.hero-highlight-card,
+.priority-card,
+.hero-status-card,
 .overview-card,
 .suggestion-card,
 .task-card,
 .overview-item,
-.flow-card,
 .note-card {
   border: 1px solid var(--line);
   border-radius: 20px;
 }
 
-.hero-highlight-card {
+.priority-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  background: rgba(255, 253, 246, 0.7);
+}
+
+.priority-card__header {
   display: grid;
   gap: 6px;
-  padding: 14px;
+}
+
+.hero-panel__intro {
+  display: grid;
+  gap: 10px;
+}
+
+.hero-status-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.hero-status-card {
+  display: grid;
+  gap: 6px;
+  padding: 16px;
   background: rgba(255, 255, 255, 0.08);
 }
 
-.hero-highlight-card p,
-.hero-highlight-card small {
-  margin: 0;
+.hero-status-card p,
+.hero-status-card small {
   color: #d8eadf;
 }
 
-.hero-highlight-card strong {
-  font-size: 18px;
-  line-height: 1.3;
+.hero-status-card strong {
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.hero-status-card--ready {
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .task-grid {
@@ -918,6 +1157,20 @@ onMounted(async () => {
     box-shadow 0.2s ease;
 }
 
+.task-card__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.task-card__meta small {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .task-card:hover {
   border-color: rgba(34, 107, 74, 0.42);
   background: #f7fbf4;
@@ -925,46 +1178,17 @@ onMounted(async () => {
   box-shadow: 0 14px 28px rgba(52, 45, 29, 0.08);
 }
 
-.task-card span,
-.overview-card__header span,
-.suggestion-card__header span {
-  color: var(--warm);
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-}
-
-.task-card h3,
-.overview-card__header h3,
-.suggestion-card__header h3,
-.note-card h3 {
-  margin: 0;
-}
-
-.task-card p,
-.task-card small,
-.suggestion-card p,
-.overview-item p,
-.overview-item small,
-.overview-empty,
-.overview-error,
-.note-card p {
-  margin: 0;
-  color: var(--muted);
-  line-height: 1.65;
-}
-
-.task-card small {
+.task-card__cta {
   color: var(--accent);
-  font-weight: 700;
+  font-size: 14px;
+  line-height: 1.6;
 }
 
 .task-card--accent {
   background: linear-gradient(135deg, rgba(249, 240, 217, 0.78), rgba(238, 246, 238, 0.72));
 }
 
-.dashboard-main-grid,
-.dashboard-secondary-grid {
+.dashboard-main-grid {
   align-items: start;
 }
 
@@ -973,7 +1197,8 @@ onMounted(async () => {
 }
 
 .overview-card,
-.suggestion-card {
+.suggestion-card,
+.note-card {
   display: grid;
   gap: 14px;
   padding: 18px;
@@ -1012,41 +1237,22 @@ onMounted(async () => {
   color: #9a5b2b;
 }
 
-.flow-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.flow-card {
-  display: grid;
-  gap: 10px;
-  padding: 16px;
-  background: rgba(255, 253, 246, 0.72);
-}
-
-.flow-card span {
-  display: grid;
-  width: 30px;
-  height: 30px;
-  place-items: center;
-  border-radius: 999px;
-  color: #fff;
-  background: var(--accent);
-  font-weight: 800;
-}
-
 .note-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.note-grid--compact {
+  grid-template-columns: 1fr;
+}
+
 .note-card {
-  display: grid;
-  gap: 10px;
-  padding: 18px;
   background: rgba(255, 253, 246, 0.62);
 }
 
 @media (max-width: 1180px) {
-  .hero-highlight-grid,
+  .hero-actions,
+  .hero-priority-list,
+  .hero-status-grid,
   .task-grid,
   .task-grid--compact,
   .dashboard-grid,
@@ -1056,13 +1262,9 @@ onMounted(async () => {
 }
 
 @media (max-width: 720px) {
-  .hero-actions,
-  .flow-grid {
-    grid-template-columns: 1fr;
-  }
-
   .overview-card__header,
-  .suggestion-card__header {
+  .suggestion-card__header,
+  .task-card__meta {
     flex-direction: column;
     align-items: flex-start;
   }
