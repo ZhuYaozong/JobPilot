@@ -11,6 +11,8 @@ import type {
   InterviewPrepGenerateRequest,
 } from "@/types/generated_artifact";
 
+const ARTIFACT_GENERATION_TIMEOUT_MS = 120000;
+
 export async function listArtifacts(params: ListParams = {}) {
   const response = await apiClient.get<GeneratedArtifactListItem[]>(
     "/api/v1/artifacts",
@@ -49,6 +51,7 @@ export async function generateCoverLetter(payload: CoverLetterGenerateRequest) {
   const response = await apiClient.post<GeneratedArtifact>(
     "/api/v1/artifacts/generate-cover-letter",
     payload,
+    { timeout: ARTIFACT_GENERATION_TIMEOUT_MS },
   );
   return response.data;
 }
@@ -59,6 +62,7 @@ export async function generateInterviewPrep(
   const response = await apiClient.post<GeneratedArtifact>(
     "/api/v1/artifacts/generate-interview-prep",
     payload,
+    { timeout: ARTIFACT_GENERATION_TIMEOUT_MS },
   );
   return response.data;
 }
