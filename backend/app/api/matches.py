@@ -1,9 +1,7 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentUserDep, ListLimit, ListOffset
-from app.db.session import get_db
+from app.api.deps import CurrentUserDep, DbSession, ListLimit, ListOffset
 from app.models.match_result import MatchResult
 from app.schemas.match_analysis import MatchAnalysisRequest
 from app.schemas.match_result import (
@@ -25,8 +23,8 @@ router = APIRouter(prefix="/api/v1/matches", tags=["matches"])
 @router.post("", response_model=MatchResultRead, status_code=201)
 async def create_match(
     payload: MatchResultCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUserDep = None,
+    db: DbSession,
+    current_user: CurrentUserDep,
 ) -> MatchResult:
     await ensure_resume_and_job_exist_for_user(
         db,
@@ -44,10 +42,10 @@ async def create_match(
 
 @router.get("", response_model=list[MatchResultListItem])
 async def list_matches(
+    db: DbSession,
+    current_user: CurrentUserDep,
     limit: ListLimit = 20,
     offset: ListOffset = 0,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUserDep = None,
 ) -> list[MatchResult]:
     # MatchResult 列表明确采用 created_at recent-first，因为匹配分析天然按生成时间查看最近结果。
     statement = (
@@ -64,8 +62,8 @@ async def list_matches(
 @router.post("/analyze", response_model=MatchResultRead)
 async def analyze_match_result(
     payload: MatchAnalysisRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUserDep = None,
+    db: DbSession,
+    current_user: CurrentUserDep,
 ) -> MatchResult:
     return await analyze_match(db, payload, current_user=current_user)
 
@@ -73,8 +71,8 @@ async def analyze_match_result(
 @router.get("/{match_id}", response_model=MatchResultRead)
 async def read_match(
     match_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUserDep = None,
+    db: DbSession,
+    current_user: CurrentUserDep,
 ) -> MatchResult:
     return await get_match_result_for_user_or_404(db, match_id, current_user)
 
@@ -83,8 +81,8 @@ async def read_match(
 async def update_match(
     match_id: int,
     payload: MatchResultUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUserDep = None,
+    db: DbSession,
+    current_user: CurrentUserDep,
 ) -> MatchResult:
     match = await get_match_result_for_user_or_404(db, match_id, current_user)
     update_data = payload.model_dump(exclude_unset=True)
@@ -100,8 +98,8 @@ async def update_match(
 @router.delete("/{match_id}", status_code=204)
 async def delete_match(
     match_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUserDep = None,
+    db: DbSession,
+    current_user: CurrentUserDep,
 ) -> None:
     match = await get_match_result_for_user_or_404(db, match_id, current_user)
     await delete_match_result_tree(db, match)

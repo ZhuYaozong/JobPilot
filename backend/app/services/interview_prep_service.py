@@ -105,11 +105,9 @@ def validate_generated_interview_prep(content_text: str) -> str:
 async def generate_interview_prep(
     db: AsyncSession,
     payload: InterviewPrepGenerateRequest,
+    current_user: User,
     llm_client: LLMClient | None = None,
-    current_user: User | None = None,
 ) -> GeneratedArtifact:
-    if current_user is None:
-        raise HTTPException(status_code=500, detail="Current user scope is required")
     resume = await get_resume_for_user_or_404(db, payload.resume_id, current_user)
     job = await get_job_posting_for_user_or_404(
         db,

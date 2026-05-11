@@ -10,8 +10,6 @@ class ResumeCreate(BaseModel):
     content_hash: str
     source_file_url: str | None = None
     source_type: str = "upload"
-    parsed_json: dict[str, Any] | None = None
-    parse_status: str = "pending"
 
 
 class ResumeUpdate(BaseModel):
@@ -19,8 +17,6 @@ class ResumeUpdate(BaseModel):
     raw_text: str | None = None
     source_file_url: str | None = None
     source_type: str | None = None
-    parsed_json: dict[str, Any] | None = None
-    parse_status: str | None = None
     content_hash: str | None = None
 
 

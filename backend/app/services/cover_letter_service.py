@@ -99,11 +99,9 @@ def validate_generated_cover_letter(content_text: str, language_mode: str) -> st
 async def generate_cover_letter(
     db: AsyncSession,
     payload: CoverLetterGenerateRequest,
+    current_user: User,
     llm_client: LLMClient | None = None,
-    current_user: User | None = None,
 ) -> GeneratedArtifact:
-    if current_user is None:
-        raise HTTPException(status_code=500, detail="Current user scope is required")
     if payload.language_mode not in SUPPORTED_LANGUAGE_MODES:
         raise HTTPException(status_code=400, detail="Unsupported language_mode")
 

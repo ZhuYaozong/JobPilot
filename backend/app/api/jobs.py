@@ -1,9 +1,7 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentUserDep, ListLimit, ListOffset
-from app.db.session import get_db
+from app.api.deps import CurrentUserDep, DbSession, ListLimit, ListOffset
 from app.models.job_posting import JobPosting
 from app.schemas.job_posting import (
     JobPostingCreate,
@@ -21,8 +19,8 @@ router = APIRouter(prefix="/api/v1/jobs", tags=["jobs"])
 @router.post("", response_model=JobPostingRead, status_code=201)
 async def create_job(
     payload: JobPostingCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUserDep = None,
+    db: DbSession,
+    current_user: CurrentUserDep,
 ) -> JobPosting:
     job = JobPosting(user_id=current_user.id, **payload.model_dump())
     db.add(job)
@@ -33,10 +31,10 @@ async def create_job(
 
 @router.get("", response_model=list[JobPostingListItem])
 async def list_jobs(
+    db: DbSession,
+    current_user: CurrentUserDep,
     limit: ListLimit = 20,
     offset: ListOffset = 0,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUserDep = None,
 ) -> list[JobPosting]:
     # Jobs 列表明确采用 updated_at recent-first，避免前端靠隐含顺序猜测“最近岗位”。
     statement = (
@@ -53,8 +51,8 @@ async def list_jobs(
 @router.get("/{job_id}", response_model=JobPostingRead)
 async def read_job(
     job_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUserDep = None,
+    db: DbSession,
+    current_user: CurrentUserDep,
 ) -> JobPosting:
     return await get_job_posting_for_user_or_404(db, job_id, current_user)
 
@@ -62,8 +60,8 @@ async def read_job(
 @router.post("/{job_id}/parse", response_model=JobPostingRead)
 async def parse_job(
     job_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUserDep = None,
+    db: DbSession,
+    current_user: CurrentUserDep,
 ) -> JobPosting:
     job = await get_job_posting_for_user_or_404(db, job_id, current_user)
     return await parse_job_posting(db, job)
@@ -73,8 +71,8 @@ async def parse_job(
 async def update_job(
     job_id: int,
     payload: JobPostingUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUserDep = None,
+    db: DbSession,
+    current_user: CurrentUserDep,
 ) -> JobPosting:
     job = await get_job_posting_for_user_or_404(db, job_id, current_user)
     update_data = payload.model_dump(exclude_unset=True)
@@ -90,8 +88,8 @@ async def update_job(
 @router.delete("/{job_id}", status_code=204)
 async def delete_job(
     job_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUserDep = None,
+    db: DbSession,
+    current_user: CurrentUserDep,
 ) -> None:
     job = await get_job_posting_for_user_or_404(db, job_id, current_user)
     await delete_job_posting_tree(db, job, current_user)

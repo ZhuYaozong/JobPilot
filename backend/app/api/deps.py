@@ -30,10 +30,12 @@ ListOffset = Annotated[
     ),
 ]
 
+DbSession = Annotated[AsyncSession, Depends(get_db)]
+
 
 async def get_current_user(
-    db: AsyncSession = Depends(get_db),
-    x_user_name: str | None = Header(default=None, alias="X-User-Name"),
+    db: DbSession,
+    x_user_name: Annotated[str | None, Header(alias="X-User-Name")] = None,
 ) -> User:
     return await get_or_create_user_by_username(
         db,

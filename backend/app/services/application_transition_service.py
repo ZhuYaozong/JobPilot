@@ -1,4 +1,3 @@
-from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.application_event import ApplicationEvent
@@ -12,10 +11,8 @@ async def transition_application_stage(
     db: AsyncSession,
     application_id: int,
     payload: ApplicationTransitionRequest,
-    current_user: User | None = None,
+    current_user: User,
 ) -> ApplicationRecord:
-    if current_user is None:
-        raise HTTPException(status_code=500, detail="Current user scope is required")
     application = await get_application_record_for_user_or_404(
         db,
         application_id,

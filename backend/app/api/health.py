@@ -1,8 +1,7 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import get_db
+from app.api.deps import DbSession
 
 router = APIRouter(tags=["health"])
 
@@ -13,6 +12,6 @@ async def health() -> dict[str, str]:
 
 
 @router.get("/health/db")
-async def database_health(db: AsyncSession = Depends(get_db)) -> dict[str, int | str]:
+async def database_health(db: DbSession) -> dict[str, int | str]:
     result = await db.execute(text("SELECT 1"))
     return {"status": "ok", "database": result.scalar_one()}
