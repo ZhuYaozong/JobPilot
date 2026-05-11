@@ -4,7 +4,7 @@
       <div class="panel-heading">
         <p class="eyebrow">对话历史</p>
         <h2>新建对话</h2>
-        <p class="soft-note">当前未接入真实会话持久化，这里先提供任务模板入口。</p>
+        <p class="soft-note">侧栏列表将在后续版本接入；当前点击"新建对话"会重置当前会话。</p>
       </div>
 
       <div class="conversation-list">
@@ -31,18 +31,42 @@
         <p class="soft-note">{{ activeTemplate.description }}</p>
       </div>
 
-      <div class="message-thread-lite">
-        <article class="message-bubble-lite assistant">
+      <div class="message-thread">
+        <article v-if="messages.length === 0" class="message-bubble assistant placeholder">
           <strong>JobPilot</strong>
-          <p>我会围绕你选择的岗位、简历、投递记录和知识库来协助判断。当前页面还没有接入真实 Agent 运行时。</p>
+          <p>{{ activeTemplate.contextHint }} 输入下方问题后,我会调用合适的工具并把结果总结成回复。</p>
         </article>
-        <article class="message-bubble-lite user">
-          <strong>你可以这样问</strong>
-          <p>{{ activeTemplate.example }}</p>
+
+        <article
+          v-for="message in messages"
+          :key="message.id"
+          class="message-bubble"
+          :class="message.role"
+        >
+          <strong>{{ message.role === "user" ? "你" : "JobPilot" }}</strong>
+          <p>{{ message.content }}</p>
+          <p
+            v-if="message.role === 'assistant' && message.agent_run_id !== null"
+            class="tool-trace"
+          >
+            <template v-for="call in toolCallsFor(message.agent_run_id)" :key="call.id">
+              🔧 已调用 {{ call.tool_name }}
+              <span v-if="call.latency_ms !== null">· {{ call.latency_ms }}ms</span>
+              <span v-if="call.status === 'failed'" class="trace-failed">
+                · 失败（{{ call.error_class ?? "未知错误" }}）
+              </span>
+            </template>
+          </p>
         </article>
-        <article class="message-bubble-lite assistant">
-          <strong>建议先带上</strong>
-          <p>{{ activeTemplate.contextHint }}</p>
+
+        <article v-if="isRunning" class="message-bubble assistant pending">
+          <strong>JobPilot</strong>
+          <p>正在思考……</p>
+        </article>
+
+        <article v-if="lastRunError" class="message-bubble assistant failed">
+          <strong>本轮失败</strong>
+          <p>{{ lastRunError }}</p>
         </article>
       </div>
 
@@ -52,6 +76,7 @@
           :key="question"
           class="quick-question"
           type="button"
+          :disabled="isRunning"
           @click="draftPrompt = question"
         >
           {{ question }}
@@ -65,10 +90,11 @@
           :rows="4"
           resize="none"
           :placeholder="activeTemplate.example"
+          :disabled="isRunning"
         />
         <div class="composer-actions">
-          <p class="soft-note">发送按钮目前只做边界提示，不会伪造 AI 回复或聊天记录。</p>
-          <el-button type="primary" @click="handleSendPlaceholder">发送</el-button>
+          <p class="soft-note">同步模式:发送后等待后端工作流完成并返回完整回复。</p>
+          <el-button type="primary" :loading="isRunning" @click="handleSend">发送</el-button>
         </div>
       </div>
     </main>
@@ -132,6 +158,7 @@
       <div class="context-summary">
         <h3>当前上下文</h3>
         <p>{{ selectedContextSummary }}</p>
+        <p class="soft-note">上下文 selector 目前仅做产品展示,真实 Agent 暂未消费这些值(后续切片接入)。</p>
         <RouterLink class="inline-link" to="/knowledge">管理知识库资料</RouterLink>
       </div>
     </aside>
@@ -143,9 +170,15 @@ import { computed, onMounted, ref } from "vue";
 import { ElMessage } from "element-plus";
 
 import { listApplications } from "@/api/applications";
+import { runAssistant } from "@/api/assistant";
 import { listJobs } from "@/api/jobs";
 import { listResumes } from "@/api/resumes";
 import type { ApplicationRecordListItem } from "@/types/application_record";
+import type {
+  AgentRunSummary,
+  MessageRead,
+  ToolCallTrace,
+} from "@/types/assistant";
 import type { JobPostingListItem } from "@/types/job_posting";
 import type { ResumeListItem } from "@/types/resume";
 import { getErrorMessage } from "@/utils/http";
@@ -229,6 +262,13 @@ const referencesLoading = ref(false);
 const selectedTemplateKey = ref(conversationTemplates[0].key);
 const draftPrompt = ref("");
 
+const conversationId = ref<number | null>(null);
+const messages = ref<MessageRead[]>([]);
+// Keyed by agent_run_id so an assistant message can locate its trace cards.
+const agentRunsById = ref<Map<number, AgentRunSummary>>(new Map());
+const isRunning = ref(false);
+const lastRunError = ref<string | null>(null);
+
 const contextForm = ref({
   jobId: undefined as number | undefined,
   resumeId: undefined as number | undefined,
@@ -265,21 +305,66 @@ function getJobLabel(jobPostingId: number): string {
 
 function selectTemplate(key: string) {
   selectedTemplateKey.value = key;
-  draftPrompt.value = activeTemplate.value.example;
+  if (messages.value.length === 0) {
+    draftPrompt.value = activeTemplate.value.example;
+  }
 }
 
 function handleNewConversation() {
+  conversationId.value = null;
+  messages.value = [];
+  agentRunsById.value = new Map();
+  lastRunError.value = null;
   draftPrompt.value = "";
-  ElMessage.info("当前还没有真实会话后端；新建对话只重置输入框。");
 }
 
-function handleSendPlaceholder() {
-  if (!draftPrompt.value.trim()) {
+function toolCallsFor(agentRunId: number | null): ToolCallTrace[] {
+  if (agentRunId === null) return [];
+  return agentRunsById.value.get(agentRunId)?.tool_calls ?? [];
+}
+
+async function handleSend() {
+  const content = draftPrompt.value.trim();
+  if (!content) {
     ElMessage.warning("请先输入一个围绕当前任务的问题");
     return;
   }
+  if (isRunning.value) return;
 
-  ElMessage.info("当前未接入真实 AI 对话，不会伪造发送成功或生成回复。");
+  isRunning.value = true;
+  lastRunError.value = null;
+  draftPrompt.value = "";
+
+  try {
+    const response = await runAssistant({
+      conversation_id: conversationId.value,
+      content,
+    });
+
+    conversationId.value = response.conversation_id;
+    messages.value.push(response.user_message);
+    agentRunsById.value.set(response.agent_run.id, response.agent_run);
+
+    if (response.assistant_message) {
+      messages.value.push(response.assistant_message);
+    } else {
+      lastRunError.value = formatRunError(response.agent_run);
+    }
+  } catch (error) {
+    const message = getErrorMessage(error, "Agent 调用失败");
+    lastRunError.value = message;
+    ElMessage.error(message);
+    draftPrompt.value = content;
+  } finally {
+    isRunning.value = false;
+  }
+}
+
+function formatRunError(run: AgentRunSummary): string {
+  if (run.error_class) {
+    return `${run.error_class}${run.error_detail ? `：${run.error_detail}` : ""}`;
+  }
+  return "Agent 运行失败,请稍后重试。";
 }
 
 async function fetchReferences() {
@@ -342,21 +427,65 @@ onMounted(fetchReferences);
   color: var(--muted);
 }
 
-.message-thread-lite {
+.message-thread {
   display: grid;
   flex: 1;
   gap: 12px;
   align-content: start;
+  overflow-y: auto;
 }
 
-.message-bubble-lite p {
+.message-bubble {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.message-bubble.user {
+  background: #f1f5f9;
+  border-color: #cbd5f5;
+}
+
+.message-bubble.assistant.failed {
+  border-color: #f4b6b6;
+  background: #fef2f2;
+}
+
+.message-bubble.pending {
+  opacity: 0.7;
+  font-style: italic;
+}
+
+.message-bubble.placeholder {
+  border-style: dashed;
+}
+
+.message-bubble p {
   margin: 6px 0 0;
-  color: var(--muted);
   line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.tool-trace {
+  margin-top: 8px !important;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.trace-failed {
+  color: #c0392b;
 }
 
 .quick-question-list {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.quick-question:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .composer-actions {
