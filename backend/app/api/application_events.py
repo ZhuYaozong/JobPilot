@@ -1,9 +1,7 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentUserDep, ListLimit, ListOffset
-from app.db.session import get_db
+from app.api.deps import CurrentUserDep, DbSession, ListLimit, ListOffset
 from app.models.application_event import ApplicationEvent
 from app.schemas.application_event import (
     ApplicationEventRead,
@@ -19,10 +17,10 @@ router = APIRouter(prefix="/api/v1/applications", tags=["applications"])
 @router.get("/{application_id}/events", response_model=list[ApplicationEventRead])
 async def list_application_events(
     application_id: int,
+    db: DbSession,
+    current_user: CurrentUserDep,
     limit: ListLimit = 20,
     offset: ListOffset = 0,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUserDep = None,
 ) -> list[ApplicationEvent]:
     application = await get_application_record_for_user_or_404(
         db,
@@ -45,8 +43,8 @@ async def list_application_events(
 async def transition_application(
     application_id: int,
     payload: ApplicationTransitionRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUserDep = None,
+    db: DbSession,
+    current_user: CurrentUserDep,
 ):
     return await transition_application_stage(
         db,

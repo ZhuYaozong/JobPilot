@@ -62,9 +62,4 @@ class LLMClient:
 
         if not isinstance(content, str) or not content.strip():
             raise LLMClientError("LLM response content is empty")
-        print("=================================")
-        print(data)
-        print("+++++++++++++++++++++++++++++++++")
-        print(response.text, flush=True)
-        print("=================================")
         return content

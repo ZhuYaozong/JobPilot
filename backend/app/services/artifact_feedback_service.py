@@ -24,10 +24,8 @@ async def create_artifact_feedback(
     db: AsyncSession,
     artifact_id: int,
     payload: ArtifactFeedbackCreate,
-    current_user: User | None = None,
+    current_user: User,
 ) -> ArtifactFeedbackEvent:
-    if current_user is None:
-        raise HTTPException(status_code=500, detail="Current user scope is required")
     await get_generated_artifact_for_user_or_404(db, artifact_id, current_user)
     ensure_feedback_type_allowed(payload.feedback_type)
 
@@ -47,10 +45,8 @@ async def list_artifact_feedback(
     artifact_id: int,
     limit: int,
     offset: int,
-    current_user: User | None = None,
+    current_user: User,
 ) -> list[ArtifactFeedbackEvent]:
-    if current_user is None:
-        raise HTTPException(status_code=500, detail="Current user scope is required")
     await get_generated_artifact_for_user_or_404(db, artifact_id, current_user)
 
     statement = (

@@ -1,9 +1,16 @@
+from collections.abc import Callable
+from typing import Any
+
 from fastapi.testclient import TestClient
 
 from app.llm.client import LLMClient, LLMClientError, LLMConfigError
 
 
-def create_parsed_resume(client: TestClient, test_marker: str) -> dict:
+def create_parsed_resume(
+    client: TestClient,
+    test_marker: str,
+    set_resume_parsed_data: Callable[[int, dict[str, Any], str], None],
+) -> dict:
     response = client.post(
         "/api/v1/resumes",
         json={
@@ -11,23 +18,33 @@ def create_parsed_resume(client: TestClient, test_marker: str) -> dict:
             "raw_text": "FastAPI and workflow backend experience.",
             "content_hash": f"{test_marker}-ipres",
             "source_type": "manual",
-            "parse_status": "parsed",
-            "parsed_json": {
-                "summary": "AI application backend engineer.",
-                "skills": ["FastAPI", "SQLAlchemy", "PostgreSQL"],
-                "experiences": ["Built workflow-backed APIs"],
-                "projects": ["JobPilot"],
-                "education": [],
-                "target_roles": ["AI Application Engineer"],
-                "years_of_experience": "2 years",
-            },
         },
     )
     assert response.status_code == 201
-    return response.json()
+    resume = response.json()
+    set_resume_parsed_data(
+        resume["id"],
+        {
+            "summary": "AI application backend engineer.",
+            "skills": ["FastAPI", "SQLAlchemy", "PostgreSQL"],
+            "experiences": ["Built workflow-backed APIs"],
+            "projects": ["JobPilot"],
+            "education": [],
+            "target_roles": ["AI Application Engineer"],
+            "years_of_experience": "2 years",
+        },
+        "parsed",
+    )
+    refreshed = client.get(f"/api/v1/resumes/{resume['id']}")
+    assert refreshed.status_code == 200
+    return refreshed.json()
 
 
-def create_parsed_job(client: TestClient, test_marker: str) -> dict:
+def create_parsed_job(
+    client: TestClient,
+    test_marker: str,
+    set_job_parsed_data: Callable[[int, dict[str, Any]], None],
+) -> dict:
     response = client.post(
         "/api/v1/jobs",
         json={
@@ -35,19 +52,25 @@ def create_parsed_job(client: TestClient, test_marker: str) -> dict:
             "job_title": "AI Application Engineer",
             "city": "Shanghai",
             "jd_text": "Build AI workflow applications with FastAPI.",
-            "parsed_json": {
-                "summary": "Build workflow-backed AI applications.",
-                "responsibilities": ["Build FastAPI services"],
-                "required_skills": ["FastAPI", "PostgreSQL"],
-                "preferred_skills": ["SQLAlchemy"],
-                "keywords": ["workflow", "ai application"],
-                "seniority": "junior-mid",
-                "city": "Shanghai",
-            },
         },
     )
     assert response.status_code == 201
-    return response.json()
+    job = response.json()
+    set_job_parsed_data(
+        job["id"],
+        {
+            "summary": "Build workflow-backed AI applications.",
+            "responsibilities": ["Build FastAPI services"],
+            "required_skills": ["FastAPI", "PostgreSQL"],
+            "preferred_skills": ["SQLAlchemy"],
+            "keywords": ["workflow", "ai application"],
+            "seniority": "junior-mid",
+            "city": "Shanghai",
+        },
+    )
+    refreshed = client.get(f"/api/v1/jobs/{job['id']}")
+    assert refreshed.status_code == 200
+    return refreshed.json()
 
 
 def create_match_result(
@@ -91,9 +114,11 @@ def create_application_record(
 def create_interview_prep_ready_pair(
     client: TestClient,
     test_marker: str,
+    set_resume_parsed_data: Callable[[int, dict[str, Any], str], None],
+    set_job_parsed_data: Callable[[int, dict[str, Any]], None],
 ) -> tuple[dict, dict, dict]:
-    resume = create_parsed_resume(client, test_marker)
-    job = create_parsed_job(client, test_marker)
+    resume = create_parsed_resume(client, test_marker, set_resume_parsed_data)
+    job = create_parsed_job(client, test_marker, set_job_parsed_data)
     match = create_match_result(client, resume["id"], job["id"])
     return resume, job, match
 
@@ -118,6 +143,8 @@ def test_generate_interview_prep_success(
     client: TestClient,
     test_marker: str,
     monkeypatch,
+    set_resume_parsed_data: Callable[[int, dict[str, Any], str], None],
+    set_job_parsed_data: Callable[[int, dict[str, Any]], None],
 ) -> None:
     async def fake_generate_text(self, prompt: str) -> str:
         assert "Latest match result" in prompt
@@ -142,7 +169,7 @@ def test_generate_interview_prep_success(
 """
 
     monkeypatch.setattr(LLMClient, "generate_text", fake_generate_text)
-    resume, job, match = create_interview_prep_ready_pair(client, test_marker)
+    resume, job, match = create_interview_prep_ready_pair(client, test_marker, set_resume_parsed_data, set_job_parsed_data)
     before_count = count_interview_prep_artifacts_for_pair(
         client,
         resume["id"],
@@ -176,8 +203,9 @@ def test_generate_interview_prep_success(
 def test_generate_interview_prep_missing_resume_returns_404(
     client: TestClient,
     test_marker: str,
+    set_job_parsed_data: Callable[[int, dict[str, Any]], None],
 ) -> None:
-    job = create_parsed_job(client, test_marker)
+    job = create_parsed_job(client, test_marker, set_job_parsed_data)
 
     response = client.post(
         "/api/v1/artifacts/generate-interview-prep",
@@ -191,8 +219,9 @@ def test_generate_interview_prep_missing_resume_returns_404(
 def test_generate_interview_prep_missing_job_returns_404(
     client: TestClient,
     test_marker: str,
+    set_resume_parsed_data: Callable[[int, dict[str, Any], str], None],
 ) -> None:
-    resume = create_parsed_resume(client, test_marker)
+    resume = create_parsed_resume(client, test_marker, set_resume_parsed_data)
 
     response = client.post(
         "/api/v1/artifacts/generate-interview-prep",
@@ -206,8 +235,10 @@ def test_generate_interview_prep_missing_job_returns_404(
 def test_generate_interview_prep_missing_application_returns_404(
     client: TestClient,
     test_marker: str,
+    set_resume_parsed_data: Callable[[int, dict[str, Any], str], None],
+    set_job_parsed_data: Callable[[int, dict[str, Any]], None],
 ) -> None:
-    resume, job, _match = create_interview_prep_ready_pair(client, test_marker)
+    resume, job, _match = create_interview_prep_ready_pair(client, test_marker, set_resume_parsed_data, set_job_parsed_data)
 
     response = client.post(
         "/api/v1/artifacts/generate-interview-prep",
@@ -225,9 +256,11 @@ def test_generate_interview_prep_missing_application_returns_404(
 def test_generate_interview_prep_mismatched_application_returns_400(
     client: TestClient,
     test_marker: str,
+    set_resume_parsed_data: Callable[[int, dict[str, Any], str], None],
+    set_job_parsed_data: Callable[[int, dict[str, Any]], None],
 ) -> None:
-    resume, job, _match = create_interview_prep_ready_pair(client, test_marker)
-    other_job = create_parsed_job(client, f"{test_marker}-other")
+    resume, job, _match = create_interview_prep_ready_pair(client, test_marker, set_resume_parsed_data, set_job_parsed_data)
+    other_job = create_parsed_job(client, f"{test_marker}-other", set_job_parsed_data)
     application = create_application_record(client, resume["id"], other_job["id"])
 
     response = client.post(
@@ -248,6 +281,7 @@ def test_generate_interview_prep_mismatched_application_returns_400(
 def test_generate_interview_prep_unparsed_resume_returns_400(
     client: TestClient,
     test_marker: str,
+    set_job_parsed_data: Callable[[int, dict[str, Any]], None],
 ) -> None:
     resume = client.post(
         "/api/v1/resumes",
@@ -259,7 +293,7 @@ def test_generate_interview_prep_unparsed_resume_returns_400(
         },
     )
     assert resume.status_code == 201
-    job = create_parsed_job(client, test_marker)
+    job = create_parsed_job(client, test_marker, set_job_parsed_data)
 
     response = client.post(
         "/api/v1/artifacts/generate-interview-prep",
@@ -273,8 +307,9 @@ def test_generate_interview_prep_unparsed_resume_returns_400(
 def test_generate_interview_prep_unparsed_job_returns_400(
     client: TestClient,
     test_marker: str,
+    set_resume_parsed_data: Callable[[int, dict[str, Any], str], None],
 ) -> None:
-    resume = create_parsed_resume(client, test_marker)
+    resume = create_parsed_resume(client, test_marker, set_resume_parsed_data)
     job = client.post(
         "/api/v1/jobs",
         json={
@@ -297,9 +332,11 @@ def test_generate_interview_prep_unparsed_job_returns_400(
 def test_generate_interview_prep_missing_match_returns_400(
     client: TestClient,
     test_marker: str,
+    set_resume_parsed_data: Callable[[int, dict[str, Any], str], None],
+    set_job_parsed_data: Callable[[int, dict[str, Any]], None],
 ) -> None:
-    resume = create_parsed_resume(client, test_marker)
-    job = create_parsed_job(client, test_marker)
+    resume = create_parsed_resume(client, test_marker, set_resume_parsed_data)
+    job = create_parsed_job(client, test_marker, set_job_parsed_data)
 
     response = client.post(
         "/api/v1/artifacts/generate-interview-prep",
@@ -314,12 +351,14 @@ def test_generate_interview_prep_llm_config_error_returns_500_without_artifact(
     client: TestClient,
     test_marker: str,
     monkeypatch,
+    set_resume_parsed_data: Callable[[int, dict[str, Any], str], None],
+    set_job_parsed_data: Callable[[int, dict[str, Any]], None],
 ) -> None:
     async def fake_generate_text(self, prompt: str) -> str:
         raise LLMConfigError("LLM configuration is incomplete")
 
     monkeypatch.setattr(LLMClient, "generate_text", fake_generate_text)
-    resume, job, _match = create_interview_prep_ready_pair(client, test_marker)
+    resume, job, _match = create_interview_prep_ready_pair(client, test_marker, set_resume_parsed_data, set_job_parsed_data)
     before_count = count_interview_prep_artifacts_for_pair(
         client,
         resume["id"],
@@ -344,12 +383,14 @@ def test_generate_interview_prep_llm_call_error_returns_502_without_artifact(
     client: TestClient,
     test_marker: str,
     monkeypatch,
+    set_resume_parsed_data: Callable[[int, dict[str, Any], str], None],
+    set_job_parsed_data: Callable[[int, dict[str, Any]], None],
 ) -> None:
     async def fake_generate_text(self, prompt: str) -> str:
         raise LLMClientError("LLM request failed")
 
     monkeypatch.setattr(LLMClient, "generate_text", fake_generate_text)
-    resume, job, _match = create_interview_prep_ready_pair(client, test_marker)
+    resume, job, _match = create_interview_prep_ready_pair(client, test_marker, set_resume_parsed_data, set_job_parsed_data)
     before_count = count_interview_prep_artifacts_for_pair(
         client,
         resume["id"],
@@ -374,12 +415,14 @@ def test_generate_interview_prep_empty_result_returns_502_without_artifact(
     client: TestClient,
     test_marker: str,
     monkeypatch,
+    set_resume_parsed_data: Callable[[int, dict[str, Any], str], None],
+    set_job_parsed_data: Callable[[int, dict[str, Any]], None],
 ) -> None:
     async def fake_generate_text(self, prompt: str) -> str:
         return "   "
 
     monkeypatch.setattr(LLMClient, "generate_text", fake_generate_text)
-    resume, job, _match = create_interview_prep_ready_pair(client, test_marker)
+    resume, job, _match = create_interview_prep_ready_pair(client, test_marker, set_resume_parsed_data, set_job_parsed_data)
     before_count = count_interview_prep_artifacts_for_pair(
         client,
         resume["id"],
@@ -404,12 +447,14 @@ def test_generate_interview_prep_english_only_result_returns_502_without_artifac
     client: TestClient,
     test_marker: str,
     monkeypatch,
+    set_resume_parsed_data: Callable[[int, dict[str, Any], str], None],
+    set_job_parsed_data: Callable[[int, dict[str, Any]], None],
 ) -> None:
     async def fake_generate_text(self, prompt: str) -> str:
         return "Prepare architecture examples and API design tradeoffs."
 
     monkeypatch.setattr(LLMClient, "generate_text", fake_generate_text)
-    resume, job, _match = create_interview_prep_ready_pair(client, test_marker)
+    resume, job, _match = create_interview_prep_ready_pair(client, test_marker, set_resume_parsed_data, set_job_parsed_data)
     before_count = count_interview_prep_artifacts_for_pair(
         client,
         resume["id"],
@@ -436,12 +481,14 @@ def test_generate_interview_prep_generic_result_returns_502_without_artifact(
     client: TestClient,
     test_marker: str,
     monkeypatch,
+    set_resume_parsed_data: Callable[[int, dict[str, Any], str], None],
+    set_job_parsed_data: Callable[[int, dict[str, Any]], None],
 ) -> None:
     async def fake_generate_text(self, prompt: str) -> str:
         return "你很适合这个岗位。"
 
     monkeypatch.setattr(LLMClient, "generate_text", fake_generate_text)
-    resume, job, _match = create_interview_prep_ready_pair(client, test_marker)
+    resume, job, _match = create_interview_prep_ready_pair(client, test_marker, set_resume_parsed_data, set_job_parsed_data)
     before_count = count_interview_prep_artifacts_for_pair(
         client,
         resume["id"],

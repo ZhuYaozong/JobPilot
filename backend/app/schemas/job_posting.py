@@ -10,7 +10,6 @@ class JobPostingCreate(BaseModel):
     jd_text: str
     city: str | None = None
     source_url: str | None = None
-    parsed_json: dict[str, Any] | None = None
     status: str = "active"
 
 
@@ -20,7 +19,6 @@ class JobPostingUpdate(BaseModel):
     city: str | None = None
     source_url: str | None = None
     jd_text: str | None = None
-    parsed_json: dict[str, Any] | None = None
     status: str | None = None
 
 

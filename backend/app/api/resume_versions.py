@@ -1,9 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentUserDep, ListLimit, ListOffset
-from app.db.session import get_db
+from app.api.deps import CurrentUserDep, DbSession, ListLimit, ListOffset
 from app.models.resume import Resume
 from app.models.resume_version import ResumeVersion
 from app.models.user import User
@@ -55,8 +54,8 @@ async def ensure_job_exists_if_present(
 @router.post("/api/v1/resume-versions", response_model=ResumeVersionRead, status_code=201)
 async def create_resume_version(
     payload: ResumeVersionCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUserDep = None,
+    db: DbSession,
+    current_user: CurrentUserDep,
 ) -> ResumeVersion:
     await get_resume_for_user_or_404(db, payload.resume_id, current_user)
     await ensure_job_exists_if_present(db, payload.job_posting_id, current_user)
@@ -70,10 +69,10 @@ async def create_resume_version(
 
 @router.get("/api/v1/resume-versions", response_model=list[ResumeVersionListItem])
 async def list_resume_versions(
+    db: DbSession,
+    current_user: CurrentUserDep,
     limit: ListLimit = 20,
     offset: ListOffset = 0,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUserDep = None,
 ) -> list[ResumeVersion]:
     statement = (
         select(ResumeVersion)
@@ -90,8 +89,8 @@ async def list_resume_versions(
 @router.get("/api/v1/resume-versions/{version_id}", response_model=ResumeVersionRead)
 async def read_resume_version(
     version_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUserDep = None,
+    db: DbSession,
+    current_user: CurrentUserDep,
 ) -> ResumeVersion:
     return await get_resume_version_or_404(db, version_id, current_user)
 
@@ -100,8 +99,8 @@ async def read_resume_version(
 async def update_resume_version(
     version_id: int,
     payload: ResumeVersionUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUserDep = None,
+    db: DbSession,
+    current_user: CurrentUserDep,
 ) -> ResumeVersion:
     version = await get_resume_version_or_404(db, version_id, current_user)
     update_data = payload.model_dump(exclude_unset=True)
@@ -123,10 +122,10 @@ async def update_resume_version(
 )
 async def list_versions_by_resume(
     resume_id: int,
+    db: DbSession,
+    current_user: CurrentUserDep,
     limit: ListLimit = 20,
     offset: ListOffset = 0,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUserDep = None,
 ) -> list[ResumeVersion]:
     await get_resume_for_user_or_404(db, resume_id, current_user)
 

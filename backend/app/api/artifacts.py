@@ -1,9 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentUserDep, ListLimit, ListOffset
-from app.db.session import get_db
+from app.api.deps import CurrentUserDep, DbSession, ListLimit, ListOffset
 from app.models.generated_artifact import GeneratedArtifact
 from app.models.user import User
 from app.schemas.artifact_feedback import (
@@ -71,8 +70,8 @@ async def ensure_business_links_exist(
 @router.post("", response_model=GeneratedArtifactRead, status_code=201)
 async def create_artifact(
     payload: GeneratedArtifactCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUserDep = None,
+    db: DbSession,
+    current_user: CurrentUserDep,
 ) -> GeneratedArtifact:
     ensure_artifact_has_business_link(
         payload.resume_id,
@@ -96,10 +95,10 @@ async def create_artifact(
 
 @router.get("", response_model=list[GeneratedArtifactListItem])
 async def list_artifacts(
+    db: DbSession,
+    current_user: CurrentUserDep,
     limit: ListLimit = 20,
     offset: ListOffset = 0,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUserDep = None,
 ) -> list[GeneratedArtifact]:
     # GeneratedArtifact 列表明确采用 created_at recent-first，优先展示最近生成或写入的材料。
     statement = (
@@ -120,8 +119,8 @@ async def list_artifacts(
 )
 async def generate_cover_letter_artifact(
     payload: CoverLetterGenerateRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUserDep = None,
+    db: DbSession,
+    current_user: CurrentUserDep,
 ) -> GeneratedArtifact:
     return await generate_cover_letter(db, payload, current_user=current_user)
 
@@ -133,8 +132,8 @@ async def generate_cover_letter_artifact(
 )
 async def generate_interview_prep_artifact(
     payload: InterviewPrepGenerateRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUserDep = None,
+    db: DbSession,
+    current_user: CurrentUserDep,
 ) -> GeneratedArtifact:
     return await generate_interview_prep(db, payload, current_user=current_user)
 
@@ -147,8 +146,8 @@ async def generate_interview_prep_artifact(
 async def create_feedback_for_artifact(
     artifact_id: int,
     payload: ArtifactFeedbackCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUserDep = None,
+    db: DbSession,
+    current_user: CurrentUserDep,
 ):
     return await create_artifact_feedback(db, artifact_id, payload, current_user)
 
@@ -156,10 +155,10 @@ async def create_feedback_for_artifact(
 @router.get("/{artifact_id}/feedback", response_model=list[ArtifactFeedbackListItem])
 async def list_feedback_for_artifact(
     artifact_id: int,
+    db: DbSession,
+    current_user: CurrentUserDep,
     limit: ListLimit = 20,
     offset: ListOffset = 0,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUserDep = None,
 ):
     return await list_artifact_feedback(db, artifact_id, limit, offset, current_user)
 
@@ -167,8 +166,8 @@ async def list_feedback_for_artifact(
 @router.get("/{artifact_id}", response_model=GeneratedArtifactRead)
 async def read_artifact(
     artifact_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUserDep = None,
+    db: DbSession,
+    current_user: CurrentUserDep,
 ) -> GeneratedArtifact:
     return await get_generated_artifact_for_user_or_404(db, artifact_id, current_user)
 
@@ -177,8 +176,8 @@ async def read_artifact(
 async def update_artifact(
     artifact_id: int,
     payload: GeneratedArtifactUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUserDep = None,
+    db: DbSession,
+    current_user: CurrentUserDep,
 ) -> GeneratedArtifact:
     artifact = await get_generated_artifact_for_user_or_404(db, artifact_id, current_user)
     update_data = payload.model_dump(exclude_unset=True)

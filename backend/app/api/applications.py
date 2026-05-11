@@ -1,9 +1,7 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentUserDep, ListLimit, ListOffset
-from app.db.session import get_db
+from app.api.deps import CurrentUserDep, DbSession, ListLimit, ListOffset
 from app.models.application_record import ApplicationRecord
 from app.schemas.application_record import (
     ApplicationRecordCreate,
@@ -23,8 +21,8 @@ router = APIRouter(prefix="/api/v1/applications", tags=["applications"])
 @router.post("", response_model=ApplicationRecordRead, status_code=201)
 async def create_application(
     payload: ApplicationRecordCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUserDep = None,
+    db: DbSession,
+    current_user: CurrentUserDep,
 ) -> ApplicationRecord:
     await ensure_resume_and_job_exist_for_user(
         db,
@@ -42,10 +40,10 @@ async def create_application(
 
 @router.get("", response_model=list[ApplicationRecordListItem])
 async def list_applications(
+    db: DbSession,
+    current_user: CurrentUserDep,
     limit: ListLimit = 20,
     offset: ListOffset = 0,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUserDep = None,
 ) -> list[ApplicationRecord]:
     # ApplicationRecord 列表明确采用 updated_at recent-first，优先展示最近推进过的投递。
     statement = (
@@ -62,8 +60,8 @@ async def list_applications(
 @router.get("/{application_id}", response_model=ApplicationRecordRead)
 async def read_application(
     application_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUserDep = None,
+    db: DbSession,
+    current_user: CurrentUserDep,
 ) -> ApplicationRecord:
     return await get_application_record_for_user_or_404(
         db,
@@ -76,8 +74,8 @@ async def read_application(
 async def update_application(
     application_id: int,
     payload: ApplicationRecordUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUserDep = None,
+    db: DbSession,
+    current_user: CurrentUserDep,
 ) -> ApplicationRecord:
     application = await get_application_record_for_user_or_404(
         db,
@@ -97,8 +95,8 @@ async def update_application(
 @router.delete("/{application_id}", status_code=204)
 async def delete_application(
     application_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUserDep = None,
+    db: DbSession,
+    current_user: CurrentUserDep,
 ) -> None:
     application = await get_application_record_for_user_or_404(
         db,

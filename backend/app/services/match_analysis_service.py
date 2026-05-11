@@ -43,11 +43,9 @@ Job posting structured JSON:
 async def analyze_match(
     db: AsyncSession,
     payload: MatchAnalysisRequest,
+    current_user: User,
     llm_client: LLMClient | None = None,
-    current_user: User | None = None,
 ) -> MatchResult:
-    if current_user is None:
-        raise HTTPException(status_code=500, detail="Current user scope is required")
     resume, job = await ensure_resume_and_job_exist_for_user(
         db,
         payload.resume_id,
