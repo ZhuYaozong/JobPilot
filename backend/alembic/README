@@ -1,1 +1,5 @@
-Generic single-database configuration.
+JobPilot backend Alembic migration directory.
+
+This project uses a single PostgreSQL database. Migrations should describe real
+schema changes for the current backend stage and must not claim future Agent,
+RAG, or evaluation tables before the corresponding models are implemented.
