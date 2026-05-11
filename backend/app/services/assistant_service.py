@@ -3,14 +3,17 @@
 Responsibilities:
 1. Resolve (or create) the conversation, scoped to the current user.
 2. Persist the inbound user message with the right ``sequence_no``.
-3. Open an ``AgentRun`` (status=running) and pass its id into the workflow so
+3. Pre-load conversation history + any existing memory_summary so the
+   workflow's decide / format_response nodes see multi-turn context.
+4. Open an ``AgentRun`` (status=running) and pass its id into the workflow so
    ``ToolCallLog`` rows link back correctly.
-4. Run the LangGraph workflow.
-5. On success: persist the assistant message, mark the AgentRun succeeded,
-   bump ``conversation.last_run_at``.
-6. On system-level failure: mark the AgentRun failed; do **not** write an
+5. Run the LangGraph workflow.
+6. On success: persist the assistant message, mark the AgentRun succeeded,
+   bump ``conversation.last_run_at``; upsert ``memory_summaries`` if the
+   workflow produced a new summary.
+7. On system-level failure: mark the AgentRun failed; do **not** write an
    assistant message; surface the error to the caller via the response.
-7. Build the response DTO with full tool-call traces for the UI.
+8. Build the response DTO with full tool-call traces for the UI.
 """
 
 from datetime import datetime, timezone
@@ -25,6 +28,7 @@ from app.agent.workflow import WorkflowDecideError, build_workflow
 from app.llm.client import LLMClient
 from app.models.agent_run import AgentRun
 from app.models.conversation import Conversation
+from app.models.memory_summary import MemorySummary
 from app.models.message import Message
 from app.models.tool_call_log import ToolCallLog
 from app.models.user import User
@@ -35,6 +39,11 @@ from app.schemas.assistant import (
     ToolCallTrace,
 )
 from app.schemas.message import MessageRead
+
+
+# How many recent turns (post-summary) to put in the decide / format_response
+# prompts. Larger windows cost tokens; the summary covers earlier history.
+HISTORY_WINDOW = 8
 
 
 async def run_assistant_turn(
@@ -69,6 +78,22 @@ async def run_assistant_turn(
     user_message_id = user_message.id
     agent_run_id = agent_run.id
 
+    # Pre-load multi-turn context. The current user_message is excluded from
+    # the history window because the prompts pass it separately as
+    # ``user_text``. ``message_count_before_user`` lets maybe_summarize decide
+    # whether the conversation has crossed the summarisation threshold.
+    existing_summary_text, summary_cutoff_message_id = await _load_existing_summary(
+        db, conversation_id,
+    )
+    history = await _load_recent_history(
+        db,
+        conversation_id=conversation_id,
+        exclude_message_id=user_message_id,
+        after_message_id=summary_cutoff_message_id,
+        limit=HISTORY_WINDOW,
+    )
+    message_count_before_user = await _count_messages(db, conversation_id) - 1
+
     workflow = build_workflow(
         db=db,
         current_user=current_user,
@@ -82,6 +107,10 @@ async def run_assistant_turn(
         "user_message_id": user_message_id,
         "user_text": payload.content,
         "agent_run_id": agent_run_id,
+        "conversation_history": history,
+        "existing_summary": existing_summary_text,
+        "message_count_before_user": message_count_before_user,
+        "decide_repair_attempts": 0,
     }
 
     try:
@@ -143,6 +172,19 @@ async def run_assistant_turn(
         agent_run_id=agent_run_id,
     )
 
+    # If maybe_summarize produced a new summary, upsert it now. The cutoff
+    # advances to this turn's assistant message so the next call's history
+    # window starts after it.
+    new_summary = final_state.get("new_summary")
+    if new_summary:
+        await _upsert_memory_summary(
+            db,
+            conversation_id=conversation_id,
+            user_id=current_user_id,
+            summary_text=new_summary,
+            based_on_until_message_id=assistant_message_id,
+        )
+
     # Derive intent for traceability; falls back to "chat" for direct replies.
     intent = (
         final_state.get("tool_name")
@@ -153,6 +195,12 @@ async def run_assistant_turn(
     agent_run.status = "succeeded"
     agent_run.intent = intent
     agent_run.finished_at = finished_at
+    # A non-blocking summarize failure is recorded as error_detail (not
+    # error_class) so the run still counts as succeeded but operators can see
+    # the soft failure in the trace.
+    summary_error = final_state.get("summary_error")
+    if summary_error:
+        agent_run.error_detail = f"non_blocking_summary_failure: {summary_error}"
     conversation.last_run_at = finished_at
     await db.commit()
 
@@ -197,6 +245,97 @@ async def _next_sequence_no(db: AsyncSession, conversation_id: int) -> int:
         ),
     )
     return int(result.scalar_one()) + 1
+
+
+async def _count_messages(db: AsyncSession, conversation_id: int) -> int:
+    result = await db.execute(
+        select(func.count())
+        .select_from(Message)
+        .where(Message.conversation_id == conversation_id),
+    )
+    return int(result.scalar_one())
+
+
+async def _load_existing_summary(
+    db: AsyncSession,
+    conversation_id: int,
+) -> tuple[str | None, int | None]:
+    """Return ``(summary_text, based_on_until_message_id)`` if a summary
+    exists for this conversation, else ``(None, None)``."""
+    result = await db.execute(
+        select(
+            MemorySummary.summary_text,
+            MemorySummary.based_on_until_message_id,
+        ).where(MemorySummary.conversation_id == conversation_id),
+    )
+    row = result.one_or_none()
+    if row is None:
+        return None, None
+    return row.summary_text, row.based_on_until_message_id
+
+
+async def _load_recent_history(
+    db: AsyncSession,
+    *,
+    conversation_id: int,
+    exclude_message_id: int,
+    after_message_id: int | None,
+    limit: int,
+) -> list[dict[str, str]]:
+    """Return up to ``limit`` most-recent messages (oldest first) for the
+    decide / format_response prompts.
+
+    - ``exclude_message_id`` is the just-written user message; the prompts
+      receive it separately as ``user_text``, so we drop it here to avoid
+      duplication.
+    - ``after_message_id`` is the cutoff covered by the existing memory
+      summary. Anything at or before this id is already in the summary, so we
+      exclude it from the recent-history window.
+    """
+    conditions = [
+        Message.conversation_id == conversation_id,
+        Message.id != exclude_message_id,
+    ]
+    if after_message_id is not None:
+        conditions.append(Message.id > after_message_id)
+
+    result = await db.execute(
+        select(Message.role, Message.content, Message.sequence_no)
+        .where(*conditions)
+        .order_by(Message.sequence_no.desc())
+        .limit(limit),
+    )
+    rows = list(result.all())
+    rows.reverse()  # oldest first
+    return [{"role": row.role, "content": row.content} for row in rows]
+
+
+async def _upsert_memory_summary(
+    db: AsyncSession,
+    *,
+    conversation_id: int,
+    user_id: int,
+    summary_text: str,
+    based_on_until_message_id: int,
+) -> None:
+    result = await db.execute(
+        select(MemorySummary).where(
+            MemorySummary.conversation_id == conversation_id,
+        ),
+    )
+    summary = result.scalar_one_or_none()
+    if summary is None:
+        summary = MemorySummary(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            summary_text=summary_text,
+            based_on_until_message_id=based_on_until_message_id,
+        )
+        db.add(summary)
+    else:
+        summary.summary_text = summary_text
+        summary.based_on_until_message_id = based_on_until_message_id
+    await db.commit()
 
 
 async def _append_user_message(
