@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
 
 from app.api.deps import CurrentUserDep, DbSession, ListLimit, ListOffset
@@ -8,8 +8,11 @@ from app.schemas.job_posting import (
     JobPostingListItem,
     JobPostingRead,
     JobPostingUpdate,
+    JobURLFetchPreview,
+    JobURLFetchRequest,
 )
 from app.services.job_parsing_service import parse_job_posting
+from app.services.job_url_fetcher import JobURLFetchError, fetch_jd_from_url
 from app.services.resource_deletion_service import delete_job_posting_tree
 from app.services.user_scope_service import get_job_posting_for_user_or_404
 
@@ -27,6 +30,33 @@ async def create_job(
     await db.commit()
     await db.refresh(job)
     return job
+
+
+@router.post("/fetch-from-url", response_model=JobURLFetchPreview)
+async def fetch_job_from_url(
+    payload: JobURLFetchRequest,
+    current_user: CurrentUserDep,  # noqa: ARG001 — required by deps for auth wall
+) -> JobURLFetchPreview:
+    """Fetch JD content from a public URL and return a *preview* payload.
+
+    Nothing is persisted — the frontend uses this to pre-fill the create
+    Drawer's company / title / city / JD fields, and the user then submits
+    a regular POST /jobs to save. Keeping the two steps separate avoids
+    leaving partially-extracted garbage rows in the DB if the user backs
+    out after seeing wrong content.
+    """
+    try:
+        result = await fetch_jd_from_url(payload.url)
+    except JobURLFetchError as exc:
+        raise HTTPException(status_code=400, detail=exc.user_message) from exc
+
+    return JobURLFetchPreview(
+        jd_text=result.jd_text,
+        title=result.title,
+        company_hint=result.company_hint,
+        city_hint=result.city_hint,
+        source_url=result.source_url,
+    )
 
 
 @router.get("", response_model=list[JobPostingListItem])

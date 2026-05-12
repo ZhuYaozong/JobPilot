@@ -5,7 +5,13 @@ import type {
   JobPostingCreate,
   JobPostingListItem,
   JobPostingUpdate,
+  JobURLFetchPreview,
 } from "@/types/job_posting";
+
+// URL 抓取的端到端预算:连接 6s + 读 12s + trafilatura ~5s = 25s 上限,
+// 留 60s 给用户的慢网络。还是远低于 LLM_OPERATION_TIMEOUT_MS 的 120s,
+// 不需要独立常量。
+const FETCH_FROM_URL_TIMEOUT_MS = 60000;
 
 export async function listJobs(params: ListParams = {}) {
   const response = await apiClient.get<JobPostingListItem[]>("/api/v1/jobs", {
@@ -41,6 +47,15 @@ export async function parseJob(jobId: number) {
     `/api/v1/jobs/${jobId}/parse`,
     undefined,
     { timeout: LLM_OPERATION_TIMEOUT_MS },
+  );
+  return response.data;
+}
+
+export async function fetchJobFromUrl(url: string) {
+  const response = await apiClient.post<JobURLFetchPreview>(
+    "/api/v1/jobs/fetch-from-url",
+    { url },
+    { timeout: FETCH_FROM_URL_TIMEOUT_MS },
   );
   return response.data;
 }

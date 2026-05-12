@@ -38,3 +38,19 @@ class JobPostingRead(JobPostingListItem):
     source_url: str | None
     jd_text: str
     parsed_json: dict[str, Any] | None
+
+
+class JobURLFetchRequest(BaseModel):
+    url: str
+
+
+class JobURLFetchPreview(BaseModel):
+    """Preview-only payload from POST /jobs/fetch-from-url — nothing is
+    persisted yet. The frontend uses this to pre-fill the create form; the
+    user then submits a regular POST /jobs to save."""
+
+    jd_text: str
+    title: str | None
+    company_hint: str | None
+    city_hint: str | None
+    source_url: str
