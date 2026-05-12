@@ -7,8 +7,8 @@ from sqlalchemy import select
 from app.api.deps import CurrentUserDep, DbSession, ListLimit, ListOffset
 from app.models.resume import Resume
 from app.schemas.resume import ResumeCreate, ResumeListItem, ResumeRead, ResumeUpdate
-from app.services.resume_file_extractor import (
-    ResumeExtractionError,
+from app.services.file_text_extractor import (
+    FileExtractionError,
     extract_text_from_upload,
 )
 from app.services.resume_parsing_service import parse_resume
@@ -58,7 +58,7 @@ async def upload_resume(
             content_type=file.content_type,
             payload=raw_bytes,
         )
-    except ResumeExtractionError as exc:
+    except FileExtractionError as exc:
         raise HTTPException(status_code=400, detail=exc.user_message) from exc
 
     derived_title = (title or _derive_title_from_filename(file.filename or ""))

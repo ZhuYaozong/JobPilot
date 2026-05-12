@@ -5,6 +5,9 @@ from app.models.artifact_feedback_event import ArtifactFeedbackEvent
 from app.models.conversation import Conversation
 from app.models.generated_artifact import GeneratedArtifact
 from app.models.job_posting import JobPosting
+from app.models.knowledge_base import KnowledgeBase
+from app.models.knowledge_chunk import KnowledgeChunk
+from app.models.knowledge_document import KnowledgeDocument
 from app.models.match_result import MatchResult
 from app.models.memory_summary import MemorySummary
 from app.models.message import Message
@@ -21,6 +24,9 @@ __all__ = [
     "Conversation",
     "GeneratedArtifact",
     "JobPosting",
+    "KnowledgeBase",
+    "KnowledgeChunk",
+    "KnowledgeDocument",
     "MatchResult",
     "MemorySummary",
     "Message",
