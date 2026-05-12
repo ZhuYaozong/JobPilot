@@ -46,6 +46,28 @@ export async function parseResume(resumeId: number) {
   return response.data;
 }
 
+export async function uploadResume(
+  file: File,
+  options: { title?: string; autoParse?: boolean } = {},
+) {
+  // multipart/form-data is built by the browser so we don't set the header
+  // manually — axios + native FormData picks the right multipart boundary.
+  const form = new FormData();
+  form.append("file", file);
+  if (options.title) {
+    form.append("title", options.title);
+  }
+  if (options.autoParse === false) {
+    form.append("auto_parse", "false");
+  }
+  const response = await apiClient.post<Resume>(
+    "/api/v1/resumes/upload",
+    form,
+    { timeout: LLM_OPERATION_TIMEOUT_MS },
+  );
+  return response.data;
+}
+
 export async function listResumeVersions(
   resumeId: number,
   params: ListParams = {},

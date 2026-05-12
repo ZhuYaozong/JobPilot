@@ -27,6 +27,11 @@ export function formatSourceType(value: string | null | undefined): string {
     upload: "上传",
     manual: "手动录入",
     imported: "导入",
+    // Source types emitted by the file-upload extractor (slice 7'a).
+    pdf: "PDF 上传",
+    docx: "Word 上传",
+    text: "TXT 上传",
+    markdown: "Markdown 上传",
   });
 }
 

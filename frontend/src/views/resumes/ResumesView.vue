@@ -223,42 +223,140 @@
       direction="rtl"
       size="520px"
     >
-      <p class="drawer-hint">粘贴简历原文，保存后可以继续解析和匹配岗位。</p>
+      <div class="drawer-tabs">
+        <button
+          class="drawer-tab"
+          :class="{ 'drawer-tab--active': createMode === 'upload' }"
+          type="button"
+          @click="createMode = 'upload'"
+        >
+          📎 上传文件
+        </button>
+        <button
+          class="drawer-tab"
+          :class="{ 'drawer-tab--active': createMode === 'paste' }"
+          type="button"
+          @click="createMode = 'paste'"
+        >
+          ✍️ 粘贴原文
+        </button>
+      </div>
 
-      <el-form label-position="top" class="drawer-form" @submit.prevent>
-        <el-form-item label="简历标题" required>
-          <el-input v-model="createForm.title" placeholder="例如 Java 后端简历 v1" />
-        </el-form-item>
+      <!-- Upload mode -->
+      <div v-if="createMode === 'upload'" class="upload-pane">
+        <p class="drawer-hint">
+          上传 PDF / DOCX / TXT / Markdown 简历，系统会自动抽取文本并解析关键字段。
+        </p>
 
-        <el-form-item label="来源类型">
-          <el-select v-model="createForm.source_type" placeholder="选择来源">
-            <el-option label="上传" value="upload" />
-            <el-option label="手动录入" value="manual" />
-            <el-option label="导入" value="imported" />
-          </el-select>
-        </el-form-item>
+        <label
+          class="dropzone"
+          :class="{ 'dropzone--active': dragActive, 'dropzone--filled': !!pendingFile }"
+          @dragenter.prevent="onDragEnter"
+          @dragover.prevent="onDragOver"
+          @dragleave.prevent="onDragLeave"
+          @drop.prevent="onDrop"
+        >
+          <input
+            ref="fileInputRef"
+            type="file"
+            class="dropzone__input"
+            accept=".pdf,.docx,.txt,.md,.markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
+            @change="onFileInputChange"
+          >
+          <template v-if="!pendingFile">
+            <div class="dropzone__icon">📄</div>
+            <p class="dropzone__title">把文件拖到这里，或点击选择</p>
+            <p class="dropzone__hint">
+              支持 PDF / DOCX / TXT / Markdown，单文件不超过 5 MB
+            </p>
+          </template>
+          <template v-else>
+            <div class="dropzone__file">
+              <span class="dropzone__file-icon">📎</span>
+              <div class="dropzone__file-body">
+                <strong>{{ pendingFile.name }}</strong>
+                <small>{{ formatFileSize(pendingFile.size) }}</small>
+              </div>
+              <button
+                class="dropzone__clear"
+                type="button"
+                title="移除"
+                @click.prevent.stop="clearPendingFile"
+              >
+                ✕
+              </button>
+            </div>
+          </template>
+        </label>
 
-        <el-form-item label="来源文件链接">
-          <el-input
-            v-model="createForm.source_file_url"
-            placeholder="https://example.com/resume.md"
-          />
-        </el-form-item>
+        <el-form label-position="top" class="drawer-form" @submit.prevent>
+          <el-form-item label="简历标题（可选）">
+            <el-input
+              v-model="uploadForm.title"
+              :placeholder="defaultUploadTitle"
+            />
+          </el-form-item>
 
-        <el-form-item label="简历原文" required>
-          <el-input
-            v-model="createForm.raw_text"
-            type="textarea"
-            :rows="12"
-            placeholder="粘贴简历原文"
-          />
-        </el-form-item>
-      </el-form>
+          <el-form-item>
+            <el-checkbox v-model="uploadForm.autoParse">
+              上传后立即用 AI 解析（推荐）
+            </el-checkbox>
+          </el-form-item>
+        </el-form>
+      </div>
+
+      <!-- Paste mode -->
+      <div v-else class="upload-pane">
+        <p class="drawer-hint">粘贴简历原文，保存后可以继续解析和匹配岗位。</p>
+
+        <el-form label-position="top" class="drawer-form" @submit.prevent>
+          <el-form-item label="简历标题" required>
+            <el-input v-model="createForm.title" placeholder="例如 Java 后端简历 v1" />
+          </el-form-item>
+
+          <el-form-item label="来源类型">
+            <el-select v-model="createForm.source_type" placeholder="选择来源">
+              <el-option label="上传" value="upload" />
+              <el-option label="手动录入" value="manual" />
+              <el-option label="导入" value="imported" />
+            </el-select>
+          </el-form-item>
+
+          <el-form-item label="来源文件链接">
+            <el-input
+              v-model="createForm.source_file_url"
+              placeholder="https://example.com/resume.md"
+            />
+          </el-form-item>
+
+          <el-form-item label="简历原文" required>
+            <el-input
+              v-model="createForm.raw_text"
+              type="textarea"
+              :rows="12"
+              placeholder="粘贴简历原文"
+            />
+          </el-form-item>
+        </el-form>
+      </div>
 
       <template #footer>
         <div class="drawer-footer">
           <el-button text @click="closeCreateDrawer">取消</el-button>
           <el-button
+            v-if="createMode === 'upload'"
+            type="primary"
+            :loading="uploadPending"
+            :disabled="!pendingFile"
+            @click="handleUploadResume"
+          >
+            <template v-if="uploadPending">
+              {{ uploadForm.autoParse ? "上传 + 解析中…" : "上传中…" }}
+            </template>
+            <template v-else>上传简历</template>
+          </el-button>
+          <el-button
+            v-else
             type="primary"
             :loading="createPending"
             :disabled="!canCreateResume"
@@ -283,6 +381,7 @@ import {
   listResumeVersions,
   listResumes,
   parseResume,
+  uploadResume,
 } from "@/api/resumes";
 import type { Resume, ResumeCreate, ResumeListItem } from "@/types/resume";
 import type { ResumeVersionListItem } from "@/types/resume_version";
@@ -304,6 +403,22 @@ const selectedResume = ref<Resume | null>(null);
 
 const createDrawerOpen = ref(false);
 const rawCopied = ref(false);
+
+// Drawer can run in two modes — upload (file) or paste (raw text). Default
+// is upload because the manual paste path is mostly a legacy escape hatch
+// after slice 7'a; we keep it so power users (or markdown-native folks)
+// can still hand-craft a resume row.
+const createMode = ref<"upload" | "paste">("upload");
+
+// Upload state.
+const fileInputRef = ref<HTMLInputElement | null>(null);
+const pendingFile = ref<File | null>(null);
+const dragActive = ref(false);
+const uploadPending = ref(false);
+const uploadForm = ref<{ title: string; autoParse: boolean }>({
+  title: "",
+  autoParse: true,
+});
 
 const createForm = ref({
   title: "",
@@ -379,12 +494,94 @@ function resetCreateForm() {
   };
 }
 
+function resetUploadState() {
+  pendingFile.value = null;
+  uploadForm.value = { title: "", autoParse: true };
+  if (fileInputRef.value) {
+    fileInputRef.value.value = "";
+  }
+}
+
 function openCreateDrawer() {
   createDrawerOpen.value = true;
 }
 
 function closeCreateDrawer() {
   createDrawerOpen.value = false;
+  resetUploadState();
+}
+
+// ---------- Upload helpers --------------------------------------------------
+
+const defaultUploadTitle = computed(() => {
+  const name = pendingFile.value?.name ?? "";
+  if (!name) return "默认使用文件名";
+  return name.replace(/\.[^.]+$/, "");
+});
+
+function onFileInputChange(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (file) {
+    pendingFile.value = file;
+  }
+}
+
+function onDragEnter() {
+  dragActive.value = true;
+}
+
+function onDragOver() {
+  dragActive.value = true;
+}
+
+function onDragLeave() {
+  dragActive.value = false;
+}
+
+function onDrop(event: DragEvent) {
+  dragActive.value = false;
+  const file = event.dataTransfer?.files?.[0];
+  if (file) {
+    pendingFile.value = file;
+  }
+}
+
+function clearPendingFile() {
+  pendingFile.value = null;
+  if (fileInputRef.value) {
+    fileInputRef.value.value = "";
+  }
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+async function handleUploadResume() {
+  if (!pendingFile.value || uploadPending.value) return;
+
+  uploadPending.value = true;
+  try {
+    const created = await uploadResume(pendingFile.value, {
+      title: uploadForm.value.title.trim() || undefined,
+      autoParse: uploadForm.value.autoParse,
+    });
+    ElMessage.success(
+      uploadForm.value.autoParse
+        ? "简历已上传并解析"
+        : "简历已上传，可稍后手动解析",
+    );
+    resetUploadState();
+    closeCreateDrawer();
+    await fetchResumes(created.id);
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, "上传简历失败"));
+  } finally {
+    uploadPending.value = false;
+  }
 }
 
 async function copyRawText() {
@@ -1307,6 +1504,170 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+/* ============ Drawer tab + upload dropzone (slice 7'a) ============ */
+.drawer-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 4px;
+  border-radius: 10px;
+  background: #f3f5f9;
+}
+
+.drawer-tab {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #475467;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.drawer-tab:hover {
+  color: #0f172a;
+}
+
+.drawer-tab--active {
+  color: #0f172a;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.upload-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dropzone {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 168px;
+  padding: 22px 16px;
+  border: 1.5px dashed rgba(15, 23, 42, 0.16);
+  border-radius: 12px;
+  background: #fafbfc;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+
+.dropzone:hover {
+  border-color: rgba(15, 118, 110, 0.45);
+  background: #f5fbfa;
+}
+
+.dropzone--active {
+  border-color: #0f766e;
+  background: #e7f6f4;
+  transform: scale(1.005);
+}
+
+.dropzone--filled {
+  border-style: solid;
+  border-color: rgba(15, 118, 110, 0.32);
+  background: #ffffff;
+  cursor: default;
+}
+
+.dropzone__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.dropzone--filled .dropzone__input {
+  pointer-events: none;
+}
+
+.dropzone__icon {
+  font-size: 32px;
+}
+
+.dropzone__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.dropzone__hint {
+  margin: 0;
+  font-size: 12px;
+  color: #667085;
+}
+
+.dropzone__file {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 10px;
+  background: #fafbfc;
+  text-align: left;
+  z-index: 1;
+}
+
+.dropzone__file-icon {
+  font-size: 22px;
+}
+
+.dropzone__file-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dropzone__file-body strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dropzone__file-body small {
+  font-size: 11px;
+  color: #98a2b3;
+}
+
+.dropzone__clear {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #667085;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.dropzone__clear:hover {
+  background: rgba(220, 38, 38, 0.12);
+  color: #b42318;
 }
 
 .drawer-footer {
