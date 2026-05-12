@@ -64,19 +64,24 @@ function humanizeError(name: string): string {
 
 <style scoped>
 .trace-section {
-  margin-top: 10px;
-  padding-top: 8px;
-  border-top: 1px dashed #e5e7eb;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.04);
 }
 
 .trace-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
   margin: 0;
-  font-size: 12px;
-  color: #6b7280;
-  line-height: 1.6;
+  font-size: 11px;
+  color: #475467;
+  line-height: 1.5;
 }
 
 .trace-line.failed {
@@ -84,10 +89,24 @@ function humanizeError(name: string): string {
 }
 
 .trace-icon {
-  margin-right: 6px;
+  margin-right: 2px;
+}
+
+.trace-label {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.trace-line.failed .trace-label {
+  color: #b45309;
+}
+
+.trace-latency {
+  color: #98a2b3;
 }
 
 .trace-error {
-  color: #dc2626;
+  color: #b42318;
+  font-weight: 600;
 }
 </style>

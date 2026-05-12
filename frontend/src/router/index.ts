@@ -85,6 +85,7 @@ const router = createRouter({
             title: "AI 助手",
             eyebrow: "对话、复盘与模拟面试",
             description: "围绕岗位、简历、投递记录和知识库组织对话入口。",
+            fullBleed: true,
           },
         },
         {
