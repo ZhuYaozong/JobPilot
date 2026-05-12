@@ -1,4 +1,4 @@
-import { apiClient } from "./client";
+import { apiClient, LLM_OPERATION_TIMEOUT_MS } from "./client";
 import type { ListParams } from "@/types/common";
 import type {
   MatchAnalysisRequest,
@@ -41,6 +41,7 @@ export async function analyzeMatch(payload: MatchAnalysisRequest) {
   const response = await apiClient.post<MatchResult>(
     "/api/v1/matches/analyze",
     payload,
+    { timeout: LLM_OPERATION_TIMEOUT_MS },
   );
   return response.data;
 }

@@ -19,6 +19,9 @@
         :tool-calls-for-run="toolCallsForRun"
         :is-running="isRunning"
         :last-error="lastError"
+        :running-phase="runningPhase"
+        :running-tool="runningTool"
+        :live-tool-trace="liveToolTrace"
         @retry="handleRetry"
       />
 
@@ -62,7 +65,7 @@ import { listApplications } from "@/api/applications";
 import {
   listConversations,
   listMessages,
-  runAssistant,
+  runAssistantStream,
 } from "@/api/assistant";
 import { listJobs } from "@/api/jobs";
 import { listResumes } from "@/api/resumes";
@@ -70,6 +73,7 @@ import { listResumes } from "@/api/resumes";
 import type { ApplicationRecordListItem } from "@/types/application_record";
 import type {
   AgentRunSummary,
+  AssistantPhase,
   ConversationListItem,
   MessageRead,
   ToolCallTrace,
@@ -93,6 +97,16 @@ const draftPrompt = ref("");
 const isRunning = ref(false);
 const lastError = ref<string | null>(null);
 const lastFailedUserText = ref<string | null>(null);
+
+// Streaming progress — driven by SSE events from /assistant/run-stream so the
+// MessageThread can show "正在思考……" / "正在查询岗位……" / "正在整理回答……"
+// instead of a single static placeholder for the whole turn.
+const runningPhase = ref<AssistantPhase | null>(null);
+const runningTool = ref<string | null>(null);
+// Inline trace shown above the pending bubble while the turn is still
+// running. We replace it with the persisted tool_calls list from the final
+// agent_run once the message event arrives.
+const liveToolTrace = ref<ToolCallTrace[]>([]);
 
 // Right-pane reference lists for the selectors.
 const resumes = ref<ResumeListItem[]>([]);
@@ -266,51 +280,110 @@ async function sendMessage(content: string) {
   isRunning.value = true;
   lastError.value = null;
   draftPrompt.value = "";
+  runningPhase.value = "deciding";
+  runningTool.value = null;
+  liveToolTrace.value = [];
 
   // Optimistic echo: show the user's message in the thread immediately,
   // before we wait on the backend. We replace it with the server-issued
-  // message once the run returns (or remove it if the request errors out).
+  // message once the started event arrives (or remove it if the request
+  // errors out).
   const optimistic = makeOptimisticUserMessage(content);
   messages.value.push(optimistic);
 
+  const wasNew = conversationId.value === null;
+  let savedAgentRun: AgentRunSummary | null = null;
+  let receivedMessage = false;
+
   try {
-    const response = await runAssistant({
-      conversation_id: conversationId.value,
-      content,
-      context: {
-        resume_id: contextResumeId.value ?? null,
-        job_posting_id: contextJobId.value ?? null,
-        application_record_id: contextApplicationId.value ?? null,
+    await runAssistantStream(
+      {
+        conversation_id: conversationId.value,
+        content,
+        context: {
+          resume_id: contextResumeId.value ?? null,
+          job_posting_id: contextJobId.value ?? null,
+          application_record_id: contextApplicationId.value ?? null,
+        },
       },
-    });
-    // First-turn conversation_id might be new; remember it and refresh the
-    // sidebar so the new conversation shows up there.
-    const isNew = conversationId.value === null;
-    conversationId.value = response.conversation_id;
+      {
+        onStarted: (data) => {
+          conversationId.value = data.conversation_id;
+          // Swap optimistic placeholder for the persisted user message
+          // in-place to preserve scroll position.
+          const idx = messages.value.findIndex((m) => m.id === optimistic.id);
+          if (idx >= 0) {
+            messages.value.splice(idx, 1, data.user_message);
+          } else {
+            messages.value.push(data.user_message);
+          }
+        },
+        onPhase: (data) => {
+          runningPhase.value = data.phase;
+          // Leaving the "deciding" phase implies we're past tool selection
+          // for now — clear the live tool label.
+          if (data.phase !== "deciding") {
+            runningTool.value = null;
+          }
+        },
+        onToolCallStarted: (data) => {
+          runningPhase.value = "deciding"; // status text now driven by tool
+          runningTool.value = data.tool_name;
+          // Append a "running" entry to the live trace so the UI can show it
+          // immediately; ids are negative until we get the real ones back in
+          // the message event.
+          liveToolTrace.value = [
+            ...liveToolTrace.value,
+            {
+              id: -data.iteration,
+              tool_name: data.tool_name,
+              status: "running",
+              error_class: null,
+              latency_ms: null,
+            },
+          ];
+        },
+        onToolCallCompleted: (data) => {
+          runningTool.value = null;
+          // Mark the corresponding entry as success/failed so the trace
+          // shows a check / cross before the final message arrives.
+          liveToolTrace.value = liveToolTrace.value.map((entry, index) => {
+            if (index !== liveToolTrace.value.length - 1) return entry;
+            if (entry.tool_name !== data.tool_name) return entry;
+            return {
+              ...entry,
+              status: data.ok ? "success" : "failed",
+              error_class: data.error_class,
+            };
+          });
+        },
+        onMessage: (data) => {
+          receivedMessage = true;
+          savedAgentRun = data.agent_run;
+          toolCallsForRun.value = {
+            ...toolCallsForRun.value,
+            [data.agent_run.id]: data.agent_run.tool_calls,
+          };
+          messages.value.push(data.assistant_message);
+          lastFailedUserText.value = null;
+        },
+        onError: (data) => {
+          savedAgentRun = data.agent_run;
+          lastError.value = formatRunError(data.agent_run, data.error_class);
+          lastFailedUserText.value = content;
+        },
+      },
+    );
 
-    // Swap optimistic placeholder for the real server message in-place to
-    // preserve scroll position.
-    const idx = messages.value.findIndex((m) => m.id === optimistic.id);
-    if (idx >= 0) {
-      messages.value.splice(idx, 1, response.user_message);
-    } else {
-      messages.value.push(response.user_message);
-    }
-
-    toolCallsForRun.value = {
-      ...toolCallsForRun.value,
-      [response.agent_run.id]: response.agent_run.tool_calls,
-    };
-
-    if (response.assistant_message) {
-      messages.value.push(response.assistant_message);
-      lastFailedUserText.value = null;
-    } else {
-      lastError.value = formatRunError(response.agent_run);
+    if (!receivedMessage && !lastError.value) {
+      // Stream ended cleanly but produced neither a message nor an error —
+      // shouldn't happen given the server always emits one or the other.
+      // Surface it explicitly so the user isn't left staring at a silent UI.
+      lastError.value = "Agent 没有返回结果";
       lastFailedUserText.value = content;
     }
 
-    if (isNew) {
+    if (wasNew && conversationId.value !== null) {
       // Refresh conversation list to surface the just-created one. Fire and
       // forget; failures don't block the chat.
       void refreshConversations();
@@ -324,15 +397,30 @@ async function sendMessage(content: string) {
     ElMessage.error(message);
   } finally {
     isRunning.value = false;
+    runningPhase.value = null;
+    runningTool.value = null;
+    liveToolTrace.value = [];
+    // ``savedAgentRun`` is referenced only via ``toolCallsForRun`` which is
+    // already populated — but keep the local for future eslint friendliness.
+    void savedAgentRun;
   }
 }
 
-function formatRunError(run: AgentRunSummary): string {
-  if (run.error_class === "llm_config_missing" || run.error_class === "llm_unavailable") {
+function formatRunError(
+  run: AgentRunSummary,
+  errorClassOverride?: string | null,
+): string {
+  // Prefer the SSE-supplied error_class because the agent_run row may not
+  // have been updated yet when the error event is emitted.
+  const errorClass = errorClassOverride ?? run.error_class;
+  if (errorClass === "llm_config_missing" || errorClass === "llm_unavailable") {
     return "模型暂时无法响应,稍后再试。";
   }
-  if (run.error_class === "decide_repair_failed") {
+  if (errorClass === "decide_repair_failed") {
     return "模型输出格式异常,我已经重试过了。请稍后再试或换种问法。";
+  }
+  if (errorClass === "empty_assistant_response") {
+    return "Agent 没有产生回复,请换种问法重试。";
   }
   if (run.error_detail) {
     return run.error_detail;

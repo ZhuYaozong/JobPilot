@@ -4,10 +4,17 @@
       v-for="call in toolCalls"
       :key="call.id"
       class="trace-line"
-      :class="{ failed: call.status === 'failed' }"
+      :class="{
+        failed: call.status === 'failed',
+        running: call.status === 'running',
+      }"
     >
-      <span class="trace-icon">{{ toolDisplay(call.tool_name).icon }}</span>
+      <span v-if="call.status === 'running'" class="trace-spinner" />
+      <span v-else class="trace-icon">{{ toolDisplay(call.tool_name).icon }}</span>
       <span class="trace-label">{{ toolDisplay(call.tool_name).label }}</span>
+      <span v-if="call.status === 'running'" class="trace-running-tag">
+        · 进行中
+      </span>
       <span v-if="call.latency_ms !== null" class="trace-latency">
         · {{ formatLatency(call.latency_ms) }}
       </span>
@@ -108,5 +115,33 @@ function humanizeError(name: string): string {
 .trace-error {
   color: #b42318;
   font-weight: 600;
+}
+
+.trace-line.running {
+  color: #0f766e;
+}
+
+.trace-line.running .trace-label {
+  color: #0f766e;
+}
+
+.trace-running-tag {
+  color: #0f766e;
+  font-weight: 600;
+}
+
+.trace-spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 4px;
+  border: 2px solid rgba(15, 118, 110, 0.2);
+  border-top-color: #0f766e;
+  border-radius: 50%;
+  animation: trace-spin 0.8s linear infinite;
+}
+
+@keyframes trace-spin {
+  to { transform: rotate(360deg); }
 }
 </style>

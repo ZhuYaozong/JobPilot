@@ -16,6 +16,8 @@ Responsibilities:
 8. Build the response DTO with full tool-call traces for the UI.
 """
 
+import asyncio
+from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 from typing import Any
 
@@ -228,6 +230,288 @@ async def run_assistant_turn(
         assistant_message_id=assistant_message_id,
         agent_run_id=agent_run_id,
     )
+
+
+async def run_assistant_turn_stream(
+    db: AsyncSession,
+    current_user: User,
+    payload: AssistantRunRequest,
+    llm_client: LLMClient | None = None,
+) -> AsyncIterator[dict[str, Any]]:
+    """Streaming counterpart to :func:`run_assistant_turn`.
+
+    Yields a sequence of events that the SSE endpoint serialises as
+    ``event: <type>\\ndata: <json>\\n\\n`` frames. The shape:
+
+    - ``started`` — once, immediately after the user message is persisted.
+      Lets the UI replace its optimistic placeholder with the server-side
+      message and remember the (possibly new) ``conversation_id``.
+    - ``phase`` — every time a node changes the high-level activity
+      ("deciding" / "formatting" / "summarizing"). Drives the chat's typing
+      indicator copy.
+    - ``tool_call_started`` / ``tool_call_completed`` — bracket each tool
+      invocation so the UI can show a live trace of "正在查询岗位……" etc.
+    - ``message`` — exactly once on success, carries the final assistant
+      message + agent_run summary (same DTOs as the legacy /run response).
+    - ``error`` — exactly once on failure, carries error_class + detail and
+      the agent_run summary so the UI can offer "重试".
+    - ``done`` — always last; signals the consumer to close the connection.
+
+    Implementation note: the workflow is driven concurrently via
+    ``asyncio.create_task``; an ``asyncio.Queue`` bridges the workflow's
+    in-node ``emit_event`` callbacks to this generator so each event can be
+    yielded the instant it happens, not deferred until the whole turn
+    completes.
+    """
+    current_user_id = current_user.id
+
+    conversation = await _get_or_create_conversation(
+        db, current_user, payload.conversation_id,
+    )
+    user_message = await _append_user_message(
+        db, conversation, current_user, payload.content,
+    )
+
+    context_hint = await _build_context_hint(db, current_user.id, payload.context)
+    workflow_user_text = (
+        f"{context_hint}\n\n[用户问题]\n{payload.content}"
+        if context_hint
+        else payload.content
+    )
+
+    agent_run = AgentRun(
+        user_id=current_user_id,
+        conversation_id=conversation.id,
+        trigger_message_id=user_message.id,
+        status="running",
+    )
+    db.add(agent_run)
+    await db.commit()
+    await db.refresh(agent_run)
+
+    conversation_id = conversation.id
+    user_message_id = user_message.id
+    agent_run_id = agent_run.id
+
+    # Tell the UI the message has been persisted server-side. We refetch via
+    # _fetch_message_row to get the same flat row the legacy endpoint returns
+    # — keeps the contract aligned between /run and /run-stream.
+    user_message_dto = await _fetch_message_row(db, user_message_id)
+    yield {
+        "event": "started",
+        "data": {
+            "conversation_id": conversation_id,
+            "user_message": user_message_dto.model_dump(mode="json"),
+        },
+    }
+
+    existing_summary_text, summary_cutoff_message_id = await _load_existing_summary(
+        db, conversation_id,
+    )
+    history = await _load_recent_history(
+        db,
+        conversation_id=conversation_id,
+        exclude_message_id=user_message_id,
+        after_message_id=summary_cutoff_message_id,
+        limit=HISTORY_WINDOW,
+    )
+    message_count_before_user = await _count_messages(db, conversation_id) - 1
+
+    event_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+
+    async def emit_event(event_type: str, data: dict[str, Any]) -> None:
+        await event_queue.put({"event": event_type, "data": data})
+
+    workflow = build_workflow(
+        db=db,
+        current_user=current_user,
+        agent_run_id=agent_run_id,
+        llm_client=llm_client,
+        emit_event=emit_event,
+    )
+
+    initial_state: dict[str, Any] = {
+        "user_id": current_user.id,
+        "conversation_id": conversation_id,
+        "user_message_id": user_message_id,
+        "user_text": workflow_user_text,
+        "agent_run_id": agent_run_id,
+        "conversation_history": history,
+        "existing_summary": existing_summary_text,
+        "message_count_before_user": message_count_before_user,
+        "decide_repair_attempts": 0,
+        "iteration_count": 0,
+        "tool_call_history": [],
+    }
+
+    workflow_exception: Exception | None = None
+    workflow_final_state: dict[str, Any] | None = None
+    workflow_done_signal = asyncio.Event()
+
+    async def _drive_workflow() -> None:
+        nonlocal workflow_exception, workflow_final_state
+        try:
+            workflow_final_state = await workflow.ainvoke(initial_state)
+        except Exception as exc:  # noqa: BLE001 — surfaced via error event below
+            workflow_exception = exc
+        finally:
+            workflow_done_signal.set()
+
+    workflow_task = asyncio.create_task(_drive_workflow())
+
+    # Relay in-flight events. We race ``queue.get()`` against
+    # ``workflow_done_signal`` so the loop exits as soon as the workflow
+    # finishes, then drain any events that arrived just before completion.
+    try:
+        while True:
+            get_task = asyncio.create_task(event_queue.get())
+            done_task = asyncio.create_task(workflow_done_signal.wait())
+            done, _ = await asyncio.wait(
+                [get_task, done_task],
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if get_task in done:
+                done_task.cancel()
+                yield get_task.result()
+            else:
+                get_task.cancel()
+                break
+        while not event_queue.empty():
+            yield event_queue.get_nowait()
+    finally:
+        # Make sure the workflow task itself has surfaced (it should be done
+        # already given we waited on the signal, but await it to clear any
+        # pending exceptions).
+        await workflow_task
+
+    # ----- Finalize ---------------------------------------------------------
+
+    if workflow_exception is not None:
+        if isinstance(workflow_exception, (WorkflowDecideError, ToolSystemError)):
+            error_class = getattr(
+                workflow_exception, "error_class", "workflow_failure",
+            )
+            error_detail = str(workflow_exception)
+        else:
+            error_class = "unexpected_workflow_error"
+            exc = workflow_exception
+            error_detail = f"{type(exc).__name__}: {exc}"
+        response = await _finalize_failed_run(
+            db,
+            agent_run_id=agent_run_id,
+            conversation_id=conversation_id,
+            user_message_id=user_message_id,
+            error_class=error_class,
+            error_detail=error_detail,
+        )
+        yield {
+            "event": "error",
+            "data": {
+                "error_class": error_class,
+                "error_detail": error_detail,
+                "agent_run": response.agent_run.model_dump(mode="json"),
+            },
+        }
+        yield {"event": "done", "data": {}}
+        return
+
+    assert workflow_final_state is not None
+    final_state = workflow_final_state
+
+    decide_error_class = final_state.get("decide_error_class")
+    if decide_error_class:
+        response = await _finalize_failed_run(
+            db,
+            agent_run_id=agent_run_id,
+            conversation_id=conversation_id,
+            user_message_id=user_message_id,
+            error_class=decide_error_class,
+            error_detail=final_state.get("decide_error_detail") or "",
+        )
+        yield {
+            "event": "error",
+            "data": {
+                "error_class": decide_error_class,
+                "error_detail": final_state.get("decide_error_detail") or "",
+                "agent_run": response.agent_run.model_dump(mode="json"),
+            },
+        }
+        yield {"event": "done", "data": {}}
+        return
+
+    final_text = (final_state.get("final_text") or "").strip()
+    if not final_text:
+        response = await _finalize_failed_run(
+            db,
+            agent_run_id=agent_run_id,
+            conversation_id=conversation_id,
+            user_message_id=user_message_id,
+            error_class="empty_assistant_response",
+            error_detail="workflow returned no text",
+        )
+        yield {
+            "event": "error",
+            "data": {
+                "error_class": "empty_assistant_response",
+                "error_detail": "workflow returned no text",
+                "agent_run": response.agent_run.model_dump(mode="json"),
+            },
+        }
+        yield {"event": "done", "data": {}}
+        return
+
+    # Success path mirrors run_assistant_turn line-for-line so both endpoints
+    # leave the DB in identical state.
+    db.expire_all()
+    conversation_fresh = await db.get(Conversation, conversation_id)
+    agent_run_fresh = await db.get(AgentRun, agent_run_id)
+    assert conversation_fresh is not None and agent_run_fresh is not None
+
+    assistant_message_id = await _append_assistant_message(
+        db,
+        conversation_id=conversation_id,
+        user_id=current_user_id,
+        content=final_text,
+        agent_run_id=agent_run_id,
+    )
+
+    new_summary = final_state.get("new_summary")
+    if new_summary:
+        await _upsert_memory_summary(
+            db,
+            conversation_id=conversation_id,
+            user_id=current_user_id,
+            summary_text=new_summary,
+            based_on_until_message_id=assistant_message_id,
+        )
+
+    intent = _derive_intent(final_state.get("tool_call_history") or [])
+    finished_at = datetime.now(timezone.utc)
+    agent_run_fresh.status = "succeeded"
+    agent_run_fresh.intent = intent
+    agent_run_fresh.finished_at = finished_at
+    summary_error = final_state.get("summary_error")
+    if summary_error:
+        agent_run_fresh.error_detail = f"non_blocking_summary_failure: {summary_error}"
+    conversation_fresh.last_run_at = finished_at
+    await db.commit()
+
+    response = await _build_response(
+        db,
+        conversation_id=conversation_id,
+        user_message_id=user_message_id,
+        assistant_message_id=assistant_message_id,
+        agent_run_id=agent_run_id,
+    )
+    assert response.assistant_message is not None
+    yield {
+        "event": "message",
+        "data": {
+            "assistant_message": response.assistant_message.model_dump(mode="json"),
+            "agent_run": response.agent_run.model_dump(mode="json"),
+        },
+    }
+    yield {"event": "done", "data": {}}
 
 
 def _derive_intent(tool_call_history: list[dict[str, Any]]) -> str:

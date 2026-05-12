@@ -29,7 +29,7 @@ without overwriting earlier entries.
 """
 
 import operator
-from typing import Annotated, Any, Literal, TypedDict
+from typing import Annotated, Any, Awaitable, Callable, Literal, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, ValidationError
@@ -46,6 +46,13 @@ from app.agent.tools import TOOL_REGISTRY
 from app.llm.client import LLMClient, LLMClientError, LLMConfigError
 from app.llm.json_utils import load_llm_json
 from app.models.user import User
+
+# Optional progress emitter. ``event_type`` is one of "phase",
+# "tool_call_started", "tool_call_completed"; ``data`` is a JSON-serialisable
+# dict describing the event. The streaming assistant endpoint plugs an
+# asyncio queue here so it can push SSE events to the client mid-run; the
+# non-streaming /run endpoint passes None and gets the old behaviour.
+EventEmitter = Callable[[str, dict[str, Any]], Awaitable[None]]
 
 
 # Hard cap on tool calls per turn. The decide prompt is told how many calls
@@ -123,17 +130,40 @@ def build_workflow(
     current_user: User,
     agent_run_id: int,
     llm_client: LLMClient | None = None,
+    emit_event: EventEmitter | None = None,
 ):
-    """Compile a fresh LangGraph workflow for a single request."""
+    """Compile a fresh LangGraph workflow for a single request.
+
+    ``emit_event`` is invoked before each node starts (and after ``call_tool``
+    finishes) so the streaming endpoint can surface "正在思考……" / "正在查询
+    岗位……" status to the user. ``None`` means events are dropped (used by
+    the non-streaming /run endpoint to keep the legacy contract).
+    """
 
     client = llm_client or LLMClient()
 
+    async def emit(event_type: str, data: dict[str, Any]) -> None:
+        if emit_event is None:
+            return
+        try:
+            await emit_event(event_type, data)
+        except Exception:  # noqa: BLE001 — emit must never crash the workflow
+            pass
+
     async def decide_node(state: AgentState) -> dict[str, Any]:
         attempts = int(state.get("decide_repair_attempts") or 0)
+        iterations_used = int(state.get("iteration_count") or 0)
+        await emit(
+            "phase",
+            {
+                "phase": "deciding",
+                "iteration": iterations_used,
+                "repair_attempt": attempts,
+            },
+        )
         history = state.get("conversation_history") or []
         existing_summary = state.get("existing_summary")
         tool_history = state.get("tool_call_history") or []
-        iterations_used = int(state.get("iteration_count") or 0)
         iterations_remaining = max(MAX_TOOL_ITERATIONS - iterations_used, 0)
 
         if attempts == 0:
@@ -196,6 +226,11 @@ def build_workflow(
     async def call_tool_node(state: AgentState) -> dict[str, Any]:
         tool_name = state["tool_name"]
         assert tool_name is not None
+        iteration = int(state.get("iteration_count") or 0) + 1
+        await emit(
+            "tool_call_started",
+            {"tool_name": tool_name, "iteration": iteration},
+        )
         tool_cls = TOOL_REGISTRY[tool_name]
         ctx = ToolContext(
             db=db,
@@ -218,12 +253,21 @@ def build_workflow(
                 "user_facing_detail": "Tool arguments failed validation.",
             }
 
-        new_iteration = int(state.get("iteration_count") or 0) + 1
+        await emit(
+            "tool_call_completed",
+            {
+                "tool_name": tool_name,
+                "iteration": iteration,
+                "ok": bool(result.get("ok", True)),
+                "error_class": result.get("error_class"),
+            },
+        )
+
         return {
             "tool_call_history": [
                 {"tool": tool_name, "args": args, "result": result},
             ],
-            "iteration_count": new_iteration,
+            "iteration_count": iteration,
             # Clear the per-step action so the next decide isn't confused
             # by stale slots.
             "tool_name": None,
@@ -235,6 +279,8 @@ def build_workflow(
 
         if state.get("action") == "respond_directly":
             return {"final_text": (state.get("direct_text") or "").strip()}
+
+        await emit("phase", {"phase": "formatting"})
 
         # Either we exited the loop after at least one tool call, or the
         # budget cut us off mid-thought. Either way, summarise what we have.
@@ -257,6 +303,8 @@ def build_workflow(
         message_count_after_turn = int(state.get("message_count_before_user") or 0) + 2
         if message_count_after_turn < SUMMARIZE_MESSAGE_THRESHOLD:
             return {}
+
+        await emit("phase", {"phase": "summarizing"})
 
         history = list(state.get("conversation_history") or [])
         history.append({"role": "user", "content": state["user_text"]})
