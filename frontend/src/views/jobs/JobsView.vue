@@ -1,129 +1,210 @@
 <template>
-  <div class="page-stack">
-    <SectionCard
-      title="目标岗位"
-      subtitle="保存感兴趣的岗位、岗位链接和 JD 原文，后续匹配与投递都会围绕它展开。"
-      eyebrow="岗位管理"
-    >
-      <template #aside>
-        <a class="inline-link" href="#new-job">新增岗位</a>
-      </template>
-      <div class="compact-grid">
-        <p class="soft-note">已保存 {{ jobs.length }} 个岗位。</p>
-        <p class="soft-note">当前选中：{{ selectedJob ? `${selectedJob.company_name} · ${selectedJob.job_title}` : "还未选择岗位" }}</p>
+  <div class="jobs">
+    <!-- ========== Page header ========== -->
+    <header class="page-head">
+      <div>
+        <p class="page-head__eyebrow">岗位管理</p>
+        <h1 class="page-head__title">目标岗位</h1>
+        <p class="page-head__subtitle">
+          保存感兴趣的岗位、岗位链接和 JD 原文，匹配分析与投递跟进都会围绕它展开。
+        </p>
       </div>
-    </SectionCard>
 
-    <div class="resource-workspace">
-      <SectionCard class="resource-panel resource-panel--list" title="岗位列表" subtitle="选择一个目标岗位查看 JD。">
-        <div class="resource-list-shell">
-          <div v-if="jobsLoading" class="panel-loading">正在加载岗位...</div>
-          <div v-else-if="jobs.length" class="resource-list">
+      <div class="page-head__actions">
+        <div class="page-head__counts">
+          <strong>{{ jobs.length }}</strong>
+          <span>个岗位</span>
+        </div>
+        <button class="primary-btn" type="button" @click="openCreateDrawer">
+          <span class="primary-btn__icon">+</span>
+          <span>新增岗位</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- ========== Two-column workspace ========== -->
+    <div class="workspace">
+      <!-- ---------- List ---------- -->
+      <aside class="list-pane">
+        <header class="list-pane__head">
+          <h2>岗位列表</h2>
+          <span class="list-pane__hint">点选一条查看详情</span>
+        </header>
+
+        <div class="list-pane__scroll">
+          <div v-if="jobsLoading" class="list-skel">
+            <div v-for="i in 4" :key="i" class="list-skel__row" />
+          </div>
+
+          <div v-else-if="jobs.length" class="list-items">
             <button
               v-for="job in jobs"
               :key="job.id"
-              class="resource-item"
-              :class="{ active: selectedJobId === job.id }"
+              class="list-item"
+              :class="{ 'list-item--active': selectedJobId === job.id }"
               type="button"
               @click="selectJob(job.id)"
             >
-              <div class="resource-item__header">
-                <strong>{{ job.job_title }}</strong>
-                <el-tag size="small" effect="plain">{{ formatJobStatus(job.status) }}</el-tag>
+              <div class="list-item__row">
+                <strong class="list-item__title">{{ job.job_title }}</strong>
+                <span
+                  class="badge"
+                  :class="`badge--${jobStatusTone(job.status)}`"
+                >{{ formatJobStatus(job.status) }}</span>
               </div>
-              <p>{{ job.company_name }}</p>
-              <small>{{ job.city || "城市未填写" }} · {{ formatDateTime(job.updated_at) }}</small>
+              <p class="list-item__company">{{ job.company_name }}</p>
+              <div class="list-item__meta">
+                <span class="list-item__city">
+                  <span class="dot" />
+                  {{ job.city || "城市未填" }}
+                </span>
+                <span class="list-item__time">{{ formatRelativeTime(job.updated_at) }}</span>
+              </div>
             </button>
           </div>
-          <EmptyStateCard
-            v-else
-            eyebrow="开始收集岗位"
-            title="还没有岗位"
-            description="先粘贴一段 JD，后续就能做匹配分析、生成材料并加入投递跟进。"
-          />
+
+          <div v-else class="empty">
+            <div class="empty__icon">📋</div>
+            <p class="empty__title">还没有岗位</p>
+            <p class="empty__hint">先粘贴一段 JD，后续就能匹配分析、生成材料并加入投递跟进。</p>
+            <button class="primary-btn primary-btn--sm" type="button" @click="openCreateDrawer">
+              新增第一个岗位
+            </button>
+          </div>
         </div>
-      </SectionCard>
+      </aside>
 
-      <SectionCard title="岗位详情" subtitle="查看岗位信息、JD 原文和 AI 解析结果。">
-        <div v-if="detailLoading" class="panel-loading">正在加载岗位内容...</div>
-        <EmptyStateCard
-          v-else-if="!selectedJob"
-          eyebrow="选择岗位"
-          title="先选一条目标岗位"
-          description="选中后可以解析 JD、进入匹配分析或加入投递跟进。"
-        />
-        <div v-else class="detail-stack">
-          <div class="detail-actions">
-            <div class="detail-title">
-              <h3>{{ selectedJob.job_title }}</h3>
-              <p>{{ selectedJob.company_name }}</p>
+      <!-- ---------- Detail ---------- -->
+      <main class="detail-pane">
+        <div v-if="detailLoading" class="detail-loading">
+          <div class="detail-loading__spinner" />
+          <p>正在加载岗位内容…</p>
+        </div>
+
+        <div v-else-if="!selectedJob" class="detail-empty">
+          <div class="detail-empty__orb" />
+          <h3>先选一条目标岗位</h3>
+          <p>选中后可以解析 JD、进入匹配分析或加入投递跟进。</p>
+        </div>
+
+        <article v-else class="detail">
+          <!-- Hero stripe: 核心信息 + 主操作 -->
+          <section class="detail-hero">
+            <div class="detail-hero__main">
+              <p class="detail-hero__company">{{ selectedJob.company_name }}</p>
+              <h2 class="detail-hero__title">{{ selectedJob.job_title }}</h2>
+              <div class="detail-hero__metas">
+                <span class="meta-chip">
+                  <span class="meta-chip__icon">📍</span>
+                  {{ selectedJob.city || "城市未填" }}
+                </span>
+                <span
+                  class="meta-chip"
+                  :class="selectedJob.parsed_json ? 'meta-chip--ok' : 'meta-chip--warn'"
+                >
+                  <span class="meta-chip__icon">{{ selectedJob.parsed_json ? "✓" : "○" }}</span>
+                  {{ selectedJob.parsed_json ? "已解析 JD" : "待解析 JD" }}
+                </span>
+                <span class="meta-chip">
+                  <span class="meta-chip__icon">🕒</span>
+                  {{ formatRelativeTime(selectedJob.updated_at) }}
+                </span>
+              </div>
             </div>
-            <div class="panel-actions">
-              <el-button type="primary" :loading="parsePending" @click="handleParseJob">
-                解析岗位
-              </el-button>
-              <RouterLink class="inline-link" to="/matches">和简历匹配</RouterLink>
-              <RouterLink class="inline-link" to="/applications">加入投递跟进</RouterLink>
-              <el-button type="danger" plain :loading="deletePending" @click="handleDeleteJob">
-                删除岗位
-              </el-button>
+
+            <div class="detail-hero__actions">
+              <button
+                class="primary-btn"
+                type="button"
+                :disabled="parsePending"
+                @click="handleParseJob"
+              >
+                <span v-if="parsePending" class="spinner" />
+                <span v-else>✨</span>
+                <span>{{ selectedJob.parsed_json ? "重新解析" : "解析 JD" }}</span>
+              </button>
+              <RouterLink class="ghost-btn" :to="`/matches?job=${selectedJob.id}`">
+                和简历匹配 →
+              </RouterLink>
+              <RouterLink class="ghost-btn" :to="`/applications?job=${selectedJob.id}`">
+                加入投递 →
+              </RouterLink>
+              <button
+                class="ghost-btn ghost-btn--danger"
+                type="button"
+                :disabled="deletePending"
+                @click="handleDeleteJob"
+              >
+                删除
+              </button>
             </div>
-          </div>
+          </section>
 
-          <article class="work-panel-callout">
-            <strong>{{ selectedJobAction.title }}</strong>
-            <p>{{ selectedJobAction.description }}</p>
-          </article>
+          <!-- Hint callout -->
+          <aside class="callout" :class="`callout--${calloutTone}`">
+            <div class="callout__icon">{{ calloutIcon }}</div>
+            <div>
+              <strong>{{ selectedJobAction.title }}</strong>
+              <p>{{ selectedJobAction.description }}</p>
+            </div>
+          </aside>
 
-          <div class="detail-meta">
-            <article>
-              <span>公司</span>
-              <strong>{{ selectedJob.company_name }}</strong>
-            </article>
-            <article>
-              <span>城市</span>
-              <strong>{{ selectedJob.city || "待补充" }}</strong>
-            </article>
-            <article>
-              <span>解析状态</span>
-              <strong>{{ selectedJobParseState }}</strong>
-            </article>
-          </div>
-
-          <article class="inline-note-card">
-            <span>投递网址 / 岗位链接</span>
-            <h3>{{ selectedJob.source_url ? "已保存链接" : "暂未填写链接" }}</h3>
-            <a v-if="selectedJob.source_url" class="detail-link" :href="selectedJob.source_url" target="_blank" rel="noreferrer">
+          <!-- Source URL -->
+          <section v-if="selectedJob.source_url" class="link-card">
+            <span class="link-card__label">岗位链接</span>
+            <a
+              class="link-card__url"
+              :href="selectedJob.source_url"
+              target="_blank"
+              rel="noreferrer"
+            >
               {{ selectedJob.source_url }}
+              <span class="link-card__arrow">↗</span>
             </a>
-            <p v-else>创建岗位时可以填写原始链接，方便后续投递跟进时回到岗位页面。</p>
-          </article>
+          </section>
 
-          <div class="detail-field">
-            <span>JD 原文</span>
-            <pre class="text-block">{{ selectedJob.jd_text }}</pre>
-          </div>
+          <!-- JD original text -->
+          <section class="block">
+            <header class="block__head">
+              <h3>JD 原文</h3>
+              <button class="text-btn" type="button" @click="copyJdText">
+                {{ jdCopied ? "已复制" : "复制原文" }}
+              </button>
+            </header>
+            <pre class="block__pre">{{ selectedJob.jd_text }}</pre>
+          </section>
 
-          <details class="debug-toggle">
-            <summary>查看 AI 解析结果</summary>
-            <JsonBlock
-              title="AI 解析结果"
-              caption="岗位要点"
-              :value="selectedJob.parsed_json"
-              empty-text="还没完成 JD 解析；进入匹配或材料生成前，可以先点上方按钮解析。"
-            />
+          <!-- AI parsed result -->
+          <details class="parsed-block">
+            <summary>
+              <span class="parsed-block__title">AI 解析结果</span>
+              <span class="parsed-block__caption">
+                {{ selectedJob.parsed_json ? "查看结构化要点" : "还未解析" }}
+              </span>
+              <span class="parsed-block__chevron">▾</span>
+            </summary>
+            <pre v-if="selectedJob.parsed_json" class="parsed-block__pre">{{
+              JSON.stringify(selectedJob.parsed_json, null, 2)
+            }}</pre>
+            <p v-else class="parsed-block__empty">
+              还没完成 JD 解析；进入匹配或材料生成前，先点上方"解析 JD"。
+            </p>
           </details>
-        </div>
-      </SectionCard>
+        </article>
+      </main>
     </div>
 
-    <SectionCard
-      id="new-job"
+    <!-- ========== Create drawer ========== -->
+    <el-drawer
+      v-model="createDrawerOpen"
       title="新增岗位"
-      subtitle="粘贴 JD 原文，也可以一起保存岗位链接。"
-      eyebrow="粘贴 JD"
+      direction="rtl"
+      size="520px"
+      :before-close="handleDrawerClose"
     >
-      <el-form label-position="top" class="create-form-grid" @submit.prevent>
+      <p class="drawer-hint">粘贴 JD 原文，也可以一起保存岗位链接。</p>
+
+      <el-form label-position="top" class="drawer-form" @submit.prevent>
         <el-form-item label="公司名称" required>
           <el-input v-model="createForm.company_name" placeholder="例如 OpenAI" />
         </el-form-item>
@@ -140,18 +221,30 @@
           <el-input v-model="createForm.source_url" placeholder="https://example.com/job/123" />
         </el-form-item>
 
-        <el-form-item class="create-form-grid__wide" label="岗位描述 JD" required>
-          <el-input v-model="createForm.jd_text" type="textarea" :rows="8" placeholder="粘贴岗位 JD 原文" />
+        <el-form-item label="JD 原文" required>
+          <el-input
+            v-model="createForm.jd_text"
+            type="textarea"
+            :rows="10"
+            placeholder="粘贴岗位 JD 原文"
+          />
         </el-form-item>
+      </el-form>
 
-        <div class="create-form-grid__wide create-form-actions">
-          <p class="create-form-hint">创建后会自动刷新列表，并选中新岗位。</p>
-          <el-button type="primary" :loading="createPending" :disabled="!canCreateJob" @click="handleCreateJob">
+      <template #footer>
+        <div class="drawer-footer">
+          <el-button text @click="closeCreateDrawer">取消</el-button>
+          <el-button
+            type="primary"
+            :loading="createPending"
+            :disabled="!canCreateJob"
+            @click="handleCreateJob"
+          >
             保存岗位
           </el-button>
         </div>
-      </el-form>
-    </SectionCard>
+      </template>
+    </el-drawer>
   </div>
 </template>
 
@@ -160,11 +253,8 @@ import { computed, onMounted, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 
 import { createJob, deleteJob, getJob, listJobs, parseJob } from "@/api/jobs";
-import EmptyStateCard from "@/components/EmptyStateCard.vue";
-import JsonBlock from "@/components/JsonBlock.vue";
-import SectionCard from "@/components/SectionCard.vue";
 import type { JobPosting, JobPostingCreate, JobPostingListItem } from "@/types/job_posting";
-import { formatDateTime } from "@/utils/format";
+import { formatRelativeTime } from "@/utils/format";
 import { getErrorMessage } from "@/utils/http";
 import { formatJobStatus } from "@/utils/labels";
 
@@ -177,6 +267,9 @@ const deletePending = ref(false);
 const selectedJobId = ref<number | null>(null);
 const selectedJob = ref<JobPosting | null>(null);
 
+const createDrawerOpen = ref(false);
+const jdCopied = ref(false);
+
 const createForm = ref({
   company_name: "",
   job_title: "",
@@ -187,14 +280,10 @@ const createForm = ref({
 
 const canCreateJob = computed(() => {
   return Boolean(
-    createForm.value.company_name.trim() &&
-      createForm.value.job_title.trim() &&
-      createForm.value.jd_text.trim(),
+    createForm.value.company_name.trim()
+      && createForm.value.job_title.trim()
+      && createForm.value.jd_text.trim(),
   );
-});
-
-const selectedJobParseState = computed(() => {
-  return selectedJob.value?.parsed_json ? "已解析" : "待解析";
 });
 
 const selectedJobAction = computed(() => {
@@ -204,19 +293,35 @@ const selectedJobAction = computed(() => {
       description: "选中岗位后，可以解析 JD、做匹配分析或加入投递跟进。",
     };
   }
-
   if (!selectedJob.value.parsed_json) {
     return {
       title: "建议先解析这条 JD",
       description: "解析完成后，匹配分析和材料生成会更稳定。",
     };
   }
-
   return {
     title: "这条岗位可以进入匹配分析",
     description: "下一步可以选择一份简历，查看匹配度并生成求职材料。",
   };
 });
+
+const calloutTone = computed(() => {
+  if (!selectedJob.value) return "muted";
+  if (!selectedJob.value.parsed_json) return "warn";
+  return "ok";
+});
+
+const calloutIcon = computed(() => {
+  if (calloutTone.value === "ok") return "✓";
+  if (calloutTone.value === "warn") return "!";
+  return "·";
+});
+
+function jobStatusTone(status: string): string {
+  if (status === "active") return "ok";
+  if (status === "archived") return "muted";
+  return "neutral";
+}
 
 function buildCreatePayload(): JobPostingCreate {
   return {
@@ -238,6 +343,32 @@ function resetCreateForm() {
   };
 }
 
+function openCreateDrawer() {
+  createDrawerOpen.value = true;
+}
+
+function closeCreateDrawer() {
+  createDrawerOpen.value = false;
+}
+
+function handleDrawerClose(done: () => void) {
+  // Allow closing even when fields are dirty; keep it lightweight here.
+  done();
+}
+
+async function copyJdText() {
+  if (!selectedJob.value) return;
+  try {
+    await navigator.clipboard.writeText(selectedJob.value.jd_text);
+    jdCopied.value = true;
+    setTimeout(() => {
+      jdCopied.value = false;
+    }, 1800);
+  } catch {
+    ElMessage.error("复制失败，请手动选择文本");
+  }
+}
+
 async function fetchJobDetail(jobId: number) {
   detailLoading.value = true;
   try {
@@ -257,8 +388,8 @@ async function fetchJobs(nextSelectedId?: number | null) {
     jobs.value = data;
 
     const targetId =
-      nextSelectedId ??
-      (selectedJobId.value && data.some((job) => job.id === selectedJobId.value)
+      nextSelectedId
+      ?? (selectedJobId.value && data.some((job) => job.id === selectedJobId.value)
         ? selectedJobId.value
         : data[0]?.id ?? null);
 
@@ -283,7 +414,7 @@ async function selectJob(jobId: number) {
 
 async function handleCreateJob() {
   if (!canCreateJob.value) {
-    ElMessage.warning("请先填写公司名称、岗位名称和岗位描述");
+    ElMessage.warning("请先填写公司名称、岗位名称和 JD 原文");
     return;
   }
 
@@ -292,6 +423,7 @@ async function handleCreateJob() {
     const created = await createJob(buildCreatePayload());
     ElMessage.success("岗位已创建");
     resetCreateForm();
+    closeCreateDrawer();
     await fetchJobs(created.id);
   } catch (error) {
     ElMessage.error(getErrorMessage(error, "创建岗位失败"));
@@ -357,3 +489,755 @@ onMounted(async () => {
   await fetchJobs();
 });
 </script>
+
+<style scoped>
+.jobs {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 1320px;
+  margin: 0 auto;
+}
+
+/* ============ Page header ============ */
+.page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 6px 4px;
+}
+
+.page-head__eyebrow {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: #0f766e;
+  text-transform: uppercase;
+}
+
+.page-head__title {
+  margin: 6px 0 4px;
+  font-size: 28px;
+  font-weight: 760;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+}
+
+.page-head__subtitle {
+  margin: 0;
+  max-width: 640px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #667085;
+}
+
+.page-head__actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.page-head__counts {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.04);
+}
+
+.page-head__counts strong {
+  font-size: 18px;
+  font-weight: 760;
+  color: #0f172a;
+}
+
+.page-head__counts span {
+  font-size: 12px;
+  color: #667085;
+}
+
+/* ============ Buttons ============ */
+.primary-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  border: none;
+  border-radius: 999px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #2563eb, #0f766e);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.22);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+
+.primary-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(37, 99, 235, 0.3);
+}
+
+.primary-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  box-shadow: none;
+}
+
+.primary-btn--sm {
+  padding: 7px 14px;
+  font-size: 12px;
+}
+
+.primary-btn__icon {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.ghost-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 999px;
+  background: #ffffff;
+  color: #344054;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.ghost-btn:hover:not(:disabled) {
+  border-color: rgba(15, 118, 110, 0.4);
+  background: #f0fbfa;
+  color: #0f766e;
+}
+
+.ghost-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.ghost-btn--danger {
+  border-color: rgba(220, 38, 38, 0.28);
+  color: #b42318;
+}
+
+.ghost-btn--danger:hover:not(:disabled) {
+  border-color: rgba(220, 38, 38, 0.5);
+  background: #fff5f5;
+  color: #b42318;
+}
+
+.text-btn {
+  padding: 4px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.text-btn:hover {
+  background: rgba(15, 118, 110, 0.1);
+}
+
+/* ============ Workspace layout ============ */
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.85fr) minmax(0, 2fr);
+  gap: 18px;
+  align-items: start;
+}
+
+/* ============ List pane ============ */
+.list-pane {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
+  overflow: hidden;
+}
+
+.list-pane__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.list-pane__head h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.list-pane__hint {
+  font-size: 11px;
+  color: #98a2b3;
+}
+
+.list-pane__scroll {
+  max-height: clamp(420px, calc(100vh - 280px), 720px);
+  overflow-y: auto;
+  padding: 10px;
+}
+
+.list-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.list-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.list-item:hover {
+  background: #f8fafc;
+  border-color: rgba(15, 23, 42, 0.08);
+  transform: translateX(2px);
+}
+
+.list-item--active {
+  background: linear-gradient(135deg, rgba(231, 246, 244, 0.9), rgba(232, 240, 255, 0.7));
+  border-color: rgba(15, 118, 110, 0.3);
+  box-shadow: 0 4px 12px rgba(15, 118, 110, 0.08);
+  transform: none;
+}
+
+.list-item__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.list-item__title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.35;
+}
+
+.list-item__company {
+  margin: 0;
+  font-size: 12px;
+  color: #475467;
+}
+
+.list-item__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: #98a2b3;
+}
+
+.list-item__city {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dot {
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #cbd5e1;
+}
+
+.badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.badge--ok {
+  background: rgba(15, 118, 110, 0.12);
+  color: #0f766e;
+}
+
+.badge--muted {
+  background: rgba(15, 23, 42, 0.06);
+  color: #667085;
+}
+
+.badge--neutral {
+  background: rgba(37, 99, 235, 0.1);
+  color: #1d4ed8;
+}
+
+/* ============ List skeleton ============ */
+.list-skel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px;
+}
+
+.list-skel__row {
+  height: 64px;
+  border-radius: 10px;
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite linear;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ============ Empty / loading ============ */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 32px 20px;
+  text-align: center;
+}
+
+.empty__icon {
+  font-size: 36px;
+}
+
+.empty__title {
+  margin: 4px 0 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.empty__hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #667085;
+  max-width: 240px;
+}
+
+.detail-loading {
+  display: grid;
+  place-items: center;
+  gap: 14px;
+  min-height: 360px;
+  color: #667085;
+  font-size: 13px;
+}
+
+.detail-loading__spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(15, 118, 110, 0.2);
+  border-top-color: #0f766e;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.detail-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 80px 24px;
+  text-align: center;
+  color: #667085;
+}
+
+.detail-empty__orb {
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #0f766e, #2563eb);
+  box-shadow: 0 16px 32px rgba(15, 118, 110, 0.24);
+}
+
+.detail-empty h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #0f172a;
+}
+
+.detail-empty p {
+  margin: 0;
+  max-width: 360px;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+/* ============ Detail pane ============ */
+.detail-pane {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
+  overflow: hidden;
+}
+
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 24px 28px 28px;
+}
+
+/* Hero stripe */
+.detail-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.detail-hero__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.detail-hero__company {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f766e;
+}
+
+.detail-hero__title {
+  margin: 4px 0 10px;
+  font-size: clamp(22px, 2.4vw, 28px);
+  font-weight: 760;
+  line-height: 1.2;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+}
+
+.detail-hero__metas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.meta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.05);
+  font-size: 12px;
+  font-weight: 600;
+  color: #475467;
+}
+
+.meta-chip__icon {
+  font-size: 11px;
+}
+
+.meta-chip--ok {
+  background: rgba(15, 118, 110, 0.12);
+  color: #0f766e;
+}
+
+.meta-chip--warn {
+  background: rgba(245, 158, 11, 0.16);
+  color: #b45309;
+}
+
+.detail-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  max-width: 320px;
+}
+
+/* Callout */
+.callout {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+}
+
+.callout--ok {
+  border-color: rgba(15, 118, 110, 0.24);
+  background: linear-gradient(135deg, #f0fbfa, #e7f6f4);
+}
+
+.callout--warn {
+  border-color: rgba(245, 158, 11, 0.3);
+  background: linear-gradient(135deg, #fffbf0, #fff5db);
+}
+
+.callout--muted {
+  border-color: rgba(15, 23, 42, 0.08);
+  background: #f8fafc;
+}
+
+.callout__icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.callout strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.callout p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #475467;
+}
+
+/* Link card */
+.link-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.link-card__label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #98a2b3;
+  text-transform: uppercase;
+}
+
+.link-card__url {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: #2563eb;
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.link-card__url:hover {
+  text-decoration: underline;
+}
+
+.link-card__arrow {
+  margin-left: 4px;
+  font-size: 12px;
+}
+
+/* Block: JD text */
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.block__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.block__head h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.block__pre {
+  margin: 0;
+  padding: 18px 20px;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 10px;
+  background: #fafbfc;
+  color: #0f172a;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Parsed block */
+.parsed-block {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.parsed-block > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.parsed-block > summary::-webkit-details-marker {
+  display: none;
+}
+
+.parsed-block__title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.parsed-block__caption {
+  flex: 1;
+  font-size: 12px;
+  color: #98a2b3;
+}
+
+.parsed-block__chevron {
+  font-size: 14px;
+  color: #98a2b3;
+  transition: transform 0.15s ease;
+}
+
+.parsed-block[open] > summary .parsed-block__chevron {
+  transform: rotate(180deg);
+}
+
+.parsed-block__pre {
+  margin: 0;
+  padding: 14px 16px;
+  border-top: 1px solid rgba(15, 23, 42, 0.06);
+  background: #fafbfc;
+  color: #475467;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.parsed-block__empty {
+  margin: 0;
+  padding: 14px 16px;
+  border-top: 1px solid rgba(15, 23, 42, 0.06);
+  font-size: 13px;
+  color: #98a2b3;
+}
+
+/* Spinner inside primary button */
+.spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+/* ============ Drawer ============ */
+.drawer-hint {
+  margin: 0 0 16px;
+  font-size: 12px;
+  color: #667085;
+}
+
+.drawer-form {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.drawer-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* ============ Responsive ============ */
+@media (max-width: 1180px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .list-pane__scroll {
+    max-height: 360px;
+  }
+
+  .detail-hero {
+    flex-direction: column;
+  }
+
+  .detail-hero__actions {
+    max-width: none;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 720px) {
+  .page-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .page-head__actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+</style>
