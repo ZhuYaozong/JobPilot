@@ -202,34 +202,119 @@
       size="520px"
       :before-close="handleDrawerClose"
     >
-      <p class="drawer-hint">粘贴 JD 原文，也可以一起保存岗位链接。</p>
+      <div class="drawer-tabs">
+        <button
+          class="drawer-tab"
+          :class="{ 'drawer-tab--active': createMode === 'url' }"
+          type="button"
+          @click="createMode = 'url'"
+        >
+          🔗 从 URL 抓取
+        </button>
+        <button
+          class="drawer-tab"
+          :class="{ 'drawer-tab--active': createMode === 'manual' }"
+          type="button"
+          @click="createMode = 'manual'"
+        >
+          📝 手动填写
+        </button>
+      </div>
 
-      <el-form label-position="top" class="drawer-form" @submit.prevent>
-        <el-form-item label="公司名称" required>
-          <el-input v-model="createForm.company_name" placeholder="例如 OpenAI" />
-        </el-form-item>
+      <!-- URL mode -->
+      <div v-if="createMode === 'url'" class="url-pane">
+        <p class="drawer-hint">
+          粘贴一个岗位链接（公司官网 careers 页 / Greenhouse / Lever 等公开页效果最好），
+          系统会自动抓取并填好下方表单。
+        </p>
 
-        <el-form-item label="岗位名称" required>
-          <el-input v-model="createForm.job_title" placeholder="例如 AI Application Engineer" />
-        </el-form-item>
-
-        <el-form-item label="城市">
-          <el-input v-model="createForm.city" placeholder="例如 上海" />
-        </el-form-item>
-
-        <el-form-item label="投递网址 / 岗位链接">
-          <el-input v-model="createForm.source_url" placeholder="https://example.com/job/123" />
-        </el-form-item>
-
-        <el-form-item label="JD 原文" required>
+        <div class="url-input-row">
           <el-input
-            v-model="createForm.jd_text"
-            type="textarea"
-            :rows="10"
-            placeholder="粘贴岗位 JD 原文"
+            v-model="fetchUrlInput"
+            placeholder="https://example.com/jobs/senior-backend"
+            :disabled="fetchPending"
+            @keyup.enter="handleFetchFromUrl"
           />
-        </el-form-item>
-      </el-form>
+          <el-button
+            type="primary"
+            :loading="fetchPending"
+            :disabled="!fetchUrlInput.trim()"
+            @click="handleFetchFromUrl"
+          >
+            <template v-if="fetchPending">抓取中…</template>
+            <template v-else>抓取</template>
+          </el-button>
+        </div>
+
+        <div v-if="fetchHint" class="url-hint" :class="`url-hint--${fetchHintTone}`">
+          {{ fetchHint }}
+        </div>
+
+        <!-- Once we have a preview, fall through to the same form as
+             manual mode so the user can review + edit before saving. -->
+        <el-form
+          v-if="fetchPreviewReady"
+          label-position="top"
+          class="drawer-form"
+          @submit.prevent
+        >
+          <el-form-item label="公司名称" required>
+            <el-input v-model="createForm.company_name" placeholder="例如 OpenAI" />
+          </el-form-item>
+
+          <el-form-item label="岗位名称" required>
+            <el-input v-model="createForm.job_title" placeholder="例如 AI Application Engineer" />
+          </el-form-item>
+
+          <el-form-item label="城市">
+            <el-input v-model="createForm.city" placeholder="例如 上海" />
+          </el-form-item>
+
+          <el-form-item label="JD 原文" required>
+            <el-input
+              v-model="createForm.jd_text"
+              type="textarea"
+              :rows="10"
+              placeholder="抓取到的 JD 文本"
+            />
+          </el-form-item>
+        </el-form>
+      </div>
+
+      <!-- Manual mode -->
+      <div v-else class="url-pane">
+        <p class="drawer-hint">粘贴 JD 原文，也可以一起保存岗位链接。</p>
+
+        <el-form label-position="top" class="drawer-form" @submit.prevent>
+          <el-form-item label="公司名称" required>
+            <el-input v-model="createForm.company_name" placeholder="例如 OpenAI" />
+          </el-form-item>
+
+          <el-form-item label="岗位名称" required>
+            <el-input v-model="createForm.job_title" placeholder="例如 AI Application Engineer" />
+          </el-form-item>
+
+          <el-form-item label="城市">
+            <el-input v-model="createForm.city" placeholder="例如 上海" />
+          </el-form-item>
+
+          <el-form-item label="投递网址 / 岗位链接">
+            <el-input
+              v-model="createForm.source_url"
+              placeholder="https://example.com/job/123"
+            />
+          </el-form-item>
+
+          <el-form-item label="JD 原文" required>
+            <el-input
+              v-model="createForm.jd_text"
+              type="textarea"
+              :rows="10"
+              placeholder="粘贴岗位 JD 原文"
+            />
+          </el-form-item>
+        </el-form>
+      </div>
 
       <template #footer>
         <div class="drawer-footer">
@@ -252,7 +337,14 @@
 import { computed, onMounted, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 
-import { createJob, deleteJob, getJob, listJobs, parseJob } from "@/api/jobs";
+import {
+  createJob,
+  deleteJob,
+  fetchJobFromUrl,
+  getJob,
+  listJobs,
+  parseJob,
+} from "@/api/jobs";
 import type { JobPosting, JobPostingCreate, JobPostingListItem } from "@/types/job_posting";
 import { formatRelativeTime } from "@/utils/format";
 import { getErrorMessage } from "@/utils/http";
@@ -269,6 +361,15 @@ const selectedJob = ref<JobPosting | null>(null);
 
 const createDrawerOpen = ref(false);
 const jdCopied = ref(false);
+
+// Drawer modes — URL fetch first (the recommended path post-7'b),
+// manual paste as a fallback for sites our naive fetcher can't handle.
+const createMode = ref<"url" | "manual">("url");
+const fetchUrlInput = ref("");
+const fetchPending = ref(false);
+const fetchPreviewReady = ref(false);
+const fetchHint = ref<string>("");
+const fetchHintTone = ref<"info" | "ok" | "warn">("info");
 
 const createForm = ref({
   company_name: "",
@@ -343,17 +444,72 @@ function resetCreateForm() {
   };
 }
 
+function resetFetchState() {
+  fetchUrlInput.value = "";
+  fetchPreviewReady.value = false;
+  fetchHint.value = "";
+  fetchHintTone.value = "info";
+}
+
 function openCreateDrawer() {
   createDrawerOpen.value = true;
 }
 
 function closeCreateDrawer() {
   createDrawerOpen.value = false;
+  resetFetchState();
 }
 
 function handleDrawerClose(done: () => void) {
   // Allow closing even when fields are dirty; keep it lightweight here.
   done();
+}
+
+async function handleFetchFromUrl() {
+  const url = fetchUrlInput.value.trim();
+  if (!url || fetchPending.value) return;
+
+  fetchPending.value = true;
+  fetchHint.value = "正在抓取页面…";
+  fetchHintTone.value = "info";
+  try {
+    const preview = await fetchJobFromUrl(url);
+    // Fill the form so the user can review + edit before saving. We only
+    // overwrite empty fields so re-running the fetch on a tweaked URL
+    // doesn't blow away the user's manual edits to e.g. company name.
+    if (!createForm.value.company_name.trim() && preview.company_hint) {
+      createForm.value.company_name = preview.company_hint;
+    }
+    if (!createForm.value.job_title.trim() && preview.title) {
+      createForm.value.job_title = preview.title;
+    }
+    if (!createForm.value.city.trim() && preview.city_hint) {
+      createForm.value.city = preview.city_hint;
+    }
+    if (!createForm.value.source_url.trim()) {
+      createForm.value.source_url = preview.source_url;
+    }
+    // JD text is the high-confidence field — always replace it on fetch so
+    // the latest fetch is what the user sees. They can still edit before
+    // saving.
+    createForm.value.jd_text = preview.jd_text;
+
+    fetchPreviewReady.value = true;
+    const filledFields: string[] = [];
+    if (preview.title) filledFields.push("岗位");
+    if (preview.company_hint) filledFields.push("公司");
+    if (preview.city_hint) filledFields.push("城市");
+    fetchHint.value = filledFields.length
+      ? `已抓取到 JD,并猜测了 ${filledFields.join("、")},请检查后保存。`
+      : "已抓取到 JD,请补全公司、岗位等字段后保存。";
+    fetchHintTone.value = "ok";
+  } catch (error) {
+    fetchPreviewReady.value = false;
+    fetchHint.value = getErrorMessage(error, "抓取失败,请换种方式提供 JD。");
+    fetchHintTone.value = "warn";
+  } finally {
+    fetchPending.value = false;
+  }
 }
 
 async function copyJdText() {
@@ -1194,6 +1350,7 @@ onMounted(async () => {
 .drawer-hint {
   margin: 0 0 16px;
   font-size: 12px;
+  line-height: 1.6;
   color: #667085;
 }
 
@@ -1207,6 +1364,80 @@ onMounted(async () => {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+/* URL-fetch tab (slice 7'b) — same shell as ResumesView.vue's upload tab */
+.drawer-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 4px;
+  border-radius: 10px;
+  background: #f3f5f9;
+}
+
+.drawer-tab {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #475467;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.drawer-tab:hover {
+  color: #0f172a;
+}
+
+.drawer-tab--active {
+  color: #0f172a;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.url-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.url-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.url-input-row .el-input {
+  flex: 1;
+}
+
+.url-hint {
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.url-hint--info {
+  background: #f5f9ff;
+  border-color: rgba(37, 99, 235, 0.18);
+  color: #1d4ed8;
+}
+
+.url-hint--ok {
+  background: #f0fbfa;
+  border-color: rgba(15, 118, 110, 0.24);
+  color: #0f766e;
+}
+
+.url-hint--warn {
+  background: #fff7eb;
+  border-color: rgba(245, 158, 11, 0.3);
+  color: #b45309;
 }
 
 /* ============ Responsive ============ */
