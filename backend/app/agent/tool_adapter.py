@@ -99,6 +99,13 @@ class BaseTool(ABC):
         raw_args: dict[str, Any],
         ctx: ToolContext,
     ) -> dict[str, Any]:
+        # In the ReAct loop a previous tool call's ``_finalize_log`` rolled
+        # the shared session back, which expires every attached ORM instance
+        # including ``ctx.current_user``. A subsequent sync ``.id`` access
+        # would then trigger a lazy load and raise MissingGreenlet. Refresh
+        # eagerly so all attributes are loaded before any sync access below.
+        await ctx.db.refresh(ctx.current_user)
+
         # 1. Pydantic validation. We persist a failed ToolCallLog before
         #    raising so LangGraph's repair attempt has an audit trail.
         try:

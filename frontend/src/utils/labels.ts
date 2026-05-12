@@ -101,3 +101,25 @@ export function formatOperatorType(value: string | null | undefined): string {
     assistant: "助手",
   });
 }
+
+// User-facing names for the agent's tool calls. The backend tool name (e.g.
+// "list_user_jobs") is technical; for the message trace we want something
+// readable. Display + icon both live here so a future redesign only touches
+// this file.
+export interface ToolDisplay {
+  label: string;
+  icon: string;
+}
+
+const TOOL_DISPLAY: Record<string, ToolDisplay> = {
+  list_user_jobs: { label: "查询岗位", icon: "🔍" },
+  list_user_resumes: { label: "查询简历", icon: "🔍" },
+  list_user_applications: { label: "查询投递", icon: "🔍" },
+  analyze_match: { label: "匹配分析", icon: "📊" },
+  generate_cover_letter: { label: "生成求职信", icon: "✍️" },
+  generate_interview_prep: { label: "准备面试", icon: "🎤" },
+};
+
+export function formatToolName(name: string): ToolDisplay {
+  return TOOL_DISPLAY[name] ?? { label: name, icon: "🔧" };
+}

@@ -1,31 +1,35 @@
 """LangGraph workflow for the assistant.
 
-Slice 4 nodes: ``decide`` → optional self-loop on a single ``decide`` repair →
-optional ``call_tool`` → ``format_response`` → ``maybe_summarize``.
+Slice 5 introduces a ReAct-style multi-tool loop. The graph nodes are still
+the same as slice 4 — ``decide``, ``call_tool``, ``format_response``,
+``maybe_summarize`` — but the edge from ``call_tool`` now goes back to
+``decide`` instead of forward to ``format_response``. ``decide`` inspects
+``tool_call_history`` plus a per-turn iteration budget; it can call more
+tools, give up and respond, or be force-routed to ``format_response`` once
+the budget runs out.
 
-The graph state intentionally carries only serialisable fields (ints, strings,
-dicts, lists). The AsyncSession and current User are passed to nodes via
-closures built at compile time, so the state can later be persisted or
-streamed without extra machinery.
+Graph (5 nodes, with the new ReAct loop):
 
-Slice 4 promotes the workflow from slice 3 in three ways:
+    START
+      ↓
+    decide ──┬── action="call_tool" & budget left ──→ call_tool ──→ decide  (loop)
+             │
+             ├── action="respond_directly" ──→ format_response ──→ maybe_summarize ──→ END
+             │
+             ├── budget exhausted but action="call_tool" ──→ format_response ──→ ...
+             │
+             ├── repair attempts remaining for bad output ──→ decide  (self-loop)
+             │
+             └── repair attempts exhausted ──→ END  (decide_error_class set)
 
-- ``conversation_history`` and ``existing_summary`` are pre-loaded by the
-  caller and threaded into both the decide and format_response prompts so the
-  agent sees prior turns.
-- A single ``decide`` repair attempt: if the first decide call returns
-  unparseable or schema-mismatched output, the workflow loops back to decide
-  with the previous raw output + error description in the prompt. If the
-  retry also fails, we bail out with ``decide_repair_failed`` and the caller
-  marks the AgentRun failed.
-- A ``maybe_summarize`` node at the tail: when the conversation has grown
-  past a threshold, it asks the LLM for a fresh memory summary and stashes it
-  in state for the caller to persist. Failures here are non-blocking — the
-  user still gets the assistant reply; we just leave the previous summary in
-  place and surface the failure via a soft signal.
+Closures (db, current_user, agent_run_id) are unchanged. State carries only
+JSON-serialisable values; ``tool_call_history`` uses ``operator.add`` as a
+LangGraph reducer so each ``call_tool`` invocation can append a single entry
+without overwriting earlier entries.
 """
 
-from typing import Any, Literal, TypedDict
+import operator
+from typing import Annotated, Any, Literal, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, ValidationError
@@ -44,10 +48,12 @@ from app.llm.json_utils import load_llm_json
 from app.models.user import User
 
 
-# Trigger a memory summary write when the conversation has at least this
-# many persisted messages (including the user/assistant pair we are about
-# to add). Slice 4 keeps the same threshold as documented in the slice plan;
-# the maybe_summarize node enforces it.
+# Hard cap on tool calls per turn. The decide prompt is told how many calls
+# remain so it can wind down voluntarily; this cap is the safety net.
+MAX_TOOL_ITERATIONS = 3
+
+# Trigger a memory summary write when the conversation has at least this many
+# persisted messages (counting the user/assistant pair we are about to add).
 SUMMARIZE_MESSAGE_THRESHOLD = 20
 
 
@@ -58,11 +64,8 @@ class AgentState(TypedDict, total=False):
     user_message_id: int
     user_text: str
     agent_run_id: int
-    # Pre-loaded multi-turn context.
     conversation_history: list[dict[str, str]]
     existing_summary: str | None
-    # Total persisted message count *before* the current user message — used
-    # by maybe_summarize to decide whether to write a summary this turn.
     message_count_before_user: int
 
     # `decide` node output / repair scratchpad.
@@ -74,21 +77,20 @@ class AgentState(TypedDict, total=False):
     decide_last_raw_output: str | None
     decide_last_error: str | None
 
-    # `call_tool` node output.
-    tool_result: dict[str, Any] | None
+    # ReAct accumulator. ``operator.add`` reducer means each ``call_tool``
+    # invocation can return ``{"tool_call_history": [new_entry]}`` and have it
+    # appended to whatever was already there.
+    tool_call_history: Annotated[list[dict[str, Any]], operator.add]
+    iteration_count: int
 
     # `format_response` node output.
     final_text: str
 
-    # `maybe_summarize` node output. ``new_summary`` is the text the caller
-    # should persist into memory_summaries; ``summary_error`` is set on
-    # non-blocking failure (e.g. LLM down at summarise time).
+    # `maybe_summarize` node output.
     new_summary: str | None
     summary_error: str | None
 
-    # Hard failure signalling — populated only when decide produces
-    # unrecoverable garbage even after one repair attempt. assistant_service
-    # treats this as a system-level failure.
+    # Hard failure signalling.
     decide_error_class: str | None
     decide_error_detail: str | None
 
@@ -122,11 +124,7 @@ def build_workflow(
     agent_run_id: int,
     llm_client: LLMClient | None = None,
 ):
-    """Compile a fresh LangGraph workflow for a single request.
-
-    The graph is bound to ``db``, ``current_user``, and ``agent_run_id`` via
-    closures, so a workflow instance is single-use.
-    """
+    """Compile a fresh LangGraph workflow for a single request."""
 
     client = llm_client or LLMClient()
 
@@ -134,10 +132,17 @@ def build_workflow(
         attempts = int(state.get("decide_repair_attempts") or 0)
         history = state.get("conversation_history") or []
         existing_summary = state.get("existing_summary")
+        tool_history = state.get("tool_call_history") or []
+        iterations_used = int(state.get("iteration_count") or 0)
+        iterations_remaining = max(MAX_TOOL_ITERATIONS - iterations_used, 0)
 
         if attempts == 0:
             prompt = build_decide_prompt(
-                state["user_text"], history=history, existing_summary=existing_summary,
+                state["user_text"],
+                history=history,
+                existing_summary=existing_summary,
+                tool_call_history=tool_history,
+                iterations_remaining=iterations_remaining,
             )
         else:
             prompt = build_decide_repair_prompt(
@@ -146,6 +151,8 @@ def build_workflow(
                 existing_summary=existing_summary,
                 previous_raw_output=state.get("decide_last_raw_output") or "",
                 error_description=state.get("decide_last_error") or "unknown error",
+                tool_call_history=tool_history,
+                iterations_remaining=iterations_remaining,
             )
 
         try:
@@ -155,31 +162,26 @@ def build_workflow(
         except LLMClientError as exc:
             raise WorkflowDecideError("llm_unavailable", str(exc)) from exc
 
-        # Parse + validate. On failure: if we still have a repair budget,
-        # stash the error and stay on the decide node for one more shot;
-        # otherwise mark the run failed via decide_error_class.
         try:
             parsed = load_llm_json(raw)
         except ValueError as exc:
             error = f"output is not valid JSON: {exc}"
-            return _decide_failure(attempts, raw, error, "decide_output_not_json")
+            return _decide_failure(attempts, raw, error)
 
         try:
             envelope = _DecideEnvelope.model_validate(parsed)
         except ValidationError as exc:
             error = f"JSON did not match required schema: {exc}"
-            return _decide_failure(attempts, raw, error, "decide_output_schema_mismatch")
+            return _decide_failure(attempts, raw, error)
 
         if envelope.action == "call_tool":
             if envelope.tool not in TOOL_REGISTRY:
                 error = f"tool {envelope.tool!r} is not registered"
-                return _decide_failure(attempts, raw, error, "decide_chose_unknown_tool")
+                return _decide_failure(attempts, raw, error)
             return {
                 "action": "call_tool",
                 "tool_name": envelope.tool,
                 "tool_args": envelope.args or {},
-                # Clear any prior repair signals so downstream nodes see a
-                # clean decision.
                 "decide_last_raw_output": None,
                 "decide_last_error": None,
             }
@@ -200,24 +202,33 @@ def build_workflow(
             current_user=current_user,
             agent_run_id=agent_run_id,
         )
+        args = state.get("tool_args") or {}
         try:
-            result = await tool_cls().invoke(state.get("tool_args") or {}, ctx)
+            result = await tool_cls().invoke(args, ctx)
         except ToolValidationError:
-            # Slice 4 still has no tool-arg repair (the decide repair only
-            # covers decide's own output). Surface the failure as a soft
-            # business error so format_response can apologise.
-            return {
-                "tool_result": {
-                    "ok": False,
-                    "error_class": "tool_args_invalid",
-                    "message_for_llm": (
-                        "The arguments provided to the tool failed schema "
-                        "validation. Ask the user to clarify what they meant."
-                    ),
-                    "user_facing_detail": "Tool arguments failed validation.",
-                },
+            # Bake a synthetic "ok=False" entry so format_response can
+            # apologise even without a real tool result.
+            result = {
+                "ok": False,
+                "error_class": "tool_args_invalid",
+                "message_for_llm": (
+                    "The arguments provided to the tool failed schema "
+                    "validation. Ask the user to clarify what they meant."
+                ),
+                "user_facing_detail": "Tool arguments failed validation.",
             }
-        return {"tool_result": result}
+
+        new_iteration = int(state.get("iteration_count") or 0) + 1
+        return {
+            "tool_call_history": [
+                {"tool": tool_name, "args": args, "result": result},
+            ],
+            "iteration_count": new_iteration,
+            # Clear the per-step action so the next decide isn't confused
+            # by stale slots.
+            "tool_name": None,
+            "tool_args": None,
+        }
 
     async def format_response_node(state: AgentState) -> dict[str, Any]:
         history = state.get("conversation_history") or []
@@ -225,12 +236,12 @@ def build_workflow(
         if state.get("action") == "respond_directly":
             return {"final_text": (state.get("direct_text") or "").strip()}
 
-        tool_name = state.get("tool_name") or ""
-        tool_result = state.get("tool_result") or {}
+        # Either we exited the loop after at least one tool call, or the
+        # budget cut us off mid-thought. Either way, summarise what we have.
+        tool_history = state.get("tool_call_history") or []
         prompt = build_format_response_prompt(
             user_text=state["user_text"],
-            tool_name=tool_name,
-            tool_result=tool_result,
+            tool_call_history=tool_history,
             history=history,
         )
         try:
@@ -240,16 +251,14 @@ def build_workflow(
         return {"final_text": text.strip()}
 
     async def maybe_summarize_node(state: AgentState) -> dict[str, Any]:
-        # The user message has been persisted but the assistant message will
-        # be written by the caller after the graph returns. We pre-count both
-        # so the threshold reflects post-turn state.
+        # The user message is persisted but the assistant message will be
+        # written by the caller after the graph returns. Count both so the
+        # threshold reflects post-turn state.
         message_count_after_turn = int(state.get("message_count_before_user") or 0) + 2
         if message_count_after_turn < SUMMARIZE_MESSAGE_THRESHOLD:
             return {}
 
         history = list(state.get("conversation_history") or [])
-        # Include this turn's user and tentative assistant message so the
-        # summary covers them too.
         history.append({"role": "user", "content": state["user_text"]})
         history.append({"role": "assistant", "content": state.get("final_text") or ""})
 
@@ -257,8 +266,6 @@ def build_workflow(
         try:
             text = await client.generate_text(prompt)
         except (LLMConfigError, LLMClientError) as exc:
-            # Non-blocking: leave the previous summary in place and surface
-            # the failure so the caller can record it on the agent_run.
             return {"summary_error": f"summary_llm_failed: {exc}"}
 
         new_summary = text.strip()
@@ -268,14 +275,22 @@ def build_workflow(
 
     def route_after_decide(state: AgentState) -> str:
         if state.get("decide_error_class"):
-            # Repair attempts exhausted — bail out.
             return END
         if state.get("decide_last_error"):
-            # We have a repair signal but no hard error_class yet → loop back.
-            return "decide"
+            return "decide"  # repair self-loop
         if state.get("action") == "call_tool":
+            iterations_used = int(state.get("iteration_count") or 0)
+            if iterations_used >= MAX_TOOL_ITERATIONS:
+                # Budget exhausted — synthesise the answer from whatever we
+                # already gathered instead of calling another tool.
+                return "format_response"
             return "call_tool"
         return "format_response"
+
+    def route_after_call_tool(state: AgentState) -> str:
+        # After every tool call, hand control back to decide so it can
+        # observe the new result and pick the next step.
+        return "decide"
 
     workflow: StateGraph = StateGraph(AgentState)
     workflow.add_node("decide", decide_node)
@@ -294,7 +309,11 @@ def build_workflow(
             END: END,
         },
     )
-    workflow.add_edge("call_tool", "format_response")
+    workflow.add_conditional_edges(
+        "call_tool",
+        route_after_call_tool,
+        {"decide": "decide"},
+    )
     workflow.add_edge("format_response", "maybe_summarize")
     workflow.add_edge("maybe_summarize", END)
 
@@ -305,7 +324,6 @@ def _decide_failure(
     previous_attempts: int,
     raw_output: str,
     error: str,
-    hard_error_class: str,
 ) -> dict[str, Any]:
     """Centralise the decide-node failure bookkeeping.
 
