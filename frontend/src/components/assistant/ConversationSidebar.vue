@@ -26,19 +26,41 @@
         class="bucket"
       >
         <p class="bucket-label">{{ bucket.label }}</p>
-        <button
+        <div
           v-for="conv in bucket.items"
           :key="conv.id"
           class="conv-item"
-          :class="{ active: conv.id === activeConversationId }"
-          type="button"
-          @click="$emit('select', conv.id)"
+          :class="{ 'conv-item--active': conv.id === activeConversationId }"
         >
-          <strong class="conv-title">{{ truncateTitle(conv.title) }}</strong>
-          <small class="conv-meta">
-            {{ formatRelativeTime(conv.last_run_at ?? conv.updated_at) }}
-          </small>
-        </button>
+          <button
+            class="conv-item__main"
+            type="button"
+            @click="$emit('select', conv.id)"
+          >
+            <strong class="conv-title">{{ truncateTitle(conv.title) }}</strong>
+            <small class="conv-meta">
+              {{ formatRelativeTime(conv.last_run_at ?? conv.updated_at) }}
+            </small>
+          </button>
+          <div class="conv-item__actions">
+            <button
+              class="conv-action"
+              type="button"
+              title="重命名"
+              @click.stop="$emit('rename', conv)"
+            >
+              ✎
+            </button>
+            <button
+              class="conv-action conv-action--danger"
+              type="button"
+              title="删除"
+              @click.stop="$emit('delete', conv)"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
       </section>
     </div>
   </aside>
@@ -61,6 +83,8 @@ const props = withDefaults(defineProps<Props>(), { loading: false });
 defineEmits<{
   (event: "new-conversation"): void;
   (event: "select", conversationId: number): void;
+  (event: "rename", conversation: ConversationListItem): void;
+  (event: "delete", conversation: ConversationListItem): void;
 }>();
 
 const groupedConversations = computed(() =>
@@ -195,19 +219,16 @@ function truncateTitle(title: string): string {
   text-transform: uppercase;
 }
 
+/* Item is a flex row: clickable main on the left + hover-revealed actions
+   on the right. Using a real <button> for the main area means keyboard
+   focus + activation still work; actions sit as sibling buttons. */
 .conv-item {
   position: relative;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  width: 100%;
-  padding: 10px 12px;
+  align-items: stretch;
   border: 1px solid transparent;
   border-radius: 10px;
   background: transparent;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
 }
 
@@ -217,11 +238,29 @@ function truncateTitle(title: string): string {
   transform: translateX(2px);
 }
 
-.conv-item.active {
+.conv-item--active {
   background: linear-gradient(135deg, rgba(231, 246, 244, 0.9), rgba(232, 240, 255, 0.7));
   border-color: rgba(15, 118, 110, 0.32);
   box-shadow: 0 4px 12px rgba(15, 118, 110, 0.08);
   transform: none;
+}
+
+.conv-item--active:hover {
+  transform: none;
+}
+
+.conv-item__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 .conv-title {
@@ -229,10 +268,52 @@ function truncateTitle(title: string): string {
   font-weight: 600;
   line-height: 1.4;
   color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .conv-meta {
   font-size: 11px;
   color: #98a2b3;
+}
+
+.conv-item__actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 6px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.conv-item:hover .conv-item__actions,
+.conv-item--active .conv-item__actions,
+.conv-item:focus-within .conv-item__actions {
+  opacity: 1;
+}
+
+.conv-action {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #667085;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.conv-action:hover {
+  background: rgba(15, 23, 42, 0.06);
+  color: #0f172a;
+}
+
+.conv-action--danger:hover {
+  background: rgba(220, 38, 38, 0.12);
+  color: #b42318;
 }
 </style>
