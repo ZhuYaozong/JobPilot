@@ -7,6 +7,7 @@ from app.api.assistant import router as assistant_router
 from app.api.conversations import router as conversations_router
 from app.api.health import router as health_router
 from app.api.jobs import router as jobs_router
+from app.api.knowledge import router as knowledge_router
 from app.api.matches import router as matches_router
 from app.api.resume_versions import router as resume_versions_router
 from app.api.resumes import router as resumes_router
@@ -27,3 +28,4 @@ app.include_router(application_events_router)
 app.include_router(artifacts_router)
 app.include_router(conversations_router)
 app.include_router(assistant_router)
+app.include_router(knowledge_router)

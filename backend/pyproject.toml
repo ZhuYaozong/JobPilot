@@ -10,6 +10,7 @@ dependencies = [
     "langchain-core>=1,<2",
     "langgraph>=1,<2",
     "pdfplumber>=0.11.0",
+    "pgvector>=0.4.0",
     "pydantic-settings>=2.14.0",
     "pytest>=9.0.2",
     "python-docx>=1.1.0",
