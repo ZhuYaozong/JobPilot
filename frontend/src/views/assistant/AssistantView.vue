@@ -6,6 +6,8 @@
       :loading="conversationsLoading"
       @new-conversation="handleNewConversation"
       @select="handleSelectConversation"
+      @rename="handleRenameConversation"
+      @delete="handleDeleteConversation"
     />
 
     <main class="chat-pane">
@@ -53,7 +55,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 
 import ConversationSidebar from "@/components/assistant/ConversationSidebar.vue";
 import ContextPanel from "@/components/assistant/ContextPanel.vue";
@@ -63,9 +65,11 @@ import SuggestedPrompts from "@/components/assistant/SuggestedPrompts.vue";
 
 import { listApplications } from "@/api/applications";
 import {
+  deleteConversation,
   listConversations,
   listMessages,
   runAssistantStream,
+  updateConversation,
 } from "@/api/assistant";
 import { listJobs } from "@/api/jobs";
 import { listResumes } from "@/api/resumes";
@@ -233,6 +237,70 @@ function handleSelectConversation(id: number) {
   conversationId.value = id;
   lastError.value = null;
   draftPrompt.value = "";
+}
+
+async function handleRenameConversation(conv: ConversationListItem) {
+  let nextTitle: string;
+  try {
+    const result = await ElMessageBox.prompt("给这次对话起个名字", "重命名对话", {
+      confirmButtonText: "保存",
+      cancelButtonText: "取消",
+      inputValue: conv.title,
+      inputValidator: (value: string) => {
+        const trimmed = (value ?? "").trim();
+        if (!trimmed) return "名字不能为空";
+        if (trimmed.length > 255) return "名字太长了";
+        return true;
+      },
+    });
+    nextTitle = result.value.trim();
+  } catch {
+    return; // user cancelled
+  }
+
+  if (nextTitle === conv.title) return;
+
+  try {
+    const updated = await updateConversation(conv.id, { title: nextTitle });
+    // Patch the local list in-place so the sidebar updates without a full
+    // refetch — same trick as the optimistic update pattern in sendMessage.
+    const idx = conversations.value.findIndex((c) => c.id === updated.id);
+    if (idx >= 0) {
+      conversations.value.splice(idx, 1, updated);
+    }
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, "重命名失败"));
+  }
+}
+
+async function handleDeleteConversation(conv: ConversationListItem) {
+  try {
+    await ElMessageBox.confirm(
+      "删除后这个对话和它的消息记录都会一起消失，且不可恢复。",
+      `删除对话：${conv.title}？`,
+      {
+        type: "warning",
+        confirmButtonText: "删除",
+        cancelButtonText: "取消",
+        confirmButtonClass: "el-button--danger",
+      },
+    );
+  } catch {
+    return;
+  }
+
+  try {
+    await deleteConversation(conv.id);
+    conversations.value = conversations.value.filter((c) => c.id !== conv.id);
+    ElMessage.success("对话已删除");
+    if (conversationId.value === conv.id) {
+      // The active conversation is gone; reset to the new-conversation
+      // state so the user lands somewhere sane.
+      handleNewConversation();
+    }
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, "删除失败"));
+  }
 }
 
 function onPromptSelect(text: string) {

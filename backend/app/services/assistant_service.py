@@ -65,6 +65,7 @@ async def run_assistant_turn(
 
     conversation = await _get_or_create_conversation(
         db, current_user, payload.conversation_id,
+        first_user_text=payload.content,
     )
     # Store the user's clean text in the message row (no hint prefix) so the
     # UI displays exactly what the user typed.
@@ -267,6 +268,7 @@ async def run_assistant_turn_stream(
 
     conversation = await _get_or_create_conversation(
         db, current_user, payload.conversation_id,
+        first_user_text=payload.content,
     )
     user_message = await _append_user_message(
         db, conversation, current_user, payload.content,
@@ -594,13 +596,33 @@ async def _build_context_hint(
     return "[当前上下文]\n" + "\n".join(lines)
 
 
+_MAX_TITLE_CHARS = 28
+
+
+def _derive_title(first_user_text: str) -> str:
+    """Generate a conversation title from the user's first message.
+
+    Strategy: collapse whitespace + truncate to ``_MAX_TITLE_CHARS`` chars
+    (with an ellipsis if we cut anything off). Falls back to a date-stamped
+    placeholder when the message is empty after trimming — should not
+    happen given content is min_length=1, but defensive.
+    """
+    cleaned = " ".join(first_user_text.split()).strip()
+    if not cleaned:
+        return f"新对话 {datetime.now().strftime('%m-%d %H:%M')}"
+    if len(cleaned) <= _MAX_TITLE_CHARS:
+        return cleaned
+    return f"{cleaned[:_MAX_TITLE_CHARS]}…"
+
+
 async def _get_or_create_conversation(
     db: AsyncSession,
     current_user: User,
     conversation_id: int | None,
+    first_user_text: str | None = None,
 ) -> Conversation:
     if conversation_id is None:
-        title = f"新建对话 {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        title = _derive_title(first_user_text or "")
         conversation = Conversation(user_id=current_user.id, title=title)
         db.add(conversation)
         await db.commit()

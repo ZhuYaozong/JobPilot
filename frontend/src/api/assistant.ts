@@ -175,3 +175,18 @@ export async function listMessages(conversationId: number) {
   );
   return response.data;
 }
+
+export async function updateConversation(
+  conversationId: number,
+  payload: { title?: string; status?: string },
+) {
+  const response = await apiClient.patch<ConversationListItem>(
+    `/api/v1/conversations/${conversationId}`,
+    payload,
+  );
+  return response.data;
+}
+
+export async function deleteConversation(conversationId: number) {
+  await apiClient.delete(`/api/v1/conversations/${conversationId}`);
+}

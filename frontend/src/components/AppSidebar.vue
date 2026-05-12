@@ -8,13 +8,30 @@
       </span>
     </RouterLink>
 
-    <section class="sidebar-user" aria-label="当前用户">
-      <span class="sidebar-avatar">{{ currentUser.label.slice(0, 1) }}</span>
-      <div>
-        <strong>{{ currentUser.label }}</strong>
-        <small>{{ currentUser.description }}</small>
+    <details class="sidebar-user" aria-label="当前用户">
+      <summary class="sidebar-user__summary">
+        <span class="sidebar-avatar">{{ currentUser.label.slice(0, 1) }}</span>
+        <span class="sidebar-user__copy">
+          <strong>{{ currentUser.label }}</strong>
+          <small>{{ currentUser.description }}</small>
+        </span>
+        <span class="sidebar-user__chevron">▾</span>
+      </summary>
+      <div class="sidebar-user__menu">
+        <label class="sidebar-user__field">
+          <span>切换工作区</span>
+          <select v-model="selectedUser" @change="handleUserChange">
+            <option
+              v-for="option in DEV_USER_OPTIONS"
+              :key="option.username"
+              :value="option.username"
+            >
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
       </div>
-    </section>
+    </details>
 
     <nav class="nav-groups nav-groups--single" aria-label="主导航">
       <section
@@ -42,9 +59,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 
-import { getCurrentDevUserOption } from "@/lib/currentUser";
+import {
+  DEV_USER_OPTIONS,
+  type DevUserName,
+  getCurrentDevUserOption,
+  setCurrentDevUserName,
+} from "@/lib/currentUser";
 
 interface SidebarNavItem {
   to: string;
@@ -53,12 +75,18 @@ interface SidebarNavItem {
   hint: string;
 }
 
-const currentUser = computed(() => getCurrentDevUserOption());
-
 interface SidebarNavGroup {
   title: string;
   primary?: boolean;
   items: SidebarNavItem[];
+}
+
+const currentUser = computed(() => getCurrentDevUserOption());
+const selectedUser = ref<DevUserName>(getCurrentDevUserOption().username);
+
+function handleUserChange() {
+  setCurrentDevUserName(selectedUser.value);
+  window.location.reload();
 }
 
 const navGroups: SidebarNavGroup[] = [
@@ -82,3 +110,91 @@ const navGroups: SidebarNavGroup[] = [
   },
 ];
 </script>
+
+<style scoped>
+/* Workspace switcher (replaces the old AppHeader user menu). The details/
+   summary structure keeps it lightweight — no portal-based dropdown
+   needed since this section sits in the sidebar's natural flow. */
+.sidebar-user__summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+  cursor: pointer;
+  list-style: none;
+}
+
+.sidebar-user__summary::-webkit-details-marker {
+  display: none;
+}
+
+.sidebar-user__summary:hover {
+  border-color: rgba(15, 23, 42, 0.16);
+  background: #ffffff;
+}
+
+.sidebar-user__copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebar-user__copy strong,
+.sidebar-user__copy small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-user__copy small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.sidebar-user__chevron {
+  flex: 0 0 auto;
+  color: #98a2b3;
+  font-size: 12px;
+  transition: transform 0.15s ease;
+}
+
+.sidebar-user[open] .sidebar-user__chevron {
+  transform: rotate(180deg);
+}
+
+.sidebar-user__menu {
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.sidebar-user__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sidebar-user__field span {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475467;
+}
+
+.sidebar-user__field select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #ffffff;
+  font: inherit;
+  cursor: pointer;
+}
+</style>

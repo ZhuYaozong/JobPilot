@@ -54,13 +54,37 @@ async def _seed_conversation_with_messages(
 def test_list_conversations_returns_recent_first(
     client: TestClient, test_marker: str,
 ) -> None:
-    cid = _run(lambda db: _seed_conversation_with_messages(db, test_marker, 0))
+    # Bump last_run_at on the seeded conversation so it ranks high enough
+    # to show up in the top-100 result regardless of how many older
+    # conversations the shared test DB has accumulated.
+    cid = _run(
+        lambda db: _seed_conversation_with_recent_run(db, test_marker),
+    )
 
-    response = client.get("/api/v1/conversations?limit=50")
+    response = client.get("/api/v1/conversations?limit=100")
     assert response.status_code == 200
     body = response.json()
     ids = [c["id"] for c in body]
     assert cid in ids
+
+
+async def _seed_conversation_with_recent_run(
+    db: AsyncSession, marker: str,
+) -> int:
+    from datetime import datetime, timezone
+
+    user = (
+        await db.execute(select(User).where(User.username == "test"))
+    ).scalar_one()
+    conversation = Conversation(
+        user_id=user.id,
+        title=f"{marker} conv",
+        last_run_at=datetime.now(timezone.utc),
+    )
+    db.add(conversation)
+    await db.commit()
+    await db.refresh(conversation)
+    return conversation.id
 
 
 def test_list_messages_in_sequence_order(
@@ -88,3 +112,119 @@ def test_list_messages_rejects_other_users_conversation(
     response = client.get("/api/v1/conversations/999999999/messages")
     assert response.status_code == 404
     assert response.json()["detail"] == "Conversation not found"
+
+
+def test_update_conversation_renames_title(
+    client: TestClient, test_marker: str,
+) -> None:
+    cid = _run(lambda db: _seed_conversation_with_messages(db, test_marker, 0))
+
+    response = client.patch(
+        f"/api/v1/conversations/{cid}",
+        json={"title": f"{test_marker} 改名后"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == cid
+    assert body["title"] == f"{test_marker} 改名后"
+
+
+def test_update_conversation_rejects_empty_title(
+    client: TestClient, test_marker: str,
+) -> None:
+    cid = _run(lambda db: _seed_conversation_with_messages(db, test_marker, 0))
+
+    response = client.patch(
+        f"/api/v1/conversations/{cid}",
+        json={"title": "   "},
+    )
+    assert response.status_code == 400
+    assert "empty" in response.json()["detail"].lower()
+
+
+def test_update_conversation_rejects_other_users(
+    client: TestClient, test_marker: str,
+) -> None:
+    response = client.patch(
+        "/api/v1/conversations/999999999",
+        json={"title": f"{test_marker}"},
+    )
+    assert response.status_code == 404
+
+
+def test_delete_conversation_cascades_messages(
+    client: TestClient, test_marker: str,
+) -> None:
+    cid = _run(lambda db: _seed_conversation_with_messages(db, test_marker, 3))
+
+    # Sanity: messages exist before delete.
+    pre = client.get(f"/api/v1/conversations/{cid}/messages")
+    assert pre.status_code == 200
+    assert len(pre.json()) == 3
+
+    response = client.delete(f"/api/v1/conversations/{cid}")
+    assert response.status_code == 204
+
+    # After delete the conversation is gone (404) and listing no longer
+    # surfaces it.
+    post = client.get(f"/api/v1/conversations/{cid}/messages")
+    assert post.status_code == 404
+
+    listing = client.get("/api/v1/conversations?limit=50")
+    assert listing.status_code == 200
+    assert cid not in [c["id"] for c in listing.json()]
+
+
+def test_delete_conversation_rejects_other_users(client: TestClient) -> None:
+    response = client.delete("/api/v1/conversations/999999999")
+    assert response.status_code == 404
+
+
+def test_assistant_run_auto_titles_new_conversation_from_first_message(
+    client: TestClient, monkeypatch, test_marker: str,
+) -> None:
+    """The first user message of a freshly-created conversation should become
+    its title (truncated), replacing the old "新建对话 YYYY-MM-DD HH:MM"
+    placeholder."""
+    from app.llm.client import LLMClient
+    from tests.test_assistant_api import _make_fake_llm
+
+    monkeypatch.setattr(
+        LLMClient,
+        "generate_text",
+        _make_fake_llm(
+            decide_response='{"action": "respond_directly", "text": "好的。"}',
+        ),
+    )
+
+    # Put the marker first so the truncated title (28-char cap) still keeps
+    # enough of the marker prefix for the assertion below.
+    first_question = f"{test_marker} 帮我看下今天该做什么"
+    response = client.post(
+        "/api/v1/assistant/run",
+        json={"content": first_question},
+    )
+    assert response.status_code == 200
+    conv_id = response.json()["conversation_id"]
+
+    # Look up the conversation directly by id rather than going through the
+    # listing endpoint — the shared test DB can hold more than 100 rows,
+    # which the listing's hard cap would otherwise hide.
+    title = _run(
+        lambda db: _fetch_conversation_title(db, conv_id),
+    )
+    assert title is not None
+    # The title should reflect the user's question, not the date-stamped
+    # placeholder. test_marker is ~48 chars but the title caps at 28 + "…",
+    # so we only assert the stable "pytest-jobpilot-" prefix.
+    assert "pytest-jobpilot-" in title
+    assert "新建对话" not in title
+
+
+async def _fetch_conversation_title(db: AsyncSession, conv_id: int) -> str | None:
+    row = (
+        await db.execute(
+            select(Conversation.title).where(Conversation.id == conv_id),
+        )
+    ).one_or_none()
+    return row.title if row else None
