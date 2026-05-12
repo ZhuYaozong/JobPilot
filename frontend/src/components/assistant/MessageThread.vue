@@ -1,42 +1,48 @@
 <template>
   <div ref="threadRef" class="thread">
-    <div v-if="!messages.length && !isRunning && !lastError" class="empty-state">
-      <div class="empty-avatar" />
-      <h3>JobPilot 助手</h3>
-      <p>
-        你可以问我关于简历、岗位、投递的任何问题。
-        先在右侧选好你想聊的简历和岗位,然后在下方输入吧。
-      </p>
+    <div class="thread-inner">
+      <div v-if="!messages.length && !isRunning && !lastError" class="empty-state">
+        <div class="empty-orb" />
+        <h3>JobPilot 助手</h3>
+        <p>
+          先在右侧选好你想聊的简历和岗位,然后在下方开始提问。
+          我会按需调用工具帮你完成匹配分析、写求职信、准备面试等任务。
+        </p>
+      </div>
+
+      <MessageBubble
+        v-for="message in messages"
+        :key="message.id"
+        :message="message"
+        :tool-calls-for-run="toolCallsForRun"
+      />
+
+      <article v-if="isRunning" class="bubble-row assistant pending">
+        <div class="avatar">AI</div>
+        <div class="bubble">
+          <div class="bubble-content">
+            <div class="typing">
+              <span />
+              <span />
+              <span />
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article v-if="lastError" class="bubble-row assistant failed">
+        <div class="avatar avatar--error">!</div>
+        <div class="bubble">
+          <div class="bubble-content">
+            <p class="bubble-text">这条消息没能完成</p>
+            <p class="bubble-detail">{{ lastError }}</p>
+            <button class="retry-btn" type="button" @click="$emit('retry')">
+              重试
+            </button>
+          </div>
+        </div>
+      </article>
     </div>
-
-    <MessageBubble
-      v-for="message in messages"
-      :key="message.id"
-      :message="message"
-      :tool-calls-for-run="toolCallsForRun"
-    />
-
-    <article v-if="isRunning" class="bubble-row assistant pending">
-      <div class="avatar" />
-      <div class="bubble">
-        <div class="bubble-content">
-          <p class="bubble-text muted">正在思考……</p>
-        </div>
-      </div>
-    </article>
-
-    <article v-if="lastError" class="bubble-row assistant failed">
-      <div class="avatar" />
-      <div class="bubble">
-        <div class="bubble-content">
-          <p class="bubble-text">⚠️ 这条消息没能完成</p>
-          <p class="bubble-detail">{{ lastError }}</p>
-          <button class="retry-btn" type="button" @click="$emit('retry')">
-            ↻ 重试
-          </button>
-        </div>
-      </div>
-    </article>
   </div>
 </template>
 
@@ -64,9 +70,9 @@ const threadRef = ref<HTMLElement | null>(null);
 
 async function scrollToBottom() {
   await nextTick();
-  if (threadRef.value) {
-    threadRef.value.scrollTo({ top: threadRef.value.scrollHeight, behavior: "smooth" });
-  }
+  const el = threadRef.value;
+  if (!el) return;
+  el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
 }
 
 watch(
@@ -79,119 +85,172 @@ watch(
 
 <style scoped>
 .thread {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 24px 0;
+  background: linear-gradient(180deg, #ffffff 0, #fafbfc 100%);
+}
+
+.thread-inner {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  flex: 1;
-  padding: 16px;
-  overflow-y: auto;
+  gap: 18px;
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 0 24px;
 }
 
 .empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  margin: auto;
-  padding: 32px 16px;
-  max-width: 420px;
+  gap: 14px;
+  margin: 32px auto;
+  padding: 32px;
+  max-width: 460px;
   text-align: center;
-  color: #6b7280;
+  color: #667085;
+}
+
+.empty-orb {
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #0f766e, #2563eb);
+  box-shadow: 0 12px 28px rgba(15, 118, 110, 0.24);
 }
 
 .empty-state h3 {
   margin: 0;
-  font-size: 18px;
-  color: #111827;
+  font-size: 20px;
+  color: #0f172a;
+  letter-spacing: 0;
 }
 
 .empty-state p {
   margin: 0;
   font-size: 14px;
-  line-height: 1.7;
-}
-
-.empty-avatar {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #3b82f6;
+  line-height: 1.75;
+  color: #667085;
 }
 
 .bubble-row {
   display: flex;
-  gap: 10px;
+  gap: 12px;
+  align-items: flex-start;
 }
 
-.bubble-row.assistant {
+.bubble-row.assistant.pending,
+.bubble-row.assistant.failed {
   flex-direction: row;
 }
 
 .avatar {
-  flex-shrink: 0;
-  width: 8px;
-  height: 8px;
-  margin-top: 14px;
-  border-radius: 50%;
-  background: #3b82f6;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin-top: 2px;
+  border-radius: 999px;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #0f766e, #14b8a6);
+  box-shadow: 0 4px 12px rgba(15, 118, 110, 0.22);
+}
+
+.avatar--error {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.22);
 }
 
 .bubble {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-width: min(560px, 80%);
+  max-width: min(640px, 78%);
 }
 
 .bubble-content {
-  padding: 12px 14px;
+  padding: 12px 16px;
   background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 14px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 16px;
+  border-bottom-left-radius: 6px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .bubble-row.failed .bubble-content {
-  border-color: #fecaca;
-  background: #fef2f2;
-}
-
-.bubble-row.pending .bubble-content {
-  opacity: 0.7;
+  border-color: rgba(220, 38, 38, 0.28);
+  background: #fff5f5;
 }
 
 .bubble-text {
   margin: 0;
   font-size: 14px;
   line-height: 1.7;
-  color: #111827;
+  color: #0f172a;
   white-space: pre-wrap;
 }
 
-.bubble-text.muted {
-  color: #6b7280;
-  font-style: italic;
-}
-
 .bubble-detail {
-  margin: 8px 0 0;
+  margin: 6px 0 0;
   font-size: 12px;
-  color: #6b7280;
   line-height: 1.6;
+  color: #b42318;
 }
 
 .retry-btn {
   margin-top: 10px;
-  padding: 4px 10px;
-  background: transparent;
-  border: 1px solid #dc2626;
-  border-radius: 6px;
-  color: #dc2626;
+  padding: 6px 14px;
+  background: #ffffff;
+  border: 1px solid rgba(220, 38, 38, 0.4);
+  border-radius: 999px;
+  color: #b42318;
   font-size: 12px;
+  font-weight: 700;
   cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
 }
 
 .retry-btn:hover {
-  background: #fef2f2;
+  background: #fff0f0;
+  transform: translateY(-1px);
+}
+
+.typing {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 2px;
+}
+
+.typing span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #94a3b8;
+  animation: typing-dot 1.2s infinite ease-in-out;
+}
+
+.typing span:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.typing span:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+@keyframes typing-dot {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
 }
 </style>

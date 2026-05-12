@@ -1,7 +1,7 @@
 <template>
   <div class="app-shell">
     <AppSidebar />
-    <div class="app-main">
+    <div class="app-main" :class="{ 'app-main--bleed': isFullBleed }">
       <AppHeader />
       <main class="app-content">
         <RouterView />
@@ -11,6 +11,12 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue";
+import { useRoute } from "vue-router";
+
 import AppHeader from "@/components/AppHeader.vue";
 import AppSidebar from "@/components/AppSidebar.vue";
+
+const route = useRoute();
+const isFullBleed = computed(() => route.meta.fullBleed === true);
 </script>

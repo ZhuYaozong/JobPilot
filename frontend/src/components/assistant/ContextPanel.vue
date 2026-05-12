@@ -1,20 +1,23 @@
 <template>
   <aside class="context-panel">
-    <div class="panel-header">
-      <h3>当前对话上下文</h3>
+    <header class="panel-header">
+      <h3>对话上下文</h3>
       <p class="hint">
-        助手在每轮回答时都能看到下面的选择,可以直接说"这个岗位"。
+        助手能看到你下面选的内容,可以直接说"这个岗位""那份简历"。
       </p>
-    </div>
+    </header>
 
     <div class="picker-list">
       <div class="picker-item">
-        <p class="picker-label">📄 简历</p>
+        <label class="picker-label">
+          <span class="picker-label__icon">📄</span>
+          <span>简历</span>
+        </label>
         <el-select
           v-model="localResumeId"
           clearable
           filterable
-          placeholder="选择简历"
+          placeholder="选择一份简历"
           :loading="loading"
           class="picker-select"
         >
@@ -26,19 +29,24 @@
           />
         </el-select>
         <p v-if="selectedResume" class="picker-status">
-          <span :class="{ ok: selectedResume.parse_status === 'parsed' }">
-            {{ formatParseStatus(selectedResume.parse_status) }}
-          </span>
+          <span
+            class="status-dot"
+            :class="{ 'status-dot--ok': selectedResume.parse_status === 'parsed' }"
+          />
+          {{ formatParseStatus(selectedResume.parse_status) }}
         </p>
       </div>
 
       <div class="picker-item">
-        <p class="picker-label">💼 岗位</p>
+        <label class="picker-label">
+          <span class="picker-label__icon">💼</span>
+          <span>岗位</span>
+        </label>
         <el-select
           v-model="localJobId"
           clearable
           filterable
-          placeholder="选择岗位"
+          placeholder="选择一个岗位"
           :loading="loading"
           class="picker-select"
         >
@@ -50,12 +58,17 @@
           />
         </el-select>
         <p v-if="selectedJob" class="picker-status">
+          <span class="status-dot status-dot--ok" />
           {{ selectedJob.city || "城市未填" }}
         </p>
       </div>
 
       <div class="picker-item">
-        <p class="picker-label">📨 投递记录(可选)</p>
+        <label class="picker-label">
+          <span class="picker-label__icon">📨</span>
+          <span>投递记录</span>
+          <span class="picker-label__optional">可选</span>
+        </label>
         <el-select
           v-model="localApplicationId"
           clearable
@@ -73,13 +86,24 @@
         </el-select>
       </div>
 
-      <div class="picker-item disabled">
-        <p class="picker-label">📚 知识库 <span class="lock">🔒</span></p>
+      <div class="picker-item picker-item--disabled">
+        <label class="picker-label">
+          <span class="picker-label__icon">📚</span>
+          <span>知识库</span>
+          <span class="picker-label__lock">即将上线</span>
+        </label>
         <el-select :model-value="undefined" disabled placeholder="即将上线" class="picker-select" />
       </div>
     </div>
 
-    <button class="clear-btn" type="button" @click="clearAll">↺ 清空所有选择</button>
+    <button
+      class="clear-btn"
+      type="button"
+      :disabled="!hasAnySelection"
+      @click="clearAll"
+    >
+      清空所有选择
+    </button>
   </aside>
 </template>
 
@@ -128,6 +152,13 @@ const selectedJob = computed<JobPostingListItem | null>(() =>
   props.jobs.find((j) => j.id === localJobId.value) ?? null,
 );
 
+const hasAnySelection = computed(
+  () =>
+    localResumeId.value !== null
+    || localJobId.value !== null
+    || localApplicationId.value !== null,
+);
+
 function applicationLabel(app: ApplicationRecordListItem): string {
   const job = props.jobs.find((j) => j.id === app.job_posting_id);
   const jobLabel = job ? `${job.company_name}` : `投递 #${app.id}`;
@@ -145,84 +176,134 @@ function clearAll() {
 .context-panel {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
   width: 100%;
   height: 100%;
-  padding: 16px;
-  background: #ffffff;
-  border-left: 1px solid #e5e7eb;
+  padding: 20px 16px;
+  background: #fafbfc;
+  border-left: 1px solid rgba(15, 23, 42, 0.06);
   overflow-y: auto;
 }
 
 .panel-header h3 {
   margin: 0;
-  font-size: 16px;
-  color: #111827;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: 0;
 }
 
 .panel-header .hint {
   margin: 6px 0 0;
   font-size: 12px;
-  line-height: 1.5;
-  color: #6b7280;
+  line-height: 1.55;
+  color: #667085;
 }
 
 .picker-list {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
 
 .picker-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
+  padding: 12px;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
 }
 
-.picker-item.disabled {
+.picker-item--disabled {
   opacity: 0.55;
 }
 
 .picker-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin: 0;
-  font-size: 13px;
-  font-weight: 500;
-  color: #111827;
+  font-size: 12px;
+  font-weight: 600;
+  color: #0f172a;
 }
 
-.picker-label .lock {
-  margin-left: 4px;
-  font-size: 11px;
+.picker-label__icon {
+  font-size: 14px;
+}
+
+.picker-label__optional,
+.picker-label__lock {
+  margin-left: auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #667085;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.picker-label__lock {
+  color: #b45309;
+  background: #fef3c7;
 }
 
 .picker-select {
   width: 100%;
 }
 
-.picker-status {
-  margin: 0;
-  font-size: 11px;
-  color: #6b7280;
+.picker-select :deep(.el-select__wrapper) {
+  background: #fafbfc;
 }
 
-.picker-status .ok {
-  color: #10b981;
+.picker-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: #667085;
+}
+
+.status-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #cbd5e1;
+}
+
+.status-dot--ok {
+  background: #10b981;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.15);
 }
 
 .clear-btn {
-  margin-top: 4px;
-  padding: 8px 12px;
+  align-self: flex-start;
+  margin-top: auto;
+  padding: 8px 14px;
   background: transparent;
-  border: 1px solid #e5e7eb;
+  border: 1px solid rgba(15, 23, 42, 0.12);
   border-radius: 8px;
-  color: #6b7280;
-  font-size: 13px;
+  color: #475467;
+  font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
-.clear-btn:hover {
-  background: #f8fafc;
-  color: #111827;
+.clear-btn:hover:not(:disabled) {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.2);
+  color: #0f172a;
+}
+
+.clear-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 </style>

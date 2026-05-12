@@ -233,13 +233,45 @@ async function handleSend() {
 
 async function handleRetry() {
   if (!lastFailedUserText.value || isRunning.value) return;
+  // Drop the trailing optimistic user message from the failed attempt so
+  // retry doesn't echo the same prompt twice in the thread.
+  for (let i = messages.value.length - 1; i >= 0; i -= 1) {
+    if (messages.value[i].id < 0 && messages.value[i].role === "user") {
+      messages.value.splice(i, 1);
+      break;
+    }
+  }
   await sendMessage(lastFailedUserText.value);
+}
+
+// Negative ids identify optimistic (client-only) messages. They are replaced
+// by the server-issued message (positive id) once the run returns.
+let optimisticSeq = 0;
+
+function makeOptimisticUserMessage(content: string): MessageRead {
+  optimisticSeq -= 1;
+  return {
+    id: optimisticSeq,
+    conversation_id: conversationId.value ?? 0,
+    role: "user",
+    content,
+    content_json: null,
+    agent_run_id: null,
+    sequence_no: 0,
+    created_at: new Date().toISOString(),
+  };
 }
 
 async function sendMessage(content: string) {
   isRunning.value = true;
   lastError.value = null;
   draftPrompt.value = "";
+
+  // Optimistic echo: show the user's message in the thread immediately,
+  // before we wait on the backend. We replace it with the server-issued
+  // message once the run returns (or remove it if the request errors out).
+  const optimistic = makeOptimisticUserMessage(content);
+  messages.value.push(optimistic);
 
   try {
     const response = await runAssistant({
@@ -256,7 +288,15 @@ async function sendMessage(content: string) {
     const isNew = conversationId.value === null;
     conversationId.value = response.conversation_id;
 
-    messages.value.push(response.user_message);
+    // Swap optimistic placeholder for the real server message in-place to
+    // preserve scroll position.
+    const idx = messages.value.findIndex((m) => m.id === optimistic.id);
+    if (idx >= 0) {
+      messages.value.splice(idx, 1, response.user_message);
+    } else {
+      messages.value.push(response.user_message);
+    }
+
     toolCallsForRun.value = {
       ...toolCallsForRun.value,
       [response.agent_run.id]: response.agent_run.tool_calls,
@@ -276,6 +316,8 @@ async function sendMessage(content: string) {
       void refreshConversations();
     }
   } catch (error) {
+    // Network/HTTP failure: keep the optimistic message visible so the user
+    // can retry, and surface the error inline.
     const message = getErrorMessage(error, "Agent 调用失败");
     lastError.value = message;
     lastFailedUserText.value = content;
@@ -344,41 +386,61 @@ onMounted(async () => {
 <style scoped>
 .assistant-page {
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr) 300px;
-  height: calc(100vh - 64px);
-  background: #ffffff;
+  grid-template-columns: 280px minmax(0, 1fr) 320px;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg, #f4f7fb);
 }
 
 .chat-pane {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
   height: 100%;
+  background: #ffffff;
 }
 
 .chat-header {
-  padding: 16px 20px;
-  border-bottom: 1px solid #e5e7eb;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 24px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
   background: #ffffff;
 }
 
 .chat-header h2 {
   margin: 0;
-  font-size: 18px;
-  color: #111827;
+  font-size: 17px;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: 0;
 }
 
 .chat-header .subtitle {
-  margin: 6px 0 0;
+  margin: 4px 0 0;
   font-size: 12px;
-  color: #6b7280;
+  line-height: 1.5;
+  color: #667085;
 }
 
 @media (max-width: 1280px) {
   .assistant-page {
-    grid-template-columns: 240px minmax(0, 1fr);
+    grid-template-columns: 260px minmax(0, 1fr);
   }
   .assistant-page :deep(.context-panel) {
+    display: none;
+  }
+}
+
+@media (max-width: 960px) {
+  .assistant-page {
+    grid-template-columns: 1fr;
+  }
+  .assistant-page :deep(.conv-sidebar) {
     display: none;
   }
 }

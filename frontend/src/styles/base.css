@@ -24,8 +24,13 @@
 body {
   margin: 0;
   min-width: 320px;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   background: var(--bg);
+}
+
+#app {
+  height: 100%;
 }
 
 a {
@@ -41,15 +46,16 @@ textarea {
 
 .app-shell {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .app-sidebar {
-  position: sticky;
-  top: 0;
+  flex: 0 0 auto;
   width: 280px;
-  height: 100vh;
+  height: 100%;
   padding: 24px;
+  overflow-y: auto;
   border-right: 1px solid var(--line);
   background: rgba(255, 253, 246, 0.82);
   backdrop-filter: blur(18px);
@@ -202,8 +208,11 @@ textarea {
 }
 
 .app-main {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-width: 0;
+  height: 100%;
 }
 
 .app-header {
@@ -1056,6 +1065,14 @@ textarea {
 }
 
 @media (max-width: 1180px) {
+  /* On narrow viewports we let the document scroll naturally instead of
+     locking app-shell to a fixed 100vh. */
+  body {
+    height: auto;
+    min-height: 100vh;
+    overflow: auto;
+  }
+
   .app-shell,
   .assistant-grid,
   .resource-workspace,
@@ -1067,12 +1084,23 @@ textarea {
 
   .app-shell {
     display: block;
+    height: auto;
+    overflow: visible;
+  }
+
+  .app-main {
+    height: auto;
+  }
+
+  .app-content {
+    overflow: visible;
   }
 
   .app-sidebar {
     position: relative;
     width: auto;
     height: auto;
+    overflow: visible;
   }
 
   .nav-groups,
@@ -2057,4 +2085,23 @@ body {
   .section-card {
     padding: 18px;
   }
+}
+
+/* App content area: own scroll, fills remaining height under header. */
+.app-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Full-bleed mode for pages that manage their own layout (e.g. Assistant):
+   hide the verbose route header to maximize page real estate, and drop the
+   content area's padding + scroll (the page handles them itself). */
+.app-main--bleed .app-header {
+  display: none;
+}
+
+.app-main--bleed .app-content {
+  padding: 0;
+  overflow: hidden;
 }

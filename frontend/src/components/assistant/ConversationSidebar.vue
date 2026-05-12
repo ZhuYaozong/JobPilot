@@ -1,14 +1,22 @@
 <template>
   <aside class="conv-sidebar">
-    <button class="new-conv-btn" type="button" @click="$emit('new-conversation')">
-      + 新建对话
-    </button>
+    <header class="conv-sidebar__head">
+      <h3>历史对话</h3>
+      <button class="new-conv-btn" type="button" @click="$emit('new-conversation')">
+        <span class="new-conv-btn__icon">+</span>
+        <span>新对话</span>
+      </button>
+    </header>
 
-    <div v-if="loading" class="empty-state">加载中...</div>
+    <div v-if="loading" class="conv-empty">
+      <div class="conv-empty__skeleton" />
+      <div class="conv-empty__skeleton" />
+      <div class="conv-empty__skeleton conv-empty__skeleton--short" />
+    </div>
 
-    <div v-else-if="!conversations.length" class="empty-state">
-      <p>还没有对话</p>
-      <p class="hint">点上面开始第一次问话。</p>
+    <div v-else-if="!conversations.length" class="conv-empty">
+      <p class="conv-empty__title">还没有对话</p>
+      <p class="conv-empty__hint">点上方"新对话"开始第一次问话。</p>
     </div>
 
     <div v-else class="bucket-list">
@@ -69,50 +77,106 @@ function truncateTitle(title: string): string {
 .conv-sidebar {
   display: flex;
   flex-direction: column;
-  gap: 12px;
   width: 100%;
   height: 100%;
-  padding: 16px;
-  background: #f8fafc;
-  border-right: 1px solid #e5e7eb;
-  overflow-y: auto;
+  background: #fafbfc;
+  border-right: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.conv-sidebar__head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 18px 16px 14px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.conv-sidebar__head h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: 0;
 }
 
 .new-conv-btn {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid #3b82f6;
-  border-radius: 8px;
-  background: #3b82f6;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border: none;
+  border-radius: 999px;
   color: #ffffff;
-  font-size: 14px;
-  font-weight: 500;
+  background: linear-gradient(135deg, #2563eb, #0f766e);
+  font-size: 12px;
+  font-weight: 700;
   cursor: pointer;
-  transition: background 0.15s ease;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.22);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
 .new-conv-btn:hover {
-  background: #2563eb;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.3);
 }
 
-.empty-state {
-  margin-top: 24px;
-  padding: 16px;
-  color: #6b7280;
-  text-align: center;
+.new-conv-btn__icon {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.conv-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 24px 16px;
+}
+
+.conv-empty__title {
+  margin: 0;
+  color: #475467;
   font-size: 13px;
 }
 
-.empty-state .hint {
-  margin-top: 6px;
+.conv-empty__hint {
+  margin: 0;
+  color: #98a2b3;
   font-size: 12px;
-  color: #9ca3af;
+}
+
+.conv-empty__skeleton {
+  height: 36px;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite linear;
+}
+
+.conv-empty__skeleton--short {
+  width: 65%;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 
 .bucket-list {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 12px 16px;
 }
 
 .bucket {
@@ -122,50 +186,53 @@ function truncateTitle(title: string): string {
 }
 
 .bucket-label {
-  margin: 0;
-  padding: 0 4px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  color: #9ca3af;
+  margin: 0 0 4px;
+  padding: 0 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #98a2b3;
   text-transform: uppercase;
 }
 
 .conv-item {
+  position: relative;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
+  gap: 4px;
   width: 100%;
   padding: 10px 12px;
-  border: none;
-  border-left: 4px solid transparent;
-  border-radius: 8px;
+  border: 1px solid transparent;
+  border-radius: 10px;
   background: transparent;
   color: inherit;
   text-align: left;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
 }
 
 .conv-item:hover {
-  background: #eef2f7;
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.08);
+  transform: translateX(2px);
 }
 
 .conv-item.active {
-  background: #eff6ff;
-  border-left-color: #3b82f6;
+  background: linear-gradient(135deg, rgba(231, 246, 244, 0.9), rgba(232, 240, 255, 0.7));
+  border-color: rgba(15, 118, 110, 0.32);
+  box-shadow: 0 4px 12px rgba(15, 118, 110, 0.08);
+  transform: none;
 }
 
 .conv-title {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.4;
-  color: #111827;
+  color: #0f172a;
 }
 
 .conv-meta {
   font-size: 11px;
-  color: #6b7280;
+  color: #98a2b3;
 }
 </style>

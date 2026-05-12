@@ -1,6 +1,6 @@
 <template>
   <div v-if="prompts.length" class="prompts">
-    <p class="prompts-label">试试这样问:</p>
+    <p class="prompts-label">试试这样问</p>
     <div class="prompts-row">
       <button
         v-for="prompt in prompts"
@@ -38,14 +38,19 @@ defineEmits<{ (event: "select", text: string): void }>();
 .prompts {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px 16px 0;
+  gap: 10px;
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 8px 24px 16px;
 }
 
 .prompts-label {
   margin: 0;
-  font-size: 12px;
-  color: #6b7280;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #98a2b3;
+  text-transform: uppercase;
 }
 
 .prompts-row {
@@ -57,20 +62,22 @@ defineEmits<{ (event: "select", text: string): void }>();
 .prompt-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
+  gap: 8px;
+  padding: 8px 14px;
   background: #ffffff;
-  border: 1px solid #e5e7eb;
+  border: 1px solid rgba(15, 23, 42, 0.1);
   border-radius: 999px;
   font-size: 13px;
-  color: #111827;
+  color: #0f172a;
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
 }
 
 .prompt-chip:hover:not(:disabled) {
-  border-color: #3b82f6;
-  background: #eff6ff;
+  border-color: rgba(15, 118, 110, 0.4);
+  background: #f0fbfa;
+  transform: translateY(-1px);
 }
 
 .prompt-chip:disabled {
@@ -79,6 +86,6 @@ defineEmits<{ (event: "select", text: string): void }>();
 }
 
 .prompt-icon {
-  font-size: 14px;
+  font-size: 15px;
 }
 </style>
