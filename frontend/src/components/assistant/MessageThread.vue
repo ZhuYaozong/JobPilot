@@ -21,11 +21,18 @@
         <div class="avatar">AI</div>
         <div class="bubble">
           <div class="bubble-content">
-            <div class="typing">
-              <span />
-              <span />
-              <span />
+            <div class="thinking">
+              <div class="typing">
+                <span />
+                <span />
+                <span />
+              </div>
+              <span class="thinking__label">{{ thinkingLabel }}</span>
             </div>
+            <ToolCallTrace
+              v-if="liveToolTrace.length"
+              :tool-calls="liveToolTrace"
+            />
           </div>
         </div>
       </article>
@@ -47,24 +54,54 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 
 import MessageBubble from "./MessageBubble.vue";
+import ToolCallTrace from "./ToolCallTrace.vue";
 import type {
+  AssistantPhase,
   MessageRead,
   ToolCallTrace as ToolCallTraceItem,
 } from "@/types/assistant";
+import { formatToolName } from "@/utils/labels";
 
 interface Props {
   messages: MessageRead[];
   toolCallsForRun: Record<number, ToolCallTraceItem[]>;
   isRunning: boolean;
   lastError: string | null;
+  // Streaming progress driven by SSE events. ``runningPhase`` is the
+  // current node label; ``runningTool`` is the tool name when call_tool is
+  // mid-flight; ``liveToolTrace`` is the per-iteration trace shown above
+  // the typing indicator while the turn is still running.
+  runningPhase?: AssistantPhase | null;
+  runningTool?: string | null;
+  liveToolTrace?: ToolCallTraceItem[];
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  runningPhase: null,
+  runningTool: null,
+  liveToolTrace: () => [],
+});
 
 defineEmits<{ (event: "retry"): void }>();
+
+const thinkingLabel = computed(() => {
+  if (props.runningTool) {
+    const display = formatToolName(props.runningTool);
+    return `正在${display.label}……`;
+  }
+  switch (props.runningPhase) {
+    case "formatting":
+      return "正在整理回答……";
+    case "summarizing":
+      return "正在总结对话历史……";
+    case "deciding":
+    default:
+      return "正在思考……";
+  }
+});
 
 const threadRef = ref<HTMLElement | null>(null);
 
@@ -218,6 +255,18 @@ watch(
 .retry-btn:hover {
   background: #fff0f0;
   transform: translateY(-1px);
+}
+
+.thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.thinking__label {
+  font-size: 13px;
+  color: #475467;
+  letter-spacing: 0;
 }
 
 .typing {

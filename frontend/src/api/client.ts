@@ -2,7 +2,18 @@ import axios from "axios";
 
 import { getCurrentDevUserName } from "@/lib/currentUser";
 
-const DEFAULT_API_TIMEOUT_MS = 30000;
+// Default timeout for "fast" API calls (list / get / simple writes). LLM-
+// driven endpoints (parse, analyze, generate) override this with a longer
+// timeout — see the per-call ``{ timeout: ... }`` overrides in api/*.ts.
+// 60s gives slow connections more margin without hurting list endpoints,
+// which typically return in well under a second.
+const DEFAULT_API_TIMEOUT_MS = 60000;
+
+// Shared timeout for endpoints that synchronously call the LLM (parse JD,
+// parse resume, analyze match, generate cover letter / interview prep).
+// Backend caps a single LLM request at 60s, so 120s gives ample margin
+// while still surfacing genuinely stuck calls.
+export const LLM_OPERATION_TIMEOUT_MS = 120000;
 const envTimeout = Number.parseInt(
   import.meta.env.VITE_API_TIMEOUT_MS || "",
   10,

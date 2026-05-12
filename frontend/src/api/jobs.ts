@@ -1,4 +1,4 @@
-import { apiClient } from "./client";
+import { apiClient, LLM_OPERATION_TIMEOUT_MS } from "./client";
 import type { ListParams } from "@/types/common";
 import type {
   JobPosting,
@@ -39,6 +39,8 @@ export async function deleteJob(jobId: number) {
 export async function parseJob(jobId: number) {
   const response = await apiClient.post<JobPosting>(
     `/api/v1/jobs/${jobId}/parse`,
+    undefined,
+    { timeout: LLM_OPERATION_TIMEOUT_MS },
   );
   return response.data;
 }
