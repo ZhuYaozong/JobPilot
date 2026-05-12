@@ -50,7 +50,7 @@ def test_second_turn_decide_prompt_contains_first_turn_user_text(
         seen_prompts.append(prompt)
         if "请严格按以下两种 JSON" in prompt:
             return '{"action": "respond_directly", "text": "好的,继续聊。"}'
-        if "刚才你调用了工具" in prompt:
+        if "本轮你为了回答用户的问题" in prompt:
             return "(format_response not expected here)"
         if "对话摘要生成器" in prompt:
             return "summary text"

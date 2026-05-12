@@ -1,523 +1,385 @@
 <template>
-  <div class="assistant-layout">
-    <aside class="assistant-panel">
-      <div class="panel-heading">
-        <p class="eyebrow">对话历史</p>
-        <h2>新建对话</h2>
-        <p class="soft-note">侧栏列表将在后续版本接入；当前点击"新建对话"会重置当前会话。</p>
-      </div>
+  <div class="assistant-page">
+    <ConversationSidebar
+      :conversations="conversations"
+      :active-conversation-id="conversationId"
+      :loading="conversationsLoading"
+      @new-conversation="handleNewConversation"
+      @select="handleSelectConversation"
+    />
 
-      <div class="conversation-list">
-        <button
-          v-for="template in conversationTemplates"
-          :key="template.key"
-          class="conversation-item"
-          :class="{ active: selectedTemplateKey === template.key }"
-          type="button"
-          @click="selectTemplate(template.key)"
-        >
-          <strong>{{ template.title }}</strong>
-          <small>{{ template.scene }}</small>
-        </button>
-      </div>
+    <main class="chat-pane">
+      <header class="chat-header">
+        <h2>{{ chatTitle }}</h2>
+        <p class="subtitle">{{ chatSubtitle }}</p>
+      </header>
 
-      <el-button type="primary" plain @click="handleNewConversation">新建对话</el-button>
-    </aside>
+      <MessageThread
+        :messages="messages"
+        :tool-calls-for-run="toolCallsForRun"
+        :is-running="isRunning"
+        :last-error="lastError"
+        @retry="handleRetry"
+      />
 
-    <main class="chat-panel">
-      <div class="panel-heading">
-        <p class="eyebrow">AI 助手</p>
-        <h2>{{ activeTemplate.title }}</h2>
-        <p class="soft-note">{{ activeTemplate.description }}</p>
-      </div>
+      <SuggestedPrompts
+        :prompts="suggestedPrompts"
+        :disabled="isRunning"
+        @select="onPromptSelect"
+      />
 
-      <div class="message-thread">
-        <article v-if="messages.length === 0" class="message-bubble assistant placeholder">
-          <strong>JobPilot</strong>
-          <p>{{ activeTemplate.contextHint }} 输入下方问题后,我会调用合适的工具并把结果总结成回复。</p>
-        </article>
-
-        <article
-          v-for="message in messages"
-          :key="message.id"
-          class="message-bubble"
-          :class="message.role"
-        >
-          <strong>{{ message.role === "user" ? "你" : "JobPilot" }}</strong>
-          <p>{{ message.content }}</p>
-          <p
-            v-if="message.role === 'assistant' && message.agent_run_id !== null"
-            class="tool-trace"
-          >
-            <template v-for="call in toolCallsFor(message.agent_run_id)" :key="call.id">
-              🔧 已调用 {{ call.tool_name }}
-              <span v-if="call.latency_ms !== null">· {{ call.latency_ms }}ms</span>
-              <span v-if="call.status === 'failed'" class="trace-failed">
-                · 失败（{{ call.error_class ?? "未知错误" }}）
-              </span>
-            </template>
-          </p>
-        </article>
-
-        <article v-if="isRunning" class="message-bubble assistant pending">
-          <strong>JobPilot</strong>
-          <p>正在思考……</p>
-        </article>
-
-        <article v-if="lastRunError" class="message-bubble assistant failed">
-          <strong>本轮失败</strong>
-          <p>{{ lastRunError }}</p>
-        </article>
-      </div>
-
-      <div class="quick-question-list">
-        <button
-          v-for="question in quickQuestions"
-          :key="question"
-          class="quick-question"
-          type="button"
-          :disabled="isRunning"
-          @click="draftPrompt = question"
-        >
-          {{ question }}
-        </button>
-      </div>
-
-      <div class="composer-bar">
-        <el-input
-          v-model="draftPrompt"
-          type="textarea"
-          :rows="4"
-          resize="none"
-          :placeholder="activeTemplate.example"
-          :disabled="isRunning"
-        />
-        <div class="composer-actions">
-          <p class="soft-note">同步模式:发送后等待后端工作流完成并返回完整回复。</p>
-          <el-button type="primary" :loading="isRunning" @click="handleSend">发送</el-button>
-        </div>
-      </div>
+      <ComposerBar
+        v-model="draftPrompt"
+        :placeholder="composerPlaceholder"
+        :disabled="isRunning"
+        @send="handleSend"
+      />
     </main>
 
-    <aside class="assistant-panel">
-      <div class="panel-heading">
-        <p class="eyebrow">上下文设置</p>
-        <h2>让回答贴近当前任务</h2>
-      </div>
-
-      <el-form label-position="top" class="context-form">
-        <el-form-item label="选择岗位">
-          <el-select v-model="contextForm.jobId" clearable filterable placeholder="选择岗位" :loading="referencesLoading">
-            <el-option
-              v-for="job in jobs"
-              :key="job.id"
-              :label="`${job.company_name} · ${job.job_title}`"
-              :value="job.id"
-            />
-          </el-select>
-        </el-form-item>
-
-        <el-form-item label="选择简历">
-          <el-select v-model="contextForm.resumeId" clearable filterable placeholder="选择简历" :loading="referencesLoading">
-            <el-option
-              v-for="resume in resumes"
-              :key="resume.id"
-              :label="resume.title"
-              :value="resume.id"
-            />
-          </el-select>
-        </el-form-item>
-
-        <el-form-item label="选择投递记录">
-          <el-select v-model="contextForm.applicationId" clearable filterable placeholder="选择投递记录" :loading="referencesLoading">
-            <el-option
-              v-for="application in applications"
-              :key="application.id"
-              :label="`${getJobLabel(application.job_posting_id)} · ${formatApplicationStage(application.current_stage)}`"
-              :value="application.id"
-            />
-          </el-select>
-        </el-form-item>
-
-        <el-form-item label="选择知识库">
-          <el-select v-model="contextForm.knowledgeKey" clearable placeholder="选择知识库">
-            <el-option
-              v-for="knowledge in knowledgeBases"
-              :key="knowledge.key"
-              :label="knowledge.name"
-              :value="knowledge.key"
-            />
-          </el-select>
-        </el-form-item>
-
-        <el-form-item label="引用我的项目经历">
-          <el-switch v-model="contextForm.useProjectExperience" />
-        </el-form-item>
-      </el-form>
-
-      <div class="context-summary">
-        <h3>当前上下文</h3>
-        <p>{{ selectedContextSummary }}</p>
-        <p class="soft-note">上下文 selector 目前仅做产品展示,真实 Agent 暂未消费这些值(后续切片接入)。</p>
-        <RouterLink class="inline-link" to="/knowledge">管理知识库资料</RouterLink>
-      </div>
-    </aside>
+    <ContextPanel
+      :resumes="resumes"
+      :jobs="jobs"
+      :applications="applications"
+      :loading="referencesLoading"
+      v-model:resume-id="contextResumeId"
+      v-model:job-posting-id="contextJobId"
+      v-model:application-record-id="contextApplicationId"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
 
+import ConversationSidebar from "@/components/assistant/ConversationSidebar.vue";
+import ContextPanel from "@/components/assistant/ContextPanel.vue";
+import ComposerBar from "@/components/assistant/ComposerBar.vue";
+import MessageThread from "@/components/assistant/MessageThread.vue";
+import SuggestedPrompts from "@/components/assistant/SuggestedPrompts.vue";
+
 import { listApplications } from "@/api/applications";
-import { runAssistant } from "@/api/assistant";
+import {
+  listConversations,
+  listMessages,
+  runAssistant,
+} from "@/api/assistant";
 import { listJobs } from "@/api/jobs";
 import { listResumes } from "@/api/resumes";
+
 import type { ApplicationRecordListItem } from "@/types/application_record";
 import type {
   AgentRunSummary,
+  ConversationListItem,
   MessageRead,
   ToolCallTrace,
 } from "@/types/assistant";
 import type { JobPostingListItem } from "@/types/job_posting";
 import type { ResumeListItem } from "@/types/resume";
+
+import { formatRelativeTime } from "@/utils/format";
 import { getErrorMessage } from "@/utils/http";
-import { formatApplicationStage } from "@/utils/labels";
 
-interface ConversationTemplate {
-  key: string;
-  title: string;
-  scene: string;
-  description: string;
-  example: string;
-  contextHint: string;
-}
+// --- Data state -------------------------------------------------------------
 
-interface KnowledgeBaseShell {
-  key: string;
-  name: string;
-}
-
-const conversationTemplates: ConversationTemplate[] = [
-  {
-    key: "job-review",
-    title: "帮我看这个岗位",
-    scene: "岗位判断",
-    description: "拆解 JD 重点，判断是否值得继续投入。",
-    example: "帮我看这个岗位最关键的 3 个要求，以及我该不该优先投。",
-    contextHint: "建议选择一个岗位，并尽量补充岗位解析结果。",
-  },
-  {
-    key: "resume-improve",
-    title: "帮我优化这份简历",
-    scene: "简历调整",
-    description: "围绕目标岗位，找出简历最该调整的表达。",
-    example: "基于这个岗位，帮我指出这份简历最该修改的 3 个地方。",
-    contextHint: "建议同时选择岗位和简历。",
-  },
-  {
-    key: "interview-prep",
-    title: "帮我生成面试问题",
-    scene: "模拟面试",
-    description: "围绕岗位要求和项目经历准备追问。",
-    example: "请基于这个岗位和我的项目经历，模拟 5 个面试追问。",
-    contextHint: "建议选择岗位、简历，并开启项目经历引用。",
-  },
-  {
-    key: "application-review",
-    title: "帮我复盘最近投递",
-    scene: "投递复盘",
-    description: "结合投递阶段和时间线判断下一步。",
-    example: "这条投递现在应该继续跟进、等待，还是调整策略？",
-    contextHint: "建议选择一条投递记录。",
-  },
-  {
-    key: "follow-up-email",
-    title: "帮我写一封跟进邮件",
-    scene: "跟进邮件",
-    description: "根据当前阶段组织礼貌、具体的跟进措辞。",
-    example: "请帮我写一封简短的 HR 跟进邮件，语气专业但不催促。",
-    contextHint: "建议选择投递记录和对应岗位。",
-  },
-];
-
-const knowledgeBases: KnowledgeBaseShell[] = [
-  { key: "company", name: "公司与岗位资料" },
-  { key: "project", name: "项目经历素材" },
-  { key: "interview", name: "面试准备资料" },
-];
-
-const quickQuestions = [
-  "帮我看这个岗位",
-  "帮我优化这份简历",
-  "帮我生成面试问题",
-  "帮我复盘最近投递",
-  "帮我写一封跟进邮件",
-];
-
-const jobs = ref<JobPostingListItem[]>([]);
-const resumes = ref<ResumeListItem[]>([]);
-const applications = ref<ApplicationRecordListItem[]>([]);
-const referencesLoading = ref(false);
-const selectedTemplateKey = ref(conversationTemplates[0].key);
-const draftPrompt = ref("");
+const conversations = ref<ConversationListItem[]>([]);
+const conversationsLoading = ref(false);
 
 const conversationId = ref<number | null>(null);
 const messages = ref<MessageRead[]>([]);
-// Keyed by agent_run_id so an assistant message can locate its trace cards.
-const agentRunsById = ref<Map<number, AgentRunSummary>>(new Map());
+const toolCallsForRun = ref<Record<number, ToolCallTrace[]>>({});
+
+const draftPrompt = ref("");
 const isRunning = ref(false);
-const lastRunError = ref<string | null>(null);
+const lastError = ref<string | null>(null);
+const lastFailedUserText = ref<string | null>(null);
 
-const contextForm = ref({
-  jobId: undefined as number | undefined,
-  resumeId: undefined as number | undefined,
-  applicationId: undefined as number | undefined,
-  knowledgeKey: "company" as string | undefined,
-  useProjectExperience: true,
+// Right-pane reference lists for the selectors.
+const resumes = ref<ResumeListItem[]>([]);
+const jobs = ref<JobPostingListItem[]>([]);
+const applications = ref<ApplicationRecordListItem[]>([]);
+const referencesLoading = ref(false);
+
+const contextResumeId = ref<number | null>(null);
+const contextJobId = ref<number | null>(null);
+const contextApplicationId = ref<number | null>(null);
+
+// --- Derived ----------------------------------------------------------------
+
+const activeConversation = computed<ConversationListItem | null>(() =>
+  conversations.value.find((c) => c.id === conversationId.value) ?? null,
+);
+
+const chatTitle = computed(() => {
+  if (!conversationId.value) return "新建对话";
+  return activeConversation.value?.title ?? "对话";
 });
 
-const jobMap = computed(() => new Map(jobs.value.map((job) => [job.id, job])));
-const resumeMap = computed(() => new Map(resumes.value.map((resume) => [resume.id, resume])));
-
-const activeTemplate = computed(() => {
-  return conversationTemplates.find((template) => template.key === selectedTemplateKey.value) ?? conversationTemplates[0];
-});
-
-const selectedContextSummary = computed(() => {
-  const parts = [
-    contextForm.value.jobId ? `岗位：${getJobLabel(contextForm.value.jobId)}` : "",
-    contextForm.value.resumeId ? `简历：${resumeMap.value.get(contextForm.value.resumeId)?.title ?? "已选择"}` : "",
-    contextForm.value.applicationId ? "投递：已选择" : "",
-    contextForm.value.knowledgeKey
-      ? `知识库：${knowledgeBases.find((item) => item.key === contextForm.value.knowledgeKey)?.name ?? "已选择"}`
-      : "",
-    contextForm.value.useProjectExperience ? "引用项目经历" : "",
-  ].filter(Boolean);
-
-  return parts.length ? parts.join(" / ") : "还没有选择上下文。";
-});
-
-function getJobLabel(jobPostingId: number): string {
-  const job = jobMap.value.get(jobPostingId);
-  return job ? `${job.company_name} · ${job.job_title}` : `岗位 #${jobPostingId}`;
-}
-
-function selectTemplate(key: string) {
-  selectedTemplateKey.value = key;
-  if (messages.value.length === 0) {
-    draftPrompt.value = activeTemplate.value.example;
+const chatSubtitle = computed(() => {
+  if (!conversationId.value) {
+    return "选择上下文并开始提问;助手会按需调用工具完成任务。";
   }
+  const updated =
+    activeConversation.value?.last_run_at
+    ?? activeConversation.value?.updated_at;
+  const stamp = updated ? formatRelativeTime(updated) : "";
+  const ctxParts = currentContextLabel.value;
+  if (ctxParts) {
+    return `${stamp} · 当前上下文:${ctxParts}`;
+  }
+  return stamp || "未选择上下文";
+});
+
+const currentContextLabel = computed(() => {
+  const parts: string[] = [];
+  if (contextResumeId.value) {
+    const r = resumes.value.find((x) => x.id === contextResumeId.value);
+    parts.push(r ? `简历 ${r.title}` : `简历 #${contextResumeId.value}`);
+  }
+  if (contextJobId.value) {
+    const j = jobs.value.find((x) => x.id === contextJobId.value);
+    parts.push(j ? `岗位 ${j.company_name}` : `岗位 #${contextJobId.value}`);
+  }
+  return parts.join(" / ");
+});
+
+const composerPlaceholder = computed(() => {
+  if (contextResumeId.value && contextJobId.value) {
+    return "比如:这个岗位的匹配度怎么样?";
+  }
+  if (contextJobId.value) {
+    return "比如:这个岗位最看重什么?";
+  }
+  return "可以问我关于简历、岗位、投递的任何问题…";
+});
+
+interface PromptChip {
+  icon: string;
+  label: string;
+  text: string;
 }
+
+const suggestedPrompts = computed<PromptChip[]>(() => {
+  // Show empty when there are messages so prompts don't overlap the input.
+  if (messages.value.length > 0) return [];
+
+  const hasContext = !!(contextResumeId.value && contextJobId.value);
+  if (hasContext) {
+    return [
+      { icon: "📊", label: "分析这个岗位的匹配度", text: "基于当前上下文,帮我分析匹配度。" },
+      { icon: "✍️", label: "写一封求职信", text: "基于当前上下文,帮我写一封求职信草稿。" },
+      { icon: "🎤", label: "准备这个岗位的面试", text: "基于当前上下文,帮我准备面试提纲。" },
+    ];
+  }
+  if (contextJobId.value && !contextResumeId.value) {
+    return [
+      { icon: "📋", label: "看看这个岗位重点考察什么", text: "基于当前选中的岗位,告诉我重点考察什么。" },
+      { icon: "📄", label: "看看我有哪些简历", text: "看看我有哪些简历。" },
+    ];
+  }
+  return [
+    { icon: "📋", label: "看看我有哪些岗位", text: "看看我有哪些岗位。" },
+    { icon: "📄", label: "看看我有哪些简历", text: "看看我有哪些简历。" },
+    { icon: "📨", label: "看看我的投递记录", text: "看看我的投递记录。" },
+  ];
+});
+
+// --- Side effects -----------------------------------------------------------
+
+watch(conversationId, async (newId) => {
+  if (newId === null) {
+    messages.value = [];
+    toolCallsForRun.value = {};
+    return;
+  }
+  try {
+    const fetched = await listMessages(newId);
+    messages.value = fetched;
+    // tool_call traces are not in the messages payload; we lose them on
+    // reload. Slice 6 can stitch them back via /agent-runs if needed. For
+    // now leave the map empty so existing assistant messages show plain text.
+    toolCallsForRun.value = {};
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, "对话消息加载失败"));
+  }
+});
+
+// --- Actions ----------------------------------------------------------------
 
 function handleNewConversation() {
   conversationId.value = null;
   messages.value = [];
-  agentRunsById.value = new Map();
-  lastRunError.value = null;
+  toolCallsForRun.value = {};
+  lastError.value = null;
   draftPrompt.value = "";
 }
 
-function toolCallsFor(agentRunId: number | null): ToolCallTrace[] {
-  if (agentRunId === null) return [];
-  return agentRunsById.value.get(agentRunId)?.tool_calls ?? [];
+function handleSelectConversation(id: number) {
+  if (id === conversationId.value) return;
+  conversationId.value = id;
+  lastError.value = null;
+  draftPrompt.value = "";
+}
+
+function onPromptSelect(text: string) {
+  draftPrompt.value = text;
 }
 
 async function handleSend() {
   const content = draftPrompt.value.trim();
-  if (!content) {
-    ElMessage.warning("请先输入一个围绕当前任务的问题");
-    return;
-  }
-  if (isRunning.value) return;
+  if (!content || isRunning.value) return;
+  await sendMessage(content);
+}
 
+async function handleRetry() {
+  if (!lastFailedUserText.value || isRunning.value) return;
+  await sendMessage(lastFailedUserText.value);
+}
+
+async function sendMessage(content: string) {
   isRunning.value = true;
-  lastRunError.value = null;
+  lastError.value = null;
   draftPrompt.value = "";
 
   try {
     const response = await runAssistant({
       conversation_id: conversationId.value,
       content,
+      context: {
+        resume_id: contextResumeId.value ?? null,
+        job_posting_id: contextJobId.value ?? null,
+        application_record_id: contextApplicationId.value ?? null,
+      },
     });
-
+    // First-turn conversation_id might be new; remember it and refresh the
+    // sidebar so the new conversation shows up there.
+    const isNew = conversationId.value === null;
     conversationId.value = response.conversation_id;
+
     messages.value.push(response.user_message);
-    agentRunsById.value.set(response.agent_run.id, response.agent_run);
+    toolCallsForRun.value = {
+      ...toolCallsForRun.value,
+      [response.agent_run.id]: response.agent_run.tool_calls,
+    };
 
     if (response.assistant_message) {
       messages.value.push(response.assistant_message);
+      lastFailedUserText.value = null;
     } else {
-      lastRunError.value = formatRunError(response.agent_run);
+      lastError.value = formatRunError(response.agent_run);
+      lastFailedUserText.value = content;
+    }
+
+    if (isNew) {
+      // Refresh conversation list to surface the just-created one. Fire and
+      // forget; failures don't block the chat.
+      void refreshConversations();
     }
   } catch (error) {
     const message = getErrorMessage(error, "Agent 调用失败");
-    lastRunError.value = message;
+    lastError.value = message;
+    lastFailedUserText.value = content;
     ElMessage.error(message);
-    draftPrompt.value = content;
   } finally {
     isRunning.value = false;
   }
 }
 
 function formatRunError(run: AgentRunSummary): string {
-  if (run.error_class) {
-    return `${run.error_class}${run.error_detail ? `：${run.error_detail}` : ""}`;
+  if (run.error_class === "llm_config_missing" || run.error_class === "llm_unavailable") {
+    return "模型暂时无法响应,稍后再试。";
+  }
+  if (run.error_class === "decide_repair_failed") {
+    return "模型输出格式异常,我已经重试过了。请稍后再试或换种问法。";
+  }
+  if (run.error_detail) {
+    return run.error_detail;
   }
   return "Agent 运行失败,请稍后重试。";
 }
 
-async function fetchReferences() {
+// --- Data loading -----------------------------------------------------------
+
+async function refreshConversations() {
+  conversationsLoading.value = true;
+  try {
+    conversations.value = await listConversations({ limit: 50 });
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, "对话列表加载失败"));
+  } finally {
+    conversationsLoading.value = false;
+  }
+}
+
+async function loadReferences() {
   referencesLoading.value = true;
-  const [jobResult, resumeResult, applicationResult] = await Promise.allSettled([
+  const [j, r, a] = await Promise.allSettled([
     listJobs({ limit: 100 }),
     listResumes({ limit: 100 }),
     listApplications({ limit: 100 }),
   ]);
-
-  if (jobResult.status === "fulfilled") {
-    jobs.value = jobResult.value;
-    contextForm.value.jobId = jobResult.value[0]?.id;
+  if (j.status === "fulfilled") {
+    jobs.value = j.value;
   } else {
-    ElMessage.error(getErrorMessage(jobResult.reason, "岗位选项加载失败"));
+    ElMessage.error(getErrorMessage(j.reason, "岗位选项加载失败"));
   }
-
-  if (resumeResult.status === "fulfilled") {
-    resumes.value = resumeResult.value;
-    contextForm.value.resumeId = resumeResult.value[0]?.id;
+  if (r.status === "fulfilled") {
+    resumes.value = r.value;
   } else {
-    ElMessage.error(getErrorMessage(resumeResult.reason, "简历选项加载失败"));
+    ElMessage.error(getErrorMessage(r.reason, "简历选项加载失败"));
   }
-
-  if (applicationResult.status === "fulfilled") {
-    applications.value = applicationResult.value;
+  if (a.status === "fulfilled") {
+    applications.value = a.value;
   } else {
-    ElMessage.error(getErrorMessage(applicationResult.reason, "投递记录加载失败"));
+    ElMessage.error(getErrorMessage(a.reason, "投递记录加载失败"));
   }
-
   referencesLoading.value = false;
 }
 
-onMounted(fetchReferences);
+onMounted(async () => {
+  await Promise.all([refreshConversations(), loadReferences()]);
+});
 </script>
 
 <style scoped>
-.panel-heading {
+.assistant-page {
   display: grid;
-  gap: 6px;
-}
-
-.panel-heading h2,
-.context-summary h3 {
-  margin: 0;
-  font-size: 18px;
-}
-
-.conversation-item,
-.quick-question {
-  display: grid;
-  gap: 6px;
-  width: 100%;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.conversation-item small {
-  color: var(--muted);
-}
-
-.message-thread {
-  display: grid;
-  flex: 1;
-  gap: 12px;
-  align-content: start;
-  overflow-y: auto;
-}
-
-.message-bubble {
-  padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  grid-template-columns: 260px minmax(0, 1fr) 300px;
+  height: calc(100vh - 64px);
   background: #ffffff;
 }
 
-.message-bubble.user {
-  background: #f1f5f9;
-  border-color: #cbd5f5;
-}
-
-.message-bubble.assistant.failed {
-  border-color: #f4b6b6;
-  background: #fef2f2;
-}
-
-.message-bubble.pending {
-  opacity: 0.7;
-  font-style: italic;
-}
-
-.message-bubble.placeholder {
-  border-style: dashed;
-}
-
-.message-bubble p {
-  margin: 6px 0 0;
-  line-height: 1.65;
-  white-space: pre-wrap;
-}
-
-.tool-trace {
-  margin-top: 8px !important;
-  padding-top: 8px;
-  border-top: 1px dashed var(--line);
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.trace-failed {
-  color: #c0392b;
-}
-
-.quick-question-list {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.quick-question:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.composer-actions {
+.chat-pane {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  flex-direction: column;
+  min-width: 0;
+  height: 100%;
 }
 
-.context-summary {
-  display: grid;
-  gap: 8px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #f8fafc;
+.chat-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #ffffff;
 }
 
-.context-summary p {
+.chat-header h2 {
   margin: 0;
-  color: var(--muted);
-  line-height: 1.65;
+  font-size: 18px;
+  color: #111827;
 }
 
-@media (max-width: 720px) {
-  .quick-question-list {
-    grid-template-columns: 1fr;
-  }
+.chat-header .subtitle {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #6b7280;
+}
 
-  .composer-actions {
-    align-items: flex-start;
-    flex-direction: column;
+@media (max-width: 1280px) {
+  .assistant-page {
+    grid-template-columns: 240px minmax(0, 1fr);
+  }
+  .assistant-page :deep(.context-panel) {
+    display: none;
   }
 }
 </style>

@@ -94,22 +94,40 @@ def _run(coro_factory: Callable) -> Any:
     return asyncio.run(_do())
 
 
+_EMPTY_TOOL_HISTORY_MARKER = "(本轮还没有调用过工具)"
+
+
 def _make_fake_llm(
     *,
     decide_response: str,
-    format_response: str = "已为你完成。",
+    final_text: str = "已为你完成。",
+    follow_up_response: str | None = None,
     match_response: str = _MATCH_LLM_JSON,
 ):
+    """Build a stateless fake LLM that dispatches on prompt markers.
+
+    The ReAct loop now calls ``decide`` again after every tool, so we
+    distinguish the initial decide (tool_call_history empty) from follow-up
+    decides (history non-empty). By default the follow-up decide returns a
+    ``respond_directly`` envelope so the loop terminates cleanly after one
+    tool. ``final_text`` is the text shown to the user as the assistant reply
+    on that respond_directly path. Tests that want a different terminating
+    text or a multi-tool flow can override ``follow_up_response`` directly.
+    """
+    default_follow_up = (
+        '{"action": "respond_directly", "text": ' + repr(final_text).replace("'", '"') + "}"
+    )
+    follow_up = follow_up_response if follow_up_response is not None else default_follow_up
+
     async def fake(self, prompt: str) -> str:
-        # The three prompts have unique markers we can dispatch on. If we
-        # don't recognise the prompt we raise — that surfaces test drift
-        # immediately instead of silently returning a wrong canned answer.
         if "Compare the structured resume" in prompt:
             return match_response
-        if "刚才你调用了工具" in prompt:
-            return format_response
+        if "本轮你为了回答用户的问题" in prompt:
+            return final_text
         if "请严格按以下两种 JSON 之一回复" in prompt:
-            return decide_response
+            if _EMPTY_TOOL_HISTORY_MARKER in prompt:
+                return decide_response
+            return follow_up
         raise AssertionError(f"unexpected LLM prompt:\n{prompt[:200]}")
 
     return fake
@@ -132,7 +150,7 @@ def test_assistant_run_happy_path_calls_tool_and_writes_assistant_message(
         "generate_text",
         _make_fake_llm(
             decide_response=decide_json,
-            format_response=f"你的简历对岗位 {job_id} 综合得分 81 分。",
+            final_text=f"你的简历对岗位 {job_id} 综合得分 81 分。",
         ),
     )
 
@@ -249,7 +267,7 @@ def test_assistant_run_handles_tool_business_error_via_format_response(
         "generate_text",
         _make_fake_llm(
             decide_response=decide_json,
-            format_response="看起来这份简历好像不存在,你确认一下 id 再试试?",
+            final_text="看起来这份简历好像不存在,你确认一下 id 再试试?",
         ),
     )
 

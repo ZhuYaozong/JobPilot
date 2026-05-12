@@ -32,10 +32,13 @@ from app.models.memory_summary import MemorySummary
 from app.models.message import Message
 from app.models.tool_call_log import ToolCallLog
 from app.models.user import User
+from app.models.job_posting import JobPosting
+from app.models.resume import Resume
 from app.schemas.assistant import (
     AgentRunSummary,
     AssistantRunRequest,
     AssistantRunResponse,
+    ContextSelection,
     ToolCallTrace,
 )
 from app.schemas.message import MessageRead
@@ -61,7 +64,19 @@ async def run_assistant_turn(
     conversation = await _get_or_create_conversation(
         db, current_user, payload.conversation_id,
     )
+    # Store the user's clean text in the message row (no hint prefix) so the
+    # UI displays exactly what the user typed.
     user_message = await _append_user_message(db, conversation, current_user, payload.content)
+
+    # Build the workflow-facing user_text. If the right-side selector pre-
+    # picked a resume/job/application, prepend a labelled hint so the agent
+    # can short-circuit list_user_* tools when the user said "这个岗位".
+    context_hint = await _build_context_hint(db, current_user.id, payload.context)
+    workflow_user_text = (
+        f"{context_hint}\n\n[用户问题]\n{payload.content}"
+        if context_hint
+        else payload.content
+    )
 
     agent_run = AgentRun(
         user_id=current_user_id,
@@ -105,12 +120,14 @@ async def run_assistant_turn(
         "user_id": current_user.id,
         "conversation_id": conversation_id,
         "user_message_id": user_message_id,
-        "user_text": payload.content,
+        "user_text": workflow_user_text,
         "agent_run_id": agent_run_id,
         "conversation_history": history,
         "existing_summary": existing_summary_text,
         "message_count_before_user": message_count_before_user,
         "decide_repair_attempts": 0,
+        "iteration_count": 0,
+        "tool_call_history": [],
     }
 
     try:
@@ -185,12 +202,12 @@ async def run_assistant_turn(
             based_on_until_message_id=assistant_message_id,
         )
 
-    # Derive intent for traceability; falls back to "chat" for direct replies.
-    intent = (
-        final_state.get("tool_name")
-        if final_state.get("action") == "call_tool"
-        else "chat"
-    )
+    # Derive intent for traceability. In the ReAct loop the final ``action``
+    # is usually respond_directly, but the agent may have called several tools
+    # along the way. Walk tool_call_history from the end and pick the last
+    # non-discovery tool (list_user_* are pure lookups). Falls back to "chat"
+    # when no tool was called at all.
+    intent = _derive_intent(final_state.get("tool_call_history") or [])
     finished_at = datetime.now(timezone.utc)
     agent_run.status = "succeeded"
     agent_run.intent = intent
@@ -211,6 +228,86 @@ async def run_assistant_turn(
         assistant_message_id=assistant_message_id,
         agent_run_id=agent_run_id,
     )
+
+
+def _derive_intent(tool_call_history: list[dict[str, Any]]) -> str:
+    """Pick a short label for ``agent_runs.intent`` from the tools called.
+
+    Action tools (analyze_match, generate_cover_letter, ...) take priority
+    over discovery tools (list_user_*). If only list tools fired, we report
+    the last one so eval / metrics can still see what the user looked at.
+    """
+    if not tool_call_history:
+        return "chat"
+    for entry in reversed(tool_call_history):
+        tool_name = entry.get("tool")
+        if tool_name and not tool_name.startswith("list_user_"):
+            return tool_name
+    return tool_call_history[-1].get("tool") or "chat"
+
+
+async def _build_context_hint(
+    db: AsyncSession,
+    user_id: int,
+    context: ContextSelection | None,
+) -> str | None:
+    """Resolve the UI-side selection to human-readable labels for the prompt.
+
+    The hint format is intentionally short and labelled — the LLM sees:
+
+        [当前上下文]
+        - 简历:Backend Resume v2 (#7)
+        - 岗位:腾讯 · 后端工程师 (#12)
+        - 投递记录:#3
+
+    Lookups silently ignore missing rows or other-user rows: we don't want a
+    transient mismatch (e.g. selector still pointing at a freshly-deleted
+    resume) to fail the whole assistant call.
+    """
+    if context is None:
+        return None
+
+    lines: list[str] = []
+
+    if context.resume_id is not None:
+        row = (
+            await db.execute(
+                select(Resume.id, Resume.title).where(
+                    Resume.id == context.resume_id,
+                    Resume.user_id == user_id,
+                ),
+            )
+        ).one_or_none()
+        if row is not None:
+            lines.append(f"- 简历:{row.title} (#{row.id})")
+
+    if context.job_posting_id is not None:
+        row = (
+            await db.execute(
+                select(
+                    JobPosting.id,
+                    JobPosting.company_name,
+                    JobPosting.job_title,
+                ).where(
+                    JobPosting.id == context.job_posting_id,
+                    JobPosting.user_id == user_id,
+                ),
+            )
+        ).one_or_none()
+        if row is not None:
+            lines.append(
+                f"- 岗位:{row.company_name} · {row.job_title} (#{row.id})",
+            )
+
+    if context.application_record_id is not None:
+        # We don't render a friendly label for applications yet; the id
+        # alone is enough for the LLM to call list_user_applications if
+        # it wants details.
+        lines.append(f"- 投递记录:#{context.application_record_id}")
+
+    if not lines:
+        return None
+    return "[当前上下文]\n" + "\n".join(lines)
 
 
 async def _get_or_create_conversation(

@@ -5,9 +5,20 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.schemas.message import MessageRead
 
 
+class ContextSelection(BaseModel):
+    """Optional UI-side context. The server stitches a human-readable hint
+    onto the user_text before feeding it to the workflow, so the agent sees
+    "user selected resume #7 and job #12" alongside the actual question."""
+
+    resume_id: int | None = None
+    job_posting_id: int | None = None
+    application_record_id: int | None = None
+
+
 class AssistantRunRequest(BaseModel):
     conversation_id: int | None = None
     content: str = Field(min_length=1, max_length=8000)
+    context: ContextSelection | None = None
 
 
 class ToolCallTrace(BaseModel):

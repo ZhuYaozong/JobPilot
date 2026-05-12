@@ -19,7 +19,7 @@ later slice does not require editing this file.
 """
 
 import json
-from typing import Iterable
+from typing import Any, Iterable
 
 from app.agent.tools import TOOL_REGISTRY
 
@@ -55,16 +55,49 @@ def _format_summary_section(existing_summary: str | None) -> str:
     return f"\n之前对话的摘要(过早的轮次已被压缩):\n{existing_summary}\n"
 
 
+def _format_tool_call_history(
+    tool_call_history: Iterable[dict[str, Any]],
+) -> str:
+    """Pretty-print prior tool calls in this turn for the decide prompt.
+
+    Each entry has keys ``tool``, ``args``, ``result``. Results may be large
+    structured dicts; we serialise them as JSON without truncation so the
+    LLM gets the full observation. If this turns out to push token usage too
+    high in production we can switch to a summarising serialiser.
+    """
+    entries = list(tool_call_history)
+    if not entries:
+        return "(本轮还没有调用过工具)"
+    lines: list[str] = []
+    for idx, entry in enumerate(entries, start=1):
+        tool = entry.get("tool", "<unknown>")
+        args = json.dumps(entry.get("args") or {}, ensure_ascii=False)
+        result = json.dumps(entry.get("result") or {}, ensure_ascii=False)
+        lines.append(
+            f"[{idx}] 工具: {tool}\n    参数: {args}\n    结果: {result}",
+        )
+    return "\n".join(lines)
+
+
 def build_decide_prompt(
     user_text: str,
     history: Iterable[dict[str, str]] | None = None,
     existing_summary: str | None = None,
+    tool_call_history: Iterable[dict[str, Any]] | None = None,
+    iterations_remaining: int | None = None,
 ) -> str:
     tools_section = _build_tools_section()
     summary_section = _format_summary_section(existing_summary)
     history_section = _format_history(history or [])
-    return f"""你是 JobPilot 的求职助手。根据用户消息,决定:
-(A) 是否需要调用某个工具来完成任务
+    tool_history_section = _format_tool_call_history(tool_call_history or [])
+    budget_hint = ""
+    if iterations_remaining is not None:
+        budget_hint = (
+            f"\n本轮剩余工具调用次数: {iterations_remaining}。"
+            f"如果剩余次数为 0 或 1,优先选 respond_directly,把目前的信息总结给用户。\n"
+        )
+    return f"""你是 JobPilot 的求职助手。根据用户消息,决定下一步:
+(A) 调用一个工具(进一步查找信息或生成产物)
 (B) 或者直接用文字回复用户
 
 可用工具:
@@ -79,14 +112,18 @@ def build_decide_prompt(
 {{"action": "respond_directly", "text": "<给用户的话>"}}
 
 判断规则:
-- 用户明确给出所需参数(比如 resume_id + job_posting_id)并想要某个工具能完成的事,选 call_tool。
-- 用户只是闲聊、问问题或信息不全,选 respond_directly,
-  在 text 字段里温和地引导用户提供需要的信息。
-- 不要猜测用户没说的 id。
-- 如果对话历史/摘要里已经提到过 resume_id / job_posting_id 等关键信息,你可以复用。
-{summary_section}
+- 如果用户用名字提到岗位/简历/投递(例如"腾讯的岗位"、"我最新的简历")但你不知道 id,
+  优先调用 list_user_jobs / list_user_resumes / list_user_applications 查出来。
+- 拿到 id 后再调用需要 id 的动作工具(analyze_match / generate_cover_letter / generate_interview_prep)。
+- 如果已有足够信息回答用户,选 respond_directly;不要重复调用同样参数的同一个工具。
+- 不要猜测用户没说的字段。
+- 如果对话摘要 / 历史 / 工具结果里已经包含某个 id,直接使用。
+{budget_hint}{summary_section}
 对话历史(最近的在最下面):
 {history_section}
+
+本轮已经调用过的工具(按时间顺序):
+{tool_history_section}
 
 本轮用户消息:
 {user_text}
@@ -99,9 +136,17 @@ def build_decide_repair_prompt(
     existing_summary: str | None,
     previous_raw_output: str,
     error_description: str,
+    tool_call_history: Iterable[dict[str, Any]] | None = None,
+    iterations_remaining: int | None = None,
 ) -> str:
     """Second-chance prompt after the first decide returned unparseable output."""
-    base = build_decide_prompt(user_text, history, existing_summary)
+    base = build_decide_prompt(
+        user_text,
+        history,
+        existing_summary,
+        tool_call_history=tool_call_history,
+        iterations_remaining=iterations_remaining,
+    )
     return f"""{base}
 
 # 重要 — 修正之前的错误回复
@@ -119,28 +164,35 @@ def build_decide_repair_prompt(
 
 def build_format_response_prompt(
     user_text: str,
-    tool_name: str,
-    tool_result: dict,
+    tool_call_history: Iterable[dict[str, Any]],
     history: Iterable[dict[str, str]] | None = None,
 ) -> str:
-    result_json = json.dumps(tool_result, ensure_ascii=False, indent=2)
+    """Build the prompt that asks the LLM to write the final reply.
+
+    ``tool_call_history`` is the full list of tools invoked this turn (one or
+    more). The prompt emphasises that the LLM should synthesise across all of
+    them rather than narrating each call.
+    """
     history_section = _format_history(history or [])
-    return f"""你是 JobPilot 的求职助手。刚才你调用了工具 `{tool_name}`,下面是工具返回的结果。
-请把结果用自然、简洁的中文回复给用户。规则:
-- 如果 ok=true:用 data 内容写一段对用户有用的总结,不要把 JSON 字面值贴回去。
-- 如果 ok=false:婉转告知用户出了什么问题,如果可以,基于 message_for_llm 给出
-  下一步建议。不要暴露 error_class 等内部字段名。
-- 不要复述"我调用了 xxx 工具"这种过程性描述,直接给结论。
-- 注意对话历史里的上下文,避免重复已经说过的话。
+    tool_history_section = _format_tool_call_history(tool_call_history)
+    return f"""你是 JobPilot 的求职助手。本轮你为了回答用户的问题,调用了下面这些工具(可能不止一个)。
+请把所有结果综合成一段自然、简洁的中文回复。规则:
+- 综合所有工具结果,直接给用户能用的结论;不要逐个工具流水账。
+- 如果某个工具结果 ok=false:基于 message_for_llm 婉转告诉用户出了什么、下一步可以怎么做。
+  不要暴露 error_class 这种内部字段名。
+- 不要把 JSON 字面值贴回去。
+- 不要说"我调用了 xxx 工具"这种过程性描述。
+- 注意对话历史上下文,不要重复说过的话。
+- 用户问题里指代不清的(比如"这个岗位")就用你查到的具体名字来指代,让用户知道你抓到的是哪个。
 
 对话历史(最近的在最下面):
 {history_section}
 
+本轮的工具调用与结果(按时间顺序):
+{tool_history_section}
+
 本轮用户消息:
 {user_text}
-
-工具结果:
-{result_json}
 """
 
 

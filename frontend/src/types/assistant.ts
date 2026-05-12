@@ -40,9 +40,16 @@ export interface AgentRunSummary {
   tool_calls: ToolCallTrace[];
 }
 
+export interface ContextSelection {
+  resume_id?: number | null;
+  job_posting_id?: number | null;
+  application_record_id?: number | null;
+}
+
 export interface AssistantRunRequest {
   conversation_id?: number | null;
   content: string;
+  context?: ContextSelection;
 }
 
 export interface AssistantRunResponse {
