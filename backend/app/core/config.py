@@ -7,8 +7,8 @@ class Settings(BaseSettings):
     app_name: str = "JobPilot Backend"
     app_env: str = "local"
     app_debug: bool = True
-    database_url: str = "postgresql+asyncpg://postgres:123456@localhost:25432/jobpilot"
-    redis_url: str = "redis://localhost:26379/0"
+    database_url: str = "postgresql+asyncpg://postgres:123456@127.0.0.1:25432/jobpilot"
+    redis_url: str = "redis://127.0.0.1:26379/0"
     llm_base_url: str | None = None
     llm_api_key: str | None = None
     llm_model_name: str | None = None
