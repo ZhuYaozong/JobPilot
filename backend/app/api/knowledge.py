@@ -263,6 +263,29 @@ async def delete_document(
     return Response(status_code=204)
 
 
+@router.post(
+    "/documents/{document_id}/reindex", response_model=KnowledgeDocumentRead,
+)
+async def reindex_document(
+    document_id: int,
+    db: DbSession,
+    current_user: CurrentUserDep,
+) -> KnowledgeDocumentRead:
+    """Re-run chunking + embedding for a document.
+
+    Common use: a previous run landed in ``status=failed`` (e.g. embedding
+    endpoint was misconfigured). After the user fixes config, this endpoint
+    drops the old chunks and re-indexes from scratch. Indexing runs
+    synchronously inside the request — see :mod:`knowledge_indexing_service`
+    for the state machine.
+    """
+    doc = await knowledge_service.get_document_for_user_or_404(
+        db, document_id, current_user,
+    )
+    doc = await knowledge_service.reindex_document(db, doc)
+    return _to_doc_full(doc)
+
+
 def _to_doc_full(doc: KnowledgeDocument) -> KnowledgeDocumentRead:
     return KnowledgeDocumentRead(
         id=doc.id,

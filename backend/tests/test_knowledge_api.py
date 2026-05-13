@@ -194,9 +194,15 @@ def test_delete_kb_cascades_documents_and_chunks(
 # ---------- Document upload ------------------------------------------------
 
 
-def test_upload_txt_creates_pending_document(
+def test_upload_txt_creates_document_with_text_persisted(
     client: TestClient, test_marker: str,
 ) -> None:
+    """The data-layer guarantees: text is extracted, source_type/raw_text are
+    populated, and the row lands in a terminal status (ready / failed).
+    Whether indexing succeeds depends on whether the test environment has
+    an embedding endpoint configured — assertions are written so the row
+    contract holds in either case. Slice 7'c2's dedicated tests
+    (test_knowledge_indexing.py) verify the indexing pipeline itself."""
     kb_id = client.post(
         "/api/v1/knowledge/bases",
         json={"name": f"{test_marker} upload"},
@@ -214,10 +220,9 @@ def test_upload_txt_creates_pending_document(
     )
     assert resp.status_code == 201, resp.text
     body = resp.json()
-    assert body["status"] == "pending"  # 7'c2 will run real indexing
+    assert body["status"] in {"ready", "failed"}
     assert body["source_type"] == "text"
     assert test_marker in body["raw_text"]
-    assert body["chunk_count"] == 0
 
 
 def test_upload_docx_extracts_paragraphs(
