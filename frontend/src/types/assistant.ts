@@ -44,6 +44,7 @@ export interface ContextSelection {
   resume_id?: number | null;
   job_posting_id?: number | null;
   application_record_id?: number | null;
+  knowledge_base_id?: number | null;
 }
 
 export interface AssistantRunRequest {

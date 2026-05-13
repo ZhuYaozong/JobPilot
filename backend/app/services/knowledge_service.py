@@ -211,6 +211,26 @@ async def get_document_for_user_or_404(
     return doc
 
 
+async def list_document_chunks(
+    db: AsyncSession,
+    document: KnowledgeDocument,
+    *,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[KnowledgeChunk]:
+    rows = await db.execute(
+        select(KnowledgeChunk)
+        .where(
+            KnowledgeChunk.document_id == document.id,
+            KnowledgeChunk.user_id == document.user_id,
+        )
+        .order_by(KnowledgeChunk.chunk_index.asc(), KnowledgeChunk.id.asc())
+        .limit(limit)
+        .offset(offset),
+    )
+    return list(rows.scalars().all())
+
+
 async def upload_document(
     db: AsyncSession,
     *,

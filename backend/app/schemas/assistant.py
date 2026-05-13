@@ -13,6 +13,7 @@ class ContextSelection(BaseModel):
     resume_id: int | None = None
     job_posting_id: int | None = None
     application_record_id: int | None = None
+    knowledge_base_id: int | None = None
 
 
 class AssistantRunRequest(BaseModel):

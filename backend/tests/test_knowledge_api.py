@@ -9,7 +9,7 @@ import io
 from typing import Any, Callable
 
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import delete as sa_delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -418,3 +418,75 @@ def test_list_documents_filters_by_kb(
 
     docs_in_a = client.get(f"/api/v1/knowledge/bases/{kb_a}/documents").json()
     assert any(d["id"] == doc_id_in_a for d in docs_in_a)
+
+
+def test_list_document_chunks_returns_ordered_preview(
+    client: TestClient, test_marker: str,
+) -> None:
+    kb_id = client.post(
+        "/api/v1/knowledge/bases",
+        json={"name": f"{test_marker} chunks"},
+    ).json()["id"]
+
+    doc_resp = client.post(
+        f"/api/v1/knowledge/bases/{kb_id}/documents/upload",
+        files={
+            "file": (
+                f"{test_marker}-chunks.txt",
+                b"chunk preview document body big enough to pass the threshold.",
+                "text/plain",
+            ),
+        },
+    )
+    assert doc_resp.status_code == 201
+    doc_id = doc_resp.json()["id"]
+
+    async def _replace_chunks(db: AsyncSession) -> None:
+        doc = (
+            await db.execute(
+                select(KnowledgeDocument).where(KnowledgeDocument.id == doc_id),
+            )
+        ).scalar_one()
+        await db.execute(
+            sa_delete(KnowledgeChunk).where(KnowledgeChunk.document_id == doc.id),
+        )
+        db.add_all(
+            [
+                KnowledgeChunk(
+                    document_id=doc.id,
+                    user_id=doc.user_id,
+                    chunk_index=1,
+                    content=f"{test_marker} second chunk",
+                    embedding=None,
+                    char_start=20,
+                    char_end=39,
+                ),
+                KnowledgeChunk(
+                    document_id=doc.id,
+                    user_id=doc.user_id,
+                    chunk_index=0,
+                    content=f"{test_marker} first chunk",
+                    embedding=None,
+                    char_start=0,
+                    char_end=18,
+                ),
+            ],
+        )
+        doc.chunk_count = 2
+        await db.commit()
+
+    _run(_replace_chunks)
+
+    resp = client.get(f"/api/v1/knowledge/documents/{doc_id}/chunks?limit=10")
+    assert resp.status_code == 200
+    chunks = resp.json()
+    assert [chunk["chunk_index"] for chunk in chunks] == [0, 1]
+    assert chunks[0]["document_id"] == doc_id
+    assert chunks[0]["content"] == f"{test_marker} first chunk"
+    assert chunks[0]["char_start"] == 0
+    assert chunks[0]["char_end"] == 18
+
+
+def test_list_document_chunks_rejects_missing_document(client: TestClient) -> None:
+    resp = client.get("/api/v1/knowledge/documents/999999999/chunks")
+    assert resp.status_code == 404

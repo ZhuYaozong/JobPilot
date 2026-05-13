@@ -4,6 +4,7 @@ import type {
   KnowledgeBaseCreate,
   KnowledgeBaseListItem,
   KnowledgeBaseUpdate,
+  KnowledgeChunkPreview,
   KnowledgeDocument,
   KnowledgeDocumentListItem,
   ManualDocumentCreate,
@@ -63,6 +64,17 @@ export async function listKnowledgeDocuments(
 export async function getKnowledgeDocument(documentId: number) {
   const response = await apiClient.get<KnowledgeDocument>(
     `/api/v1/knowledge/documents/${documentId}`,
+  );
+  return response.data;
+}
+
+export async function listKnowledgeDocumentChunks(
+  documentId: number,
+  params: { limit?: number; offset?: number } = {},
+) {
+  const response = await apiClient.get<KnowledgeChunkPreview[]>(
+    `/api/v1/knowledge/documents/${documentId}/chunks`,
+    { params },
   );
   return response.data;
 }

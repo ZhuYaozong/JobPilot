@@ -14,6 +14,7 @@ from app.api.deps import CurrentUserDep, DbSession, ListLimit, ListOffset
 from app.models.knowledge_base import KnowledgeBase
 from app.models.knowledge_document import KnowledgeDocument
 from app.schemas.knowledge import (
+    KnowledgeChunkPreview,
     KnowledgeBaseCreate,
     KnowledgeBaseListItem,
     KnowledgeBaseRead,
@@ -248,6 +249,26 @@ async def read_document(
         db, document_id, current_user,
     )
     return _to_doc_full(doc)
+
+
+@router.get(
+    "/documents/{document_id}/chunks",
+    response_model=list[KnowledgeChunkPreview],
+)
+async def list_document_chunks(
+    document_id: int,
+    db: DbSession,
+    current_user: CurrentUserDep,
+    limit: ListLimit = 50,
+    offset: ListOffset = 0,
+) -> list[KnowledgeChunkPreview]:
+    doc = await knowledge_service.get_document_for_user_or_404(
+        db, document_id, current_user,
+    )
+    chunks = await knowledge_service.list_document_chunks(
+        db, doc, limit=limit, offset=offset,
+    )
+    return [KnowledgeChunkPreview.model_validate(chunk) for chunk in chunks]
 
 
 @router.delete("/documents/{document_id}", status_code=204)

@@ -45,10 +45,12 @@
       :resumes="resumes"
       :jobs="jobs"
       :applications="applications"
+      :knowledge-bases="knowledgeBases"
       :loading="referencesLoading"
       v-model:resume-id="contextResumeId"
       v-model:job-posting-id="contextJobId"
       v-model:application-record-id="contextApplicationId"
+      v-model:knowledge-base-id="contextKnowledgeBaseId"
     />
   </div>
 </template>
@@ -72,6 +74,7 @@ import {
   updateConversation,
 } from "@/api/assistant";
 import { listJobs } from "@/api/jobs";
+import { listKnowledgeBases } from "@/api/knowledge";
 import { listResumes } from "@/api/resumes";
 
 import type { ApplicationRecordListItem } from "@/types/application_record";
@@ -83,6 +86,7 @@ import type {
   ToolCallTrace,
 } from "@/types/assistant";
 import type { JobPostingListItem } from "@/types/job_posting";
+import type { KnowledgeBaseListItem } from "@/types/knowledge";
 import type { ResumeListItem } from "@/types/resume";
 
 import { formatRelativeTime } from "@/utils/format";
@@ -116,11 +120,13 @@ const liveToolTrace = ref<ToolCallTrace[]>([]);
 const resumes = ref<ResumeListItem[]>([]);
 const jobs = ref<JobPostingListItem[]>([]);
 const applications = ref<ApplicationRecordListItem[]>([]);
+const knowledgeBases = ref<KnowledgeBaseListItem[]>([]);
 const referencesLoading = ref(false);
 
 const contextResumeId = ref<number | null>(null);
 const contextJobId = ref<number | null>(null);
 const contextApplicationId = ref<number | null>(null);
+const contextKnowledgeBaseId = ref<number | null>(null);
 
 // --- Derived ----------------------------------------------------------------
 
@@ -158,10 +164,17 @@ const currentContextLabel = computed(() => {
     const j = jobs.value.find((x) => x.id === contextJobId.value);
     parts.push(j ? `岗位 ${j.company_name}` : `岗位 #${contextJobId.value}`);
   }
+  if (contextKnowledgeBaseId.value) {
+    const kb = knowledgeBases.value.find((x) => x.id === contextKnowledgeBaseId.value);
+    parts.push(kb ? `知识库 ${kb.name}` : `知识库 #${contextKnowledgeBaseId.value}`);
+  }
   return parts.join(" / ");
 });
 
 const composerPlaceholder = computed(() => {
+  if (contextKnowledgeBaseId.value) {
+    return "比如:总结这个知识库里的面试重点。";
+  }
   if (contextResumeId.value && contextJobId.value) {
     return "比如:这个岗位的匹配度怎么样?";
   }
@@ -182,6 +195,13 @@ const suggestedPrompts = computed<PromptChip[]>(() => {
   if (messages.value.length > 0) return [];
 
   const hasContext = !!(contextResumeId.value && contextJobId.value);
+  if (contextKnowledgeBaseId.value) {
+    return [
+      { icon: "🔍", label: "搜索当前知识库", text: "基于当前选中的知识库,总结我保存的重点信息。" },
+      { icon: "🎤", label: "整理面试要点", text: "基于当前选中的知识库,帮我整理面试准备要点。" },
+      { icon: "📌", label: "提炼行动项", text: "基于当前选中的知识库,提炼我接下来该做的准备。" },
+    ];
+  }
   if (hasContext) {
     return [
       { icon: "📊", label: "分析这个岗位的匹配度", text: "基于当前上下文,帮我分析匹配度。" },
@@ -372,6 +392,7 @@ async function sendMessage(content: string) {
           resume_id: contextResumeId.value ?? null,
           job_posting_id: contextJobId.value ?? null,
           application_record_id: contextApplicationId.value ?? null,
+          knowledge_base_id: contextKnowledgeBaseId.value ?? null,
         },
       },
       {
@@ -511,10 +532,11 @@ async function refreshConversations() {
 
 async function loadReferences() {
   referencesLoading.value = true;
-  const [j, r, a] = await Promise.allSettled([
+  const [j, r, a, k] = await Promise.allSettled([
     listJobs({ limit: 100 }),
     listResumes({ limit: 100 }),
     listApplications({ limit: 100 }),
+    listKnowledgeBases({ limit: 100 }),
   ]);
   if (j.status === "fulfilled") {
     jobs.value = j.value;
@@ -530,6 +552,11 @@ async function loadReferences() {
     applications.value = a.value;
   } else {
     ElMessage.error(getErrorMessage(a.reason, "投递记录加载失败"));
+  }
+  if (k.status === "fulfilled") {
+    knowledgeBases.value = k.value;
+  } else {
+    ElMessage.error(getErrorMessage(k.reason, "知识库选项加载失败"));
   }
   referencesLoading.value = false;
 }

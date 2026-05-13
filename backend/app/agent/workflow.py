@@ -74,6 +74,7 @@ class AgentState(TypedDict, total=False):
     conversation_history: list[dict[str, str]]
     existing_summary: str | None
     message_count_before_user: int
+    selected_knowledge_base_id: int | None
 
     # `decide` node output / repair scratchpad.
     action: Literal["call_tool", "respond_directly"]
@@ -237,7 +238,10 @@ def build_workflow(
             current_user=current_user,
             agent_run_id=agent_run_id,
         )
-        args = state.get("tool_args") or {}
+        args = dict(state.get("tool_args") or {})
+        selected_knowledge_base_id = state.get("selected_knowledge_base_id")
+        if tool_name == "search_knowledge" and selected_knowledge_base_id is not None:
+            args["knowledge_base_id"] = selected_knowledge_base_id
         try:
             result = await tool_cls().invoke(args, ctx)
         except ToolValidationError:

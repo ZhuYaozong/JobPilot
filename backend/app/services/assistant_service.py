@@ -30,6 +30,7 @@ from app.agent.workflow import WorkflowDecideError, build_workflow
 from app.llm.client import LLMClient
 from app.models.agent_run import AgentRun
 from app.models.conversation import Conversation
+from app.models.knowledge_base import KnowledgeBase
 from app.models.memory_summary import MemorySummary
 from app.models.message import Message
 from app.models.tool_call_log import ToolCallLog
@@ -74,7 +75,9 @@ async def run_assistant_turn(
     # Build the workflow-facing user_text. If the right-side selector pre-
     # picked a resume/job/application, prepend a labelled hint so the agent
     # can short-circuit list_user_* tools when the user said "这个岗位".
-    context_hint = await _build_context_hint(db, current_user.id, payload.context)
+    context_hint, selected_knowledge_base_id = await _build_context_hint(
+        db, current_user.id, payload.context,
+    )
     workflow_user_text = (
         f"{context_hint}\n\n[用户问题]\n{payload.content}"
         if context_hint
@@ -128,6 +131,7 @@ async def run_assistant_turn(
         "conversation_history": history,
         "existing_summary": existing_summary_text,
         "message_count_before_user": message_count_before_user,
+        "selected_knowledge_base_id": selected_knowledge_base_id,
         "decide_repair_attempts": 0,
         "iteration_count": 0,
         "tool_call_history": [],
@@ -274,7 +278,9 @@ async def run_assistant_turn_stream(
         db, conversation, current_user, payload.content,
     )
 
-    context_hint = await _build_context_hint(db, current_user.id, payload.context)
+    context_hint, selected_knowledge_base_id = await _build_context_hint(
+        db, current_user.id, payload.context,
+    )
     workflow_user_text = (
         f"{context_hint}\n\n[用户问题]\n{payload.content}"
         if context_hint
@@ -341,6 +347,7 @@ async def run_assistant_turn_stream(
         "conversation_history": history,
         "existing_summary": existing_summary_text,
         "message_count_before_user": message_count_before_user,
+        "selected_knowledge_base_id": selected_knowledge_base_id,
         "decide_repair_attempts": 0,
         "iteration_count": 0,
         "tool_call_history": [],
@@ -536,7 +543,7 @@ async def _build_context_hint(
     db: AsyncSession,
     user_id: int,
     context: ContextSelection | None,
-) -> str | None:
+) -> tuple[str | None, int | None]:
     """Resolve the UI-side selection to human-readable labels for the prompt.
 
     The hint format is intentionally short and labelled — the LLM sees:
@@ -551,9 +558,10 @@ async def _build_context_hint(
     resume) to fail the whole assistant call.
     """
     if context is None:
-        return None
+        return None, None
 
     lines: list[str] = []
+    selected_knowledge_base_id: int | None = None
 
     if context.resume_id is not None:
         row = (
@@ -591,9 +599,25 @@ async def _build_context_hint(
         # it wants details.
         lines.append(f"- 投递记录:#{context.application_record_id}")
 
+    if context.knowledge_base_id is not None:
+        row = (
+            await db.execute(
+                select(KnowledgeBase.id, KnowledgeBase.name).where(
+                    KnowledgeBase.id == context.knowledge_base_id,
+                    KnowledgeBase.user_id == user_id,
+                ),
+            )
+        ).one_or_none()
+        if row is not None:
+            selected_knowledge_base_id = row.id
+            lines.append(
+                f"- 知识库:{row.name} (#{row.id}); "
+                "如需检索资料,调用 search_knowledge 时必须使用此 knowledge_base_id",
+            )
+
     if not lines:
-        return None
-    return "[当前上下文]\n" + "\n".join(lines)
+        return None, selected_knowledge_base_id
+    return "[当前上下文]\n" + "\n".join(lines), selected_knowledge_base_id
 
 
 _MAX_TITLE_CHARS = 28
