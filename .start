@@ -1,0 +1,5 @@
+
+
+uv run uvicorn app.main:app --reload
+
+npm run dev
