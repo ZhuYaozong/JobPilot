@@ -6,11 +6,11 @@
         <p class="page-head__eyebrow">资料中心</p>
         <h1 class="page-head__title">
           知识库管理
-          <span class="wip-pill">检索开发中</span>
+          <span class="wip-pill">已接入助手</span>
         </h1>
         <p class="page-head__subtitle">
           上传公司资料、项目素材、面试笔记等。上传后系统会自动切片并嵌入向量。
-          <strong>AI 助手检索集成下一刀接入。</strong>
+          <strong>在助手页选择知识库后,检索会限定在当前资料集。</strong>
         </p>
       </div>
 
@@ -120,9 +120,9 @@
                   <span class="meta-chip__icon">🧬</span>
                   自动切片 + 向量嵌入已接入
                 </span>
-                <span class="meta-chip meta-chip--warn">
-                  <span class="meta-chip__icon">⚠</span>
-                  AI 助手检索下一刀接入
+                <span class="meta-chip">
+                  <span class="meta-chip__icon">🔍</span>
+                  可在助手页指定检索范围
                 </span>
               </div>
             </div>
@@ -172,6 +172,14 @@
                 </div>
                 <div class="doc__actions">
                   <button
+                    v-if="doc.chunk_count > 0"
+                    class="ghost-btn ghost-btn--sm"
+                    type="button"
+                    @click="openChunksDrawer(doc)"
+                  >
+                    查看切片
+                  </button>
+                  <button
                     v-if="doc.status === 'failed' || doc.status === 'ready'"
                     class="ghost-btn ghost-btn--sm"
                     type="button"
@@ -200,8 +208,8 @@
               <strong>向量索引已接入</strong>
               <p>
                 每份文档上传后会自动切片(~800 字 / 100 字 overlap)并通过
-                独立的 embedding 端点生成向量入库。下一刀(7'c3)给 AI 助手
-                加 search_knowledge 工具,问答时按需检索。
+                独立的 embedding 端点生成向量入库。点击文档的“查看切片”
+                可以检查切片质量,助手检索命中时也会基于这些片段组织回答。
               </p>
             </div>
           </aside>
@@ -374,6 +382,33 @@
         </div>
       </template>
     </el-drawer>
+
+    <!-- ========== Chunk preview drawer ========== -->
+    <el-drawer
+      v-model="chunksDrawerOpen"
+      :title="chunksDrawerTitle"
+      direction="rtl"
+      size="620px"
+      @closed="resetChunksDrawer"
+    >
+      <div v-if="chunksLoading" class="loading-line">正在加载切片…</div>
+      <div v-else-if="!documentChunks.length" class="chunks-empty">
+        这份文档还没有可预览的切片。
+      </div>
+      <div v-else class="chunks-list">
+        <article
+          v-for="chunk in documentChunks"
+          :key="chunk.id"
+          class="chunk-card"
+        >
+          <header class="chunk-card__head">
+            <strong>#{{ chunk.chunk_index + 1 }}</strong>
+            <span>{{ chunk.char_start }}-{{ chunk.char_end }} 字符</span>
+          </header>
+          <p class="chunk-card__content">{{ chunk.content }}</p>
+        </article>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
@@ -386,6 +421,7 @@ import {
   createManualKnowledgeDocument,
   deleteKnowledgeBase,
   deleteKnowledgeDocument,
+  listKnowledgeDocumentChunks,
   listKnowledgeBases,
   listKnowledgeDocuments,
   reindexKnowledgeDocument,
@@ -394,6 +430,7 @@ import {
 } from "@/api/knowledge";
 import type {
   KnowledgeBaseListItem,
+  KnowledgeChunkPreview,
   KnowledgeDocumentListItem,
   ManualDocumentCreate,
 } from "@/types/knowledge";
@@ -416,6 +453,7 @@ const reindexingDocIds = ref<Set<number>>(new Set());
 
 const createKbDrawerOpen = ref(false);
 const uploadDocDrawerOpen = ref(false);
+const chunksDrawerOpen = ref(false);
 
 const kbForm = ref({ name: "", description: "" });
 
@@ -429,6 +467,9 @@ const manualDocForm = ref<ManualDocumentCreate>({
   body: "",
   source_url: "",
 });
+const chunksLoading = ref(false);
+const chunksDocTitle = ref("");
+const documentChunks = ref<KnowledgeChunkPreview[]>([]);
 
 const selectedKb = computed(() =>
   knowledgeBases.value.find((kb) => kb.id === selectedKbId.value) ?? null,
@@ -438,6 +479,10 @@ const canCreateManual = computed(
   () =>
     manualDocForm.value.title.trim().length > 0
     && manualDocForm.value.body.trim().length >= 30,
+);
+
+const chunksDrawerTitle = computed(() =>
+  chunksDocTitle.value ? `切片预览:${chunksDocTitle.value}` : "切片预览",
 );
 
 // ---------- Effects ---------------------------------------------------------
@@ -655,6 +700,24 @@ async function handleReindexDocument(doc: KnowledgeDocumentListItem) {
   }
 }
 
+async function openChunksDrawer(doc: KnowledgeDocumentListItem) {
+  chunksDocTitle.value = doc.title;
+  chunksDrawerOpen.value = true;
+  chunksLoading.value = true;
+  try {
+    documentChunks.value = await listKnowledgeDocumentChunks(doc.id, { limit: 100 });
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, "切片加载失败"));
+  } finally {
+    chunksLoading.value = false;
+  }
+}
+
+function resetChunksDrawer() {
+  chunksDocTitle.value = "";
+  documentChunks.value = [];
+}
+
 async function handleDeleteDocument(doc: KnowledgeDocumentListItem) {
   try {
     await ElMessageBox.confirm(
@@ -769,7 +832,7 @@ function statusTone(status: string): string {
   align-items: center;
   padding: 4px 10px;
   border-radius: 999px;
-  background: linear-gradient(135deg, #f59e0b, #d97706);
+  background: linear-gradient(135deg, #0f766e, #2563eb);
   color: #ffffff;
   font-size: 11px;
   font-weight: 700;
@@ -1356,6 +1419,55 @@ function statusTone(status: string): string {
 .ghost-btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.chunks-empty {
+  padding: 20px;
+  border: 1px dashed rgba(15, 23, 42, 0.1);
+  border-radius: 10px;
+  color: #667085;
+  font-size: 13px;
+  text-align: center;
+}
+
+.chunks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chunk-card {
+  padding: 12px 14px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 10px;
+  background: #fafbfc;
+}
+
+.chunk-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.chunk-card__head strong {
+  font-size: 12px;
+  color: #0f766e;
+}
+
+.chunk-card__head span {
+  font-size: 11px;
+  color: #98a2b3;
+}
+
+.chunk-card__content {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  line-height: 1.65;
+  color: #344054;
 }
 
 /* ============ Callout ============ */

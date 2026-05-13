@@ -86,13 +86,34 @@
         </el-select>
       </div>
 
-      <div class="picker-item picker-item--disabled">
+      <div class="picker-item">
         <label class="picker-label">
           <span class="picker-label__icon">📚</span>
           <span>知识库</span>
-          <span class="picker-label__lock">即将上线</span>
+          <span class="picker-label__optional">可选</span>
         </label>
-        <el-select :model-value="undefined" disabled placeholder="即将上线" class="picker-select" />
+        <el-select
+          v-model="localKnowledgeBaseId"
+          clearable
+          filterable
+          placeholder="选择知识库"
+          :loading="loading"
+          class="picker-select"
+        >
+          <el-option
+            v-for="kb in knowledgeBases"
+            :key="kb.id"
+            :label="kb.name"
+            :value="kb.id"
+          >
+            <span>{{ kb.name }}</span>
+            <span class="option-meta">{{ kb.document_count }} 份</span>
+          </el-option>
+        </el-select>
+        <p v-if="selectedKnowledgeBase" class="picker-status">
+          <span class="status-dot status-dot--ok" />
+          {{ selectedKnowledgeBase.document_count }} 份资料
+        </p>
       </div>
     </div>
 
@@ -112,6 +133,7 @@ import { computed, ref, watch } from "vue";
 
 import type { ApplicationRecordListItem } from "@/types/application_record";
 import type { JobPostingListItem } from "@/types/job_posting";
+import type { KnowledgeBaseListItem } from "@/types/knowledge";
 import type { ResumeListItem } from "@/types/resume";
 import { formatApplicationStage, formatParseStatus } from "@/utils/labels";
 
@@ -119,10 +141,12 @@ interface Props {
   resumes: ResumeListItem[];
   jobs: JobPostingListItem[];
   applications: ApplicationRecordListItem[];
+  knowledgeBases: KnowledgeBaseListItem[];
   loading?: boolean;
   resumeId: number | null;
   jobPostingId: number | null;
   applicationRecordId: number | null;
+  knowledgeBaseId: number | null;
 }
 
 const props = withDefaults(defineProps<Props>(), { loading: false });
@@ -131,19 +155,23 @@ const emit = defineEmits<{
   (event: "update:resumeId", value: number | null): void;
   (event: "update:jobPostingId", value: number | null): void;
   (event: "update:applicationRecordId", value: number | null): void;
+  (event: "update:knowledgeBaseId", value: number | null): void;
 }>();
 
 const localResumeId = ref<number | null>(props.resumeId);
 const localJobId = ref<number | null>(props.jobPostingId);
 const localApplicationId = ref<number | null>(props.applicationRecordId);
+const localKnowledgeBaseId = ref<number | null>(props.knowledgeBaseId);
 
 watch(() => props.resumeId, (v) => (localResumeId.value = v));
 watch(() => props.jobPostingId, (v) => (localJobId.value = v));
 watch(() => props.applicationRecordId, (v) => (localApplicationId.value = v));
+watch(() => props.knowledgeBaseId, (v) => (localKnowledgeBaseId.value = v));
 
 watch(localResumeId, (v) => emit("update:resumeId", v));
 watch(localJobId, (v) => emit("update:jobPostingId", v));
 watch(localApplicationId, (v) => emit("update:applicationRecordId", v));
+watch(localKnowledgeBaseId, (v) => emit("update:knowledgeBaseId", v));
 
 const selectedResume = computed(() =>
   props.resumes.find((r) => r.id === localResumeId.value) ?? null,
@@ -151,12 +179,16 @@ const selectedResume = computed(() =>
 const selectedJob = computed<JobPostingListItem | null>(() =>
   props.jobs.find((j) => j.id === localJobId.value) ?? null,
 );
+const selectedKnowledgeBase = computed<KnowledgeBaseListItem | null>(() =>
+  props.knowledgeBases.find((kb) => kb.id === localKnowledgeBaseId.value) ?? null,
+);
 
 const hasAnySelection = computed(
   () =>
     localResumeId.value !== null
     || localJobId.value !== null
-    || localApplicationId.value !== null,
+    || localApplicationId.value !== null
+    || localKnowledgeBaseId.value !== null,
 );
 
 function applicationLabel(app: ApplicationRecordListItem): string {
@@ -169,6 +201,7 @@ function clearAll() {
   localResumeId.value = null;
   localJobId.value = null;
   localApplicationId.value = null;
+  localKnowledgeBaseId.value = null;
 }
 </script>
 
@@ -217,10 +250,6 @@ function clearAll() {
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
 }
 
-.picker-item--disabled {
-  opacity: 0.55;
-}
-
 .picker-label {
   display: flex;
   align-items: center;
@@ -247,13 +276,15 @@ function clearAll() {
   letter-spacing: 0.04em;
 }
 
-.picker-label__lock {
-  color: #b45309;
-  background: #fef3c7;
-}
-
 .picker-select {
   width: 100%;
+}
+
+.option-meta {
+  float: right;
+  margin-left: 12px;
+  color: #98a2b3;
+  font-size: 12px;
 }
 
 .picker-select :deep(.el-select__wrapper) {

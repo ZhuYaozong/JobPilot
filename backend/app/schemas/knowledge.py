@@ -70,3 +70,16 @@ class KnowledgeDocumentListItem(BaseModel):
 class KnowledgeDocumentRead(KnowledgeDocumentListItem):
     raw_text: str
     extra_metadata: dict[str, Any] | None
+
+
+class KnowledgeChunkPreview(BaseModel):
+    id: int
+    document_id: int
+    chunk_index: int
+    content: str
+    char_start: int
+    char_end: int
+    extra_metadata: dict[str, Any] | None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

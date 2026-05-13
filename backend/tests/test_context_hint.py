@@ -25,6 +25,7 @@ from sqlalchemy.pool import NullPool
 from app.core.config import settings
 from app.llm.client import LLMClient
 from app.models.job_posting import JobPosting
+from app.models.knowledge_base import KnowledgeBase
 from app.models.message import Message
 from app.models.resume import Resume
 from app.models.user import User
@@ -196,3 +197,58 @@ def test_context_with_invalid_resume_id_silently_omits_hint(
     assert decide_prompt is not None
     # All resolutions failed → no context block at all.
     assert "[当前上下文]" not in decide_prompt
+
+
+def test_context_hint_includes_selected_knowledge_base(
+    client: TestClient, monkeypatch, test_marker: str,
+) -> None:
+    """A selected knowledge base should reach the decide prompt as a clear
+    search_knowledge constraint while keeping the persisted message clean."""
+    assert client.get("/health/db").status_code == 200
+
+    async def _seed(db: AsyncSession) -> int:
+        user = (
+            await db.execute(select(User).where(User.username == "test"))
+        ).scalar_one()
+        kb = KnowledgeBase(
+            user_id=user.id,
+            name=f"{test_marker} 面试资料",
+            description="context kb",
+        )
+        db.add(kb)
+        await db.commit()
+        await db.refresh(kb)
+        return kb.id
+
+    kb_id = _run(_seed)
+    seen_prompts: list[str] = []
+
+    async def fake_llm(self, prompt: str) -> str:
+        seen_prompts.append(prompt)
+        if "请严格按以下两种 JSON 之一回复" in prompt:
+            return '{"action": "respond_directly", "text": "ok"}'
+        raise AssertionError(f"unexpected prompt:\n{prompt[:200]}")
+
+    monkeypatch.setattr(LLMClient, "generate_text", fake_llm)
+
+    user_question = f"{test_marker} 查一下我保存的面试资料"
+    response = client.post(
+        "/api/v1/assistant/run",
+        json={
+            "content": user_question,
+            "context": {"knowledge_base_id": kb_id},
+        },
+    )
+    assert response.status_code == 200, response.text
+
+    decide_prompt = next(
+        (p for p in seen_prompts if "请严格按以下两种 JSON 之一回复" in p),
+        None,
+    )
+    assert decide_prompt is not None
+    assert "[当前上下文]" in decide_prompt
+    assert "面试资料" in decide_prompt
+    assert f"#{kb_id}" in decide_prompt
+    assert "search_knowledge" in decide_prompt
+    assert "knowledge_base_id" in decide_prompt
+    assert user_question in decide_prompt

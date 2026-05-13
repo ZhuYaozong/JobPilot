@@ -39,6 +39,17 @@ export interface KnowledgeDocument extends KnowledgeDocumentListItem {
   extra_metadata: JsonObject | null;
 }
 
+export interface KnowledgeChunkPreview {
+  id: number;
+  document_id: number;
+  chunk_index: number;
+  content: string;
+  char_start: number;
+  char_end: number;
+  extra_metadata: JsonObject | null;
+  created_at: ISODateString;
+}
+
 export interface ManualDocumentCreate {
   title: string;
   body: string;
