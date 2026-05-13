@@ -51,6 +51,7 @@
       v-model:job-posting-id="contextJobId"
       v-model:application-record-id="contextApplicationId"
       v-model:knowledge-base-id="contextKnowledgeBaseId"
+      v-model:assistant-mode="assistantMode"
     />
   </div>
 </template>
@@ -80,6 +81,7 @@ import { listResumes } from "@/api/resumes";
 import type { ApplicationRecordListItem } from "@/types/application_record";
 import type {
   AgentRunSummary,
+  AssistantMode,
   AssistantPhase,
   ConversationListItem,
   MessageRead,
@@ -127,6 +129,7 @@ const contextResumeId = ref<number | null>(null);
 const contextJobId = ref<number | null>(null);
 const contextApplicationId = ref<number | null>(null);
 const contextKnowledgeBaseId = ref<number | null>(null);
+const assistantMode = ref<AssistantMode>("chat");
 
 // --- Derived ----------------------------------------------------------------
 
@@ -168,10 +171,19 @@ const currentContextLabel = computed(() => {
     const kb = knowledgeBases.value.find((x) => x.id === contextKnowledgeBaseId.value);
     parts.push(kb ? `知识库 ${kb.name}` : `知识库 #${contextKnowledgeBaseId.value}`);
   }
+  if (assistantMode.value === "mock_interview") {
+    parts.push("模拟面试");
+  }
   return parts.join(" / ");
 });
 
 const composerPlaceholder = computed(() => {
+  if (assistantMode.value === "mock_interview") {
+    if (contextResumeId.value && contextJobId.value) {
+      return "比如:开始模拟面试。";
+    }
+    return "先选择简历和岗位,再开始模拟面试。";
+  }
   if (contextKnowledgeBaseId.value) {
     return "比如:总结这个知识库里的面试重点。";
   }
@@ -195,6 +207,20 @@ const suggestedPrompts = computed<PromptChip[]>(() => {
   if (messages.value.length > 0) return [];
 
   const hasContext = !!(contextResumeId.value && contextJobId.value);
+  if (assistantMode.value === "mock_interview") {
+    if (hasContext) {
+      return [
+        { icon: "🎤", label: "开始模拟面试", text: "基于当前上下文,开始一场模拟面试。每次只问我一个问题。" },
+        { icon: "🧭", label: "先热身", text: "先用一两个热身问题开始模拟面试。" },
+        { icon: "📌", label: "重点追问", text: "围绕这个岗位最关键的能力点来模拟面试。" },
+      ];
+    }
+    return [
+      { icon: "📄", label: "看看我有哪些简历", text: "看看我有哪些简历。" },
+      { icon: "📋", label: "看看我有哪些岗位", text: "看看我有哪些岗位。" },
+    ];
+  }
+
   if (contextKnowledgeBaseId.value) {
     return [
       { icon: "🔍", label: "搜索当前知识库", text: "基于当前选中的知识库,总结我保存的重点信息。" },
@@ -389,6 +415,7 @@ async function sendMessage(content: string) {
         conversation_id: conversationId.value,
         content,
         context: {
+          assistant_mode: assistantMode.value,
           resume_id: contextResumeId.value ?? null,
           job_posting_id: contextJobId.value ?? null,
           application_record_id: contextApplicationId.value ?? null,

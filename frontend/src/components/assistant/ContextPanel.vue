@@ -10,6 +10,21 @@
     <div class="picker-list">
       <div class="picker-item">
         <label class="picker-label">
+          <span class="picker-label__icon">🎛</span>
+          <span>模式</span>
+        </label>
+        <el-radio-group v-model="localAssistantMode" class="mode-toggle">
+          <el-radio-button label="chat">普通问答</el-radio-button>
+          <el-radio-button label="mock_interview">模拟面试</el-radio-button>
+        </el-radio-group>
+        <p v-if="localAssistantMode === 'mock_interview'" class="picker-status">
+          <span class="status-dot status-dot--ok" />
+          每轮只问一个问题,会结合简历、岗位和知识库追问
+        </p>
+      </div>
+
+      <div class="picker-item">
+        <label class="picker-label">
           <span class="picker-label__icon">📄</span>
           <span>简历</span>
         </label>
@@ -132,6 +147,7 @@
 import { computed, ref, watch } from "vue";
 
 import type { ApplicationRecordListItem } from "@/types/application_record";
+import type { AssistantMode } from "@/types/assistant";
 import type { JobPostingListItem } from "@/types/job_posting";
 import type { KnowledgeBaseListItem } from "@/types/knowledge";
 import type { ResumeListItem } from "@/types/resume";
@@ -147,6 +163,7 @@ interface Props {
   jobPostingId: number | null;
   applicationRecordId: number | null;
   knowledgeBaseId: number | null;
+  assistantMode: AssistantMode;
 }
 
 const props = withDefaults(defineProps<Props>(), { loading: false });
@@ -156,22 +173,26 @@ const emit = defineEmits<{
   (event: "update:jobPostingId", value: number | null): void;
   (event: "update:applicationRecordId", value: number | null): void;
   (event: "update:knowledgeBaseId", value: number | null): void;
+  (event: "update:assistantMode", value: AssistantMode): void;
 }>();
 
 const localResumeId = ref<number | null>(props.resumeId);
 const localJobId = ref<number | null>(props.jobPostingId);
 const localApplicationId = ref<number | null>(props.applicationRecordId);
 const localKnowledgeBaseId = ref<number | null>(props.knowledgeBaseId);
+const localAssistantMode = ref<AssistantMode>(props.assistantMode);
 
 watch(() => props.resumeId, (v) => (localResumeId.value = v));
 watch(() => props.jobPostingId, (v) => (localJobId.value = v));
 watch(() => props.applicationRecordId, (v) => (localApplicationId.value = v));
 watch(() => props.knowledgeBaseId, (v) => (localKnowledgeBaseId.value = v));
+watch(() => props.assistantMode, (v) => (localAssistantMode.value = v));
 
 watch(localResumeId, (v) => emit("update:resumeId", v));
 watch(localJobId, (v) => emit("update:jobPostingId", v));
 watch(localApplicationId, (v) => emit("update:applicationRecordId", v));
 watch(localKnowledgeBaseId, (v) => emit("update:knowledgeBaseId", v));
+watch(localAssistantMode, (v) => emit("update:assistantMode", v));
 
 const selectedResume = computed(() =>
   props.resumes.find((r) => r.id === localResumeId.value) ?? null,
@@ -277,6 +298,19 @@ function clearAll() {
 }
 
 .picker-select {
+  width: 100%;
+}
+
+.mode-toggle {
+  display: flex;
+  width: 100%;
+}
+
+.mode-toggle :deep(.el-radio-button) {
+  flex: 1;
+}
+
+.mode-toggle :deep(.el-radio-button__inner) {
   width: 100%;
 }
 
