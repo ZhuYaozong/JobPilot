@@ -120,6 +120,7 @@ const TOOL_DISPLAY: Record<string, ToolDisplay> = {
   list_user_jobs: { label: "查询岗位", icon: "🔍" },
   list_user_resumes: { label: "查询简历", icon: "🔍" },
   list_user_applications: { label: "查询投递", icon: "🔍" },
+  search_knowledge: { label: "搜索知识库", icon: "🔍" },
   analyze_match: { label: "匹配分析", icon: "📊" },
   generate_cover_letter: { label: "生成求职信", icon: "✍️" },
   generate_interview_prep: { label: "准备面试", icon: "🎤" },

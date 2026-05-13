@@ -114,6 +114,9 @@ def build_decide_prompt(
 判断规则:
 - 如果用户用名字提到岗位/简历/投递(例如"腾讯的岗位"、"我最新的简历")但你不知道 id,
   优先调用 list_user_jobs / list_user_resumes / list_user_applications 查出来。
+- 如果用户问到自己**保存过的资料**才能回答的细节(公司背景、项目经历、面试笔记、
+  以前的复盘等),且答案不在对话历史 / 摘要里 → 调用 search_knowledge 检索。
+  注意 search_knowledge 是检索用户的**知识库内容**,**不是**岗位/简历元数据。
 - 拿到 id 后再调用需要 id 的动作工具(analyze_match / generate_cover_letter / generate_interview_prep)。
 - 如果已有足够信息回答用户,选 respond_directly;不要重复调用同样参数的同一个工具。
 - 不要猜测用户没说的字段。
