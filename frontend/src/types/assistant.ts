@@ -10,6 +10,8 @@ export type AgentRunStatus =
 
 export type ToolCallStatus = "running" | "success" | "failed";
 
+export type AssistantMode = "chat" | "mock_interview";
+
 export interface MessageRead {
   id: number;
   conversation_id: number;
@@ -41,6 +43,7 @@ export interface AgentRunSummary {
 }
 
 export interface ContextSelection {
+  assistant_mode?: AssistantMode | null;
   resume_id?: number | null;
   job_posting_id?: number | null;
   application_record_id?: number | null;

@@ -1,8 +1,11 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.message import MessageRead
+
+AssistantMode = Literal["chat", "mock_interview"]
 
 
 class ContextSelection(BaseModel):
@@ -10,6 +13,7 @@ class ContextSelection(BaseModel):
     onto the user_text before feeding it to the workflow, so the agent sees
     "user selected resume #7 and job #12" alongside the actual question."""
 
+    assistant_mode: AssistantMode | None = None
     resume_id: int | None = None
     job_posting_id: int | None = None
     application_record_id: int | None = None

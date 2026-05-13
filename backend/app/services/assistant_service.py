@@ -214,7 +214,11 @@ async def run_assistant_turn(
     # along the way. Walk tool_call_history from the end and pick the last
     # non-discovery tool (list_user_* are pure lookups). Falls back to "chat"
     # when no tool was called at all.
-    intent = _derive_intent(final_state.get("tool_call_history") or [])
+    intent = (
+        "mock_interview"
+        if _is_mock_interview_mode(payload.context)
+        else _derive_intent(final_state.get("tool_call_history") or [])
+    )
     finished_at = datetime.now(timezone.utc)
     agent_run.status = "succeeded"
     agent_run.intent = intent
@@ -494,7 +498,11 @@ async def run_assistant_turn_stream(
             based_on_until_message_id=assistant_message_id,
         )
 
-    intent = _derive_intent(final_state.get("tool_call_history") or [])
+    intent = (
+        "mock_interview"
+        if _is_mock_interview_mode(payload.context)
+        else _derive_intent(final_state.get("tool_call_history") or [])
+    )
     finished_at = datetime.now(timezone.utc)
     agent_run_fresh.status = "succeeded"
     agent_run_fresh.intent = intent
@@ -539,6 +547,10 @@ def _derive_intent(tool_call_history: list[dict[str, Any]]) -> str:
     return tool_call_history[-1].get("tool") or "chat"
 
 
+def _is_mock_interview_mode(context: ContextSelection | None) -> bool:
+    return context is not None and context.assistant_mode == "mock_interview"
+
+
 async def _build_context_hint(
     db: AsyncSession,
     user_id: int,
@@ -562,6 +574,13 @@ async def _build_context_hint(
 
     lines: list[str] = []
     selected_knowledge_base_id: int | None = None
+
+    if context.assistant_mode == "mock_interview":
+        lines.append(
+            "- 模式:模拟面试; "
+            "如果缺少简历或岗位,先请用户选择; "
+            "如果已选简历和岗位,围绕它们进行交互式面试,每轮只问一个问题",
+        )
 
     if context.resume_id is not None:
         row = (
