@@ -45,6 +45,10 @@ export async function updateArtifact(
   return response.data;
 }
 
+export async function deleteArtifact(artifactId: number) {
+  await apiClient.delete(`/api/v1/artifacts/${artifactId}`);
+}
+
 export async function generateCoverLetter(payload: CoverLetterGenerateRequest) {
   const response = await apiClient.post<GeneratedArtifact>(
     "/api/v1/artifacts/generate-cover-letter",

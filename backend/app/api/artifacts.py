@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, HTTPException, Response
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUserDep, DbSession, ListLimit, ListOffset
 from app.models.generated_artifact import GeneratedArtifact
+from app.models.artifact_feedback_event import ArtifactFeedbackEvent
 from app.models.user import User
 from app.schemas.artifact_feedback import (
     ArtifactFeedbackCreate,
@@ -211,3 +212,22 @@ async def update_artifact(
     await db.commit()
     await db.refresh(artifact)
     return artifact
+
+
+@router.delete("/{artifact_id}", status_code=204)
+async def delete_artifact(
+    artifact_id: int,
+    db: DbSession,
+    current_user: CurrentUserDep,
+) -> Response:
+    artifact = await get_generated_artifact_for_user_or_404(
+        db, artifact_id, current_user,
+    )
+    await db.execute(
+        delete(ArtifactFeedbackEvent).where(
+            ArtifactFeedbackEvent.generated_artifact_id == artifact.id,
+        ),
+    )
+    await db.delete(artifact)
+    await db.commit()
+    return Response(status_code=204)

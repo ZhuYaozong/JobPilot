@@ -195,15 +195,16 @@ def test_upload_rejects_empty_file(client: TestClient) -> None:
     assert "空" in response.json()["detail"]
 
 
-def test_upload_rejects_text_too_short_to_be_a_resume(client: TestClient) -> None:
-    """A file with so little text it can't be a real resume should be
-    rejected rather than handed off to the LLM. ``MIN_EXTRACTED_CHARS=30``."""
+def test_upload_accepts_short_txt_when_auto_parse_disabled(client: TestClient) -> None:
+    """TXT/Markdown uploads are already text-bearing; don't show the
+    scanned-PDF extraction error just because a note is short."""
     response = client.post(
         "/api/v1/resumes/upload",
         files={"file": ("nano.txt", b"too short", "text/plain")},
+        data={"auto_parse": "false"},
     )
-    assert response.status_code == 400
-    assert "扫描" in response.json()["detail"] or "可读文本" in response.json()["detail"]
+    assert response.status_code == 201, response.text
+    assert response.json()["raw_text"] == "too short"
 
 
 def test_upload_can_skip_auto_parse(

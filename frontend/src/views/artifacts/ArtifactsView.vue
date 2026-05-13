@@ -104,6 +104,14 @@
               <h3>{{ selectedArtifact.title }}</h3>
               <p>{{ getArtifactContextSummary(selectedArtifact) }}</p>
             </div>
+            <el-button
+              type="danger"
+              plain
+              :loading="deletePending"
+              @click="handleDeleteArtifact"
+            >
+              删除材料
+            </el-button>
           </div>
 
           <article class="work-panel-callout">
@@ -427,12 +435,13 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 
 import { listJobs } from "@/api/jobs";
 import { listResumes } from "@/api/resumes";
 import {
   createArtifactFeedback,
+  deleteArtifact,
   generateCoverLetter,
   generateInterviewPrep,
   getArtifact,
@@ -513,6 +522,7 @@ const referencesLoading = ref(false);
 const coverLetterPending = ref(false);
 const interviewPrepPending = ref(false);
 const feedbackSubmitPending = ref(false);
+const deletePending = ref(false);
 
 const selectedArtifactId = ref<number | null>(null);
 const selectedArtifact = ref<GeneratedArtifact | null>(null);
@@ -795,6 +805,39 @@ async function fetchReferences() {
 
 async function selectArtifact(artifactId: number) {
   await hydrateSelectedArtifact(artifactId);
+}
+
+async function handleDeleteArtifact() {
+  if (!selectedArtifact.value) {
+    return;
+  }
+
+  const artifact = selectedArtifact.value;
+  try {
+    await ElMessageBox.confirm(
+      "删除后这份材料和它的采用反馈都会消失，且不可恢复。",
+      `删除材料：${artifact.title}？`,
+      {
+        type: "warning",
+        confirmButtonText: "删除",
+        cancelButtonText: "取消",
+        confirmButtonClass: "el-button--danger",
+      },
+    );
+  } catch {
+    return;
+  }
+
+  deletePending.value = true;
+  try {
+    await deleteArtifact(artifact.id);
+    ElMessage.success("材料已删除");
+    await fetchArtifacts({ nextSelectedId: null });
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, "删除材料失败"));
+  } finally {
+    deletePending.value = false;
+  }
 }
 
 async function handleGenerateCoverLetter() {

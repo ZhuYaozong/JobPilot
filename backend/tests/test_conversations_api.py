@@ -175,6 +175,18 @@ def test_delete_conversation_cascades_messages(
     assert cid not in [c["id"] for c in listing.json()]
 
 
+def test_delete_conversation_handles_agent_run_message_cycle(
+    client: TestClient, test_marker: str,
+) -> None:
+    cid = _run(lambda db: _seed_conversation_with_agent_run_graph(db, test_marker))
+
+    response = client.delete(f"/api/v1/conversations/{cid}")
+    assert response.status_code == 204, response.text
+
+    post = client.get(f"/api/v1/conversations/{cid}/messages")
+    assert post.status_code == 404
+
+
 def test_delete_conversation_rejects_other_users(client: TestClient) -> None:
     response = client.delete("/api/v1/conversations/999999999")
     assert response.status_code == 404
@@ -228,3 +240,68 @@ async def _fetch_conversation_title(db: AsyncSession, conv_id: int) -> str | Non
         )
     ).one_or_none()
     return row.title if row else None
+
+
+async def _seed_conversation_with_agent_run_graph(
+    db: AsyncSession, marker: str,
+) -> int:
+    from app.models.agent_run import AgentRun
+    from app.models.memory_summary import MemorySummary
+    from app.models.tool_call_log import ToolCallLog
+
+    user = (
+        await db.execute(select(User).where(User.username == "test"))
+    ).scalar_one()
+    conversation = Conversation(user_id=user.id, title=f"{marker} delete graph")
+    db.add(conversation)
+    await db.flush()
+
+    user_message = Message(
+        user_id=user.id,
+        conversation_id=conversation.id,
+        role="user",
+        content=f"{marker} hello",
+        sequence_no=1,
+    )
+    db.add(user_message)
+    await db.flush()
+
+    agent_run = AgentRun(
+        user_id=user.id,
+        conversation_id=conversation.id,
+        trigger_message_id=user_message.id,
+        status="success",
+    )
+    db.add(agent_run)
+    await db.flush()
+
+    assistant_message = Message(
+        user_id=user.id,
+        conversation_id=conversation.id,
+        role="assistant",
+        content=f"{marker} response",
+        agent_run_id=agent_run.id,
+        sequence_no=2,
+    )
+    db.add(assistant_message)
+    db.add(
+        ToolCallLog(
+            user_id=user.id,
+            agent_run_id=agent_run.id,
+            tool_name="list_user_jobs",
+            status="success",
+            arguments_json={},
+            result_json={"ok": True},
+        ),
+    )
+    await db.flush()
+    db.add(
+        MemorySummary(
+            user_id=user.id,
+            conversation_id=conversation.id,
+            summary_text=f"{marker} summary",
+            based_on_until_message_id=assistant_message.id,
+        ),
+    )
+    await db.commit()
+    return conversation.id

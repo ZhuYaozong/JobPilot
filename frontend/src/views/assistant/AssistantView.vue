@@ -545,6 +545,7 @@ onMounted(async () => {
   grid-template-columns: 280px minmax(0, 1fr) 320px;
   height: 100%;
   min-height: 0;
+  overflow: hidden;
   background: var(--bg, #f4f7fb);
 }
 
