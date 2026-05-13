@@ -20,6 +20,7 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.llm.embedding_client import EmbeddingClient
 from app.models.knowledge_base import KnowledgeBase
 from app.models.knowledge_chunk import KnowledgeChunk
 from app.models.knowledge_document import KnowledgeDocument
@@ -28,6 +29,10 @@ from app.services.file_text_extractor import (
     ExtractedFile,
     FileExtractionError,
     extract_text_from_upload,
+)
+from app.services.knowledge_indexing_service import (
+    index_document,
+    reindex_document as _reindex_document_via_indexer,
 )
 
 
@@ -215,20 +220,24 @@ async def upload_document(
     content_type: str | None,
     payload: bytes,
     title_override: str | None = None,
+    embedding_client: EmbeddingClient | None = None,
+    auto_index: bool = True,
 ) -> KnowledgeDocument:
-    """Extract text from an uploaded file and persist a pending document.
+    """Extract text → persist → run indexing pipeline (synchronously).
 
-    Indexing (chunking + embedding + vector write) is the next slice's job.
-    This function intentionally returns once the row hits the DB so the UI
-    can show progress on the document list independently of the indexing
-    worker.
+    Indexing failures don't roll back the document — the row lands in
+    status=failed with error_detail set so the user can fix config + click
+    "重新索引" from the UI.
+
+    ``auto_index=False`` is for tests that want to seed pending docs
+    without burning fake embedding tokens; production paths always index.
     """
     try:
         extracted = extract_text_from_upload(filename, content_type, payload)
     except FileExtractionError as exc:
         raise HTTPException(status_code=400, detail=exc.user_message) from exc
 
-    return await _persist_extracted_document(
+    doc = await _persist_extracted_document(
         db,
         kb=kb,
         user=user,
@@ -236,6 +245,12 @@ async def upload_document(
         title=title_override or _derive_title_from_filename(filename),
         source_url=None,
     )
+    if auto_index:
+        # index_document may rollback the session on failure, leaving the
+        # original ``doc`` instance detached / expired. Always take its
+        # return value so the caller serialises against a hydrated row.
+        doc = await index_document(db, doc, embedding_client=embedding_client)
+    return doc
 
 
 async def create_manual_document(
@@ -246,6 +261,8 @@ async def create_manual_document(
     title: str,
     body: str,
     source_url: str | None,
+    embedding_client: EmbeddingClient | None = None,
+    auto_index: bool = True,
 ) -> KnowledgeDocument:
     """Counterpart to upload_document for the "粘贴文本" entry point.
 
@@ -259,13 +276,32 @@ async def create_manual_document(
             detail="正文太短,请粘贴更多内容(至少 30 字)。",
         )
     extracted = ExtractedFile(text=trimmed, source_type="manual")
-    return await _persist_extracted_document(
+    doc = await _persist_extracted_document(
         db,
         kb=kb,
         user=user,
         extracted=extracted,
         title=title.strip() or _placeholder_title(),
         source_url=source_url,
+    )
+    if auto_index:
+        doc = await index_document(db, doc, embedding_client=embedding_client)
+    return doc
+
+
+async def reindex_document(
+    db: AsyncSession,
+    document: KnowledgeDocument,
+    *,
+    embedding_client: EmbeddingClient | None = None,
+) -> KnowledgeDocument:
+    """Public-facing wrapper around the indexing service's reindex routine.
+
+    Kept here so API handlers only ever import from ``knowledge_service`` —
+    routes stay agnostic to whether reindexing is sync/async/queued.
+    """
+    return await _reindex_document_via_indexer(
+        db, document, embedding_client=embedding_client,
     )
 
 

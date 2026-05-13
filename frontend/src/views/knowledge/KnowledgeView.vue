@@ -6,11 +6,11 @@
         <p class="page-head__eyebrow">资料中心</p>
         <h1 class="page-head__title">
           知识库管理
-          <span class="wip-pill">索引开发中</span>
+          <span class="wip-pill">检索开发中</span>
         </h1>
         <p class="page-head__subtitle">
-          上传公司资料、项目素材、面试笔记等,AI 助手将来会按需引用。
-          <strong>本刀已支持文件上传 + 文本入库,向量索引在下一刀接入。</strong>
+          上传公司资料、项目素材、面试笔记等。上传后系统会自动切片并嵌入向量。
+          <strong>AI 助手检索集成下一刀接入。</strong>
         </p>
       </div>
 
@@ -116,9 +116,13 @@
                   <span class="meta-chip__icon">📑</span>
                   {{ selectedKb.document_count }} 份文档
                 </span>
+                <span class="meta-chip">
+                  <span class="meta-chip__icon">🧬</span>
+                  自动切片 + 向量嵌入已接入
+                </span>
                 <span class="meta-chip meta-chip--warn">
                   <span class="meta-chip__icon">⚠</span>
-                  向量索引下一刀接入
+                  AI 助手检索下一刀接入
                 </span>
               </div>
             </div>
@@ -166,24 +170,38 @@
                     {{ doc.error_detail }}
                   </p>
                 </div>
-                <button
-                  class="ghost-btn ghost-btn--sm ghost-btn--danger"
-                  type="button"
-                  @click="handleDeleteDocument(doc)"
-                >
-                  删除
-                </button>
+                <div class="doc__actions">
+                  <button
+                    v-if="doc.status === 'failed' || doc.status === 'ready'"
+                    class="ghost-btn ghost-btn--sm"
+                    type="button"
+                    :disabled="reindexingDocIds.has(doc.id)"
+                    @click="handleReindexDocument(doc)"
+                  >
+                    {{ reindexingDocIds.has(doc.id)
+                      ? "索引中…"
+                      : doc.status === "failed" ? "重新索引" : "重建索引" }}
+                  </button>
+                  <button
+                    class="ghost-btn ghost-btn--sm ghost-btn--danger"
+                    type="button"
+                    @click="handleDeleteDocument(doc)"
+                  >
+                    删除
+                  </button>
+                </div>
               </article>
             </div>
           </section>
 
           <aside class="callout callout--info">
-            <div class="callout__icon">🤖</div>
+            <div class="callout__icon">🧬</div>
             <div>
-              <strong>下一步:向量索引 + AI 检索</strong>
+              <strong>向量索引已接入</strong>
               <p>
-                下一刀(7'c2)会把这些文档自动切片并嵌入向量;再下一刀(7'c3)
-                给 AI 助手加 search_knowledge 工具,问答时按需检索。
+                每份文档上传后会自动切片(~800 字 / 100 字 overlap)并通过
+                独立的 embedding 端点生成向量入库。下一刀(7'c3)给 AI 助手
+                加 search_knowledge 工具,问答时按需检索。
               </p>
             </div>
           </aside>
@@ -370,6 +388,7 @@ import {
   deleteKnowledgeDocument,
   listKnowledgeBases,
   listKnowledgeDocuments,
+  reindexKnowledgeDocument,
   updateKnowledgeBase,
   uploadKnowledgeDocument,
 } from "@/api/knowledge";
@@ -391,6 +410,9 @@ const kbsLoading = ref(false);
 const docsLoading = ref(false);
 const kbCreatePending = ref(false);
 const docCreatePending = ref(false);
+// Per-document spinner state — indexing is synchronous so we just track
+// which doc ids are mid-flight to disable the button.
+const reindexingDocIds = ref<Set<number>>(new Set());
 
 const createKbDrawerOpen = ref(false);
 const uploadDocDrawerOpen = ref(false);
@@ -600,6 +622,36 @@ async function handleCreateManualDocument() {
     ElMessage.error(getErrorMessage(error, "保存文档失败"));
   } finally {
     docCreatePending.value = false;
+  }
+}
+
+async function handleReindexDocument(doc: KnowledgeDocumentListItem) {
+  if (reindexingDocIds.value.has(doc.id)) return;
+  // Set spinner state via a fresh Set so Vue picks up the reactive update.
+  const inflight = new Set(reindexingDocIds.value);
+  inflight.add(doc.id);
+  reindexingDocIds.value = inflight;
+  try {
+    const updated = await reindexKnowledgeDocument(doc.id);
+    // Patch the local list so the status pill flips immediately. We don't
+    // refetch the whole list because that loses scroll position.
+    const idx = documents.value.findIndex((d) => d.id === doc.id);
+    if (idx >= 0) {
+      documents.value.splice(idx, 1, updated);
+    }
+    if (updated.status === "ready") {
+      ElMessage.success("已重新索引");
+    } else if (updated.status === "failed") {
+      ElMessage.warning(
+        `重新索引失败:${updated.error_detail ?? "请检查 embedding 配置"}`,
+      );
+    }
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, "重新索引失败"));
+  } finally {
+    const next = new Set(reindexingDocIds.value);
+    next.delete(doc.id);
+    reindexingDocIds.value = next;
   }
 }
 
@@ -1292,6 +1344,18 @@ function statusTone(status: string): string {
   background: rgba(220, 38, 38, 0.08);
   color: #b42318;
   font-size: 11px;
+}
+
+.doc__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.ghost-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 /* ============ Callout ============ */

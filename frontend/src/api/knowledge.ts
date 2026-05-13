@@ -97,3 +97,16 @@ export async function createManualKnowledgeDocument(
 export async function deleteKnowledgeDocument(documentId: number) {
   await apiClient.delete(`/api/v1/knowledge/documents/${documentId}`);
 }
+
+export async function reindexKnowledgeDocument(documentId: number) {
+  // Indexing is synchronous on the server (slice 7'c2). For small docs it
+  // returns in 1-3s; longer pieces may take longer because each chunk hits
+  // the embedding endpoint. Use the same generous timeout as other
+  // LLM-driven endpoints.
+  const response = await apiClient.post<KnowledgeDocument>(
+    `/api/v1/knowledge/documents/${documentId}/reindex`,
+    undefined,
+    { timeout: LLM_OPERATION_TIMEOUT_MS },
+  );
+  return response.data;
+}
