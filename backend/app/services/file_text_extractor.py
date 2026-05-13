@@ -100,7 +100,14 @@ def extract_text_from_upload(
         )
 
     normalised = _normalise_whitespace(text)
-    if len(normalised) < MIN_EXTRACTED_CHARS:
+    if not normalised:
+        if source in {"text", "markdown"}:
+            raise FileExtractionError("上传的文本文件没有内容。")
+        raise FileExtractionError(
+            "文件里抽不到可读文本（可能是扫描件或图片型 PDF）。"
+            "请改上传可复制文本的版本，或先转存为 DOCX/TXT。",
+        )
+    if source in {"pdf", "docx"} and len(normalised) < MIN_EXTRACTED_CHARS:
         raise FileExtractionError(
             "文件里抽不到可读文本（可能是扫描件或图片型 PDF）。"
             "请改上传可复制文本的版本，或先转存为 DOCX/TXT。",

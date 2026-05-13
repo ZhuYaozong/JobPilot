@@ -103,6 +103,8 @@ function truncateTitle(title: string): string {
   flex-direction: column;
   width: 100%;
   height: 100%;
+  min-height: 0;
+  overflow: hidden;
   background: #fafbfc;
   border-right: 1px solid rgba(15, 23, 42, 0.06);
 }
@@ -200,6 +202,7 @@ function truncateTitle(title: string): string {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 14px 12px 16px;
 }
 

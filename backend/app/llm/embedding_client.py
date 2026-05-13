@@ -103,6 +103,7 @@ class EmbeddingClient:
                 payload: dict[str, Any] = {
                     "model": self._model_name,
                     "input": batch,
+                    "dimensions": self._dimensions,
                 }
                 try:
                     response = await client.post(url, json=payload, headers=headers)

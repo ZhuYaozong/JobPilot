@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Response
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUserDep, DbSession, ListLimit, ListOffset
@@ -119,14 +119,25 @@ async def delete_conversation(
 
     if agent_run_ids:
         await db.execute(
+            update(Message)
+            .where(Message.conversation_id == conversation_id)
+            .where(Message.agent_run_id.in_(agent_run_ids))
+            .values(agent_run_id=None),
+        )
+        await db.execute(
+            update(AgentRun)
+            .where(AgentRun.id.in_(agent_run_ids))
+            .values(trigger_message_id=None),
+        )
+        await db.execute(
             delete(ToolCallLog).where(ToolCallLog.agent_run_id.in_(agent_run_ids)),
         )
 
     await db.execute(
-        delete(AgentRun).where(AgentRun.conversation_id == conversation_id),
+        delete(MemorySummary).where(MemorySummary.conversation_id == conversation_id),
     )
     await db.execute(
-        delete(MemorySummary).where(MemorySummary.conversation_id == conversation_id),
+        delete(AgentRun).where(AgentRun.conversation_id == conversation_id),
     )
     await db.execute(
         delete(Message).where(Message.conversation_id == conversation_id),
