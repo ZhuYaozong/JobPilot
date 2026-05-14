@@ -1,5 +1,9 @@
 """Tool adapter layer.
 
+中文说明：Agent 不直接调用业务 service，而是通过这个适配层统一完成参数校验、
+ToolCallLog 追踪、错误分类和用户作用域上下文传递。这样 workflow 只关心
+``ok`` / error_class / data 的稳定契约。
+
 Each `BaseTool` subclass wraps one piece of business capability (a service
 function) so the LangGraph agent layer can call it with a uniform interface:
 
@@ -29,7 +33,7 @@ from app.models.user import User
 
 
 class ToolValidationError(Exception):
-    """LLM-supplied arguments did not pass the tool's Pydantic schema.
+    """模型给出的工具参数未通过 Pydantic schema。
 
     LangGraph should re-prompt the LLM with the validation error attached.
     """
@@ -43,7 +47,7 @@ class ToolValidationError(Exception):
 
 
 class ToolSystemError(Exception):
-    """Non-business failure (DB unavailable, LLM config missing, unexpected exc).
+    """非业务失败，例如数据库、LLM 配置、网络或未知异常。
 
     LangGraph should mark the AgentRun as failed; retrying with the same args
     will not help.
@@ -58,7 +62,7 @@ class ToolSystemError(Exception):
 
 @dataclass
 class ToolContext:
-    """Per-call context that the agent layer threads into every tool.
+    """每次工具调用共享的上下文。
 
     `db` is the same AsyncSession the tool's underlying service will use.
     `agent_run_id` links every ToolCallLog row back to its AgentRun so we can
@@ -71,7 +75,7 @@ class ToolContext:
 
 
 class BaseTool(ABC):
-    """Abstract base for every concrete tool.
+    """所有具体工具的抽象基类。
 
     Subclasses set the three class vars and implement ``_execute``; the
     template ``invoke`` method handles validation, logging, timing, and error
@@ -84,7 +88,7 @@ class BaseTool(ABC):
 
     @abstractmethod
     async def _execute(self, args: BaseModel, ctx: ToolContext) -> dict[str, Any]:
-        """Run the tool's real work. Return shape:
+        """执行具体工具逻辑，并返回统一结果形状。
 
         - Success: ``{"ok": True, "data": {...}}``
         - Business error: ``{"ok": False, "error_class": str,
@@ -99,6 +103,7 @@ class BaseTool(ABC):
         raw_args: dict[str, Any],
         ctx: ToolContext,
     ) -> dict[str, Any]:
+        # 中文说明：Tool Adapter 是工具调用唯一入口，顺序固定为 refresh → 校验 → 记日志 → 执行 → 收尾。
         # In the ReAct loop a previous tool call's ``_finalize_log`` rolled
         # the shared session back, which expires every attached ORM instance
         # including ``ctx.current_user``. A subsequent sync ``.id`` access
@@ -106,6 +111,7 @@ class BaseTool(ABC):
         # eagerly so all attributes are loaded before any sync access below.
         await ctx.db.refresh(ctx.current_user)
 
+        # 中文说明：参数校验失败也要落 ToolCallLog，方便后续追踪模型给错了什么。
         # 1. Pydantic validation. We persist a failed ToolCallLog before
         #    raising so LangGraph's repair attempt has an audit trail.
         try:
@@ -114,6 +120,7 @@ class BaseTool(ABC):
             await self._persist_validation_failure(ctx, raw_args, exc)
             raise ToolValidationError(self.name, exc) from exc
 
+        # 中文说明：先写 running 日志再执行，保证工具中途崩溃也有可见运行痕迹。
         # 2. Create the "running" log row up-front and commit so it survives
         #    even if _execute crashes mid-way.
         log = ToolCallLog(
@@ -132,6 +139,7 @@ class BaseTool(ABC):
         try:
             result = await self._execute(args, ctx)
         except ToolSystemError as exc:
+            # 中文说明：系统错会继续抛给 workflow，让 AgentRun 进入 failed。
             await self._finalize_log(
                 ctx,
                 log_id,
@@ -154,6 +162,7 @@ class BaseTool(ABC):
 
         ok = bool(result.get("ok"))
         if ok:
+            # 中文说明：成功时只把 data 写入 result_json，避免重复记录 ok/message 包装字段。
             await self._finalize_log(
                 ctx,
                 log_id,
@@ -162,6 +171,7 @@ class BaseTool(ABC):
                 result_json=result.get("data"),
             )
         else:
+            # 中文说明：业务错不抛异常，留给模型决定如何向用户解释或是否换参数重试。
             await self._finalize_log(
                 ctx,
                 log_id,
@@ -178,6 +188,7 @@ class BaseTool(ABC):
         raw_args: dict[str, Any],
         exc: ValidationError,
     ) -> None:
+        # 中文说明：schema 阶段失败没有真实执行耗时，latency 固定为 0。
         # Pydantic failure happens before we even attempt execution, so the
         # log row goes straight to status='failed'.
         now = datetime.now(timezone.utc)
@@ -206,6 +217,7 @@ class BaseTool(ABC):
         error_class: str | None = None,
         error_detail: str | None = None,
     ) -> None:
+        # 中文说明：无论工具执行成功还是失败，最终都在这里关闭 running 日志。
         # If _execute left the session in a bad state (e.g. raised mid-DML),
         # roll it back so the log update can commit on a fresh transaction.
         try:

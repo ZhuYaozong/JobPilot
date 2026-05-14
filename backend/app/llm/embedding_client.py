@@ -1,5 +1,9 @@
 """OpenAI-compatible embeddings client.
 
+中文说明：这是 JobPilot 的向量化适配层，专门服务知识库索引和
+``search_knowledge`` 工具。它故意独立于聊天 LLM client，这样部署时可以
+用不同供应商分别承载生成模型和 embedding 模型。
+
 Kept deliberately separate from :class:`app.llm.client.LLMClient` so a
 deployment can route embeddings to a different provider (e.g. chat from a
 local Llama, embeddings from OpenAI for higher Chinese quality) by setting
@@ -20,18 +24,20 @@ import httpx
 from app.core.config import settings
 
 
+# 中文说明：embedding 端点通常比生成端点快，但自建或兼容接口可能抖动，所以保留独立超时。
 # Per-call timeout; embeddings are usually << 1s even for large batches,
 # but Chinese-locale providers and self-hosted endpoints can be slower.
 EMBEDDING_CONNECT_TIMEOUT_SECONDS = 10.0
 EMBEDDING_READ_TIMEOUT_SECONDS = 60.0
 
+# 中文说明：批量大小留出余量，避免兼容服务没有完全实现 OpenAI 上限时被打爆。
 # OpenAI caps text-embedding-3 at 2048 inputs per call. Keep some margin so
 # we don't accidentally tip a self-hosted clone with a smaller cap.
 MAX_BATCH = 256
 
 
 class EmbeddingConfigError(Exception):
-    """Raised when the embedding endpoint isn't configured.
+    """Embedding 端点缺配置时抛出。
 
     Surfaces as a friendly error in the knowledge-indexing path: the document
     stays in status=failed with this message in ``error_detail``, and the
@@ -40,7 +46,7 @@ class EmbeddingConfigError(Exception):
 
 
 class EmbeddingClientError(Exception):
-    """Raised on remote/transport failures (timeout, 5xx, malformed body)."""
+    """远端、网络或响应格式错误时抛出。"""
 
 
 class EmbeddingClient:
@@ -54,6 +60,7 @@ class EmbeddingClient:
         model_name: str | None = None,
         dimensions: int | None = None,
     ) -> None:
+        # 中文说明：优先使用显式 embedding 配置；没配时复用 LLM 配置，降低单供应商部署门槛。
         # Lazy fallback: prefer explicit embedding settings, then mirror the
         # chat-completion endpoint. None at call time → EmbeddingConfigError.
         self._base_url = base_url or settings.embedding_base_url or settings.llm_base_url
@@ -68,7 +75,7 @@ class EmbeddingClient:
         return self._dimensions
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
-        """Embed a batch of texts. Returns vectors aligned to input order.
+        """将一批文本转成向量，并保持返回顺序与输入顺序一致。
 
         Empty input → returns empty list immediately so callers don't have
         to special-case zero-chunk documents.
@@ -76,6 +83,7 @@ class EmbeddingClient:
         if not texts:
             return []
 
+        # 中文说明：这里不在构造函数里失败，方便测试或调用方用空输入短路。
         if (
             not self._base_url
             or not self._api_key
@@ -94,6 +102,7 @@ class EmbeddingClient:
             connect=EMBEDDING_CONNECT_TIMEOUT_SECONDS,
         )
 
+        # 中文说明：分批请求后按顺序拼回，保证 chunk_index 与 embedding 结果一一对应。
         # Slice into MAX_BATCH-sized requests and concatenate. OpenAI returns
         # results in input order so concatenation preserves alignment.
         results: list[list[float]] = []
@@ -137,6 +146,7 @@ class EmbeddingClient:
                         raise EmbeddingClientError(
                             "Embedding response missing vector",
                         )
+                    # 中文说明：pgvector 列是固定维度，维度漂移必须尽早失败，不能写入脏向量。
                     if len(vec) != self._dimensions:
                         raise EmbeddingClientError(
                             f"Embedding dim mismatch: got {len(vec)} expected "

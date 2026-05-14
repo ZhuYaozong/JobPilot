@@ -1,4 +1,8 @@
-"""Wrap interview_prep_service.generate_interview_prep as an agent tool."""
+"""把 interview_prep_service.generate_interview_prep 包装成 Agent 工具。
+
+中文说明：面试准备既可以由匹配页直接生成，也可以被模拟面试模式在工具链中调用。
+工具层只做参数桥接、错误分类和返回值裁剪。
+"""
 
 from typing import Any
 
@@ -24,6 +28,7 @@ _BUSINESS_DETAIL_TO_ERROR_CLASS: dict[str, str] = {
     "Generated interview prep is not specific enough": "llm_output_too_generic",
 }
 
+# 中文说明：message_for_llm 用英文保持和工具描述一致，最终中文回复由 format_response 生成。
 _BUSINESS_LLM_MESSAGES: dict[str, str] = {
     "resume_not_found": "The requested resume does not exist; ask the user for a valid resume_id.",
     "job_posting_not_found": "The requested job posting does not exist; ask the user for a valid job_posting_id.",
@@ -75,6 +80,7 @@ class InterviewPrepTool(BaseTool):
         args: InterviewPrepToolArgs,
         ctx: ToolContext,
     ) -> dict[str, Any]:
+        # 中文说明：service 会要求 resume/job 已解析且同组 match result 已存在。
         request = InterviewPrepGenerateRequest(
             resume_id=args.resume_id,
             job_posting_id=args.job_posting_id,
@@ -90,6 +96,7 @@ class InterviewPrepTool(BaseTool):
         except HTTPException as exc:
             return self._http_exception_to_result(exc)
 
+        # 中文说明：content_text 会进入最终回复，因此这里保留生成正文和最小元数据。
         return {
             "ok": True,
             "data": {
@@ -111,6 +118,7 @@ class InterviewPrepTool(BaseTool):
         error_class = _BUSINESS_DETAIL_TO_ERROR_CLASS.get(detail)
 
         if error_class is not None:
+            # 中文说明：如“未解析”“缺匹配结果”属于用户可补前置条件的业务错误。
             return {
                 "ok": False,
                 "error_class": error_class,
@@ -119,6 +127,7 @@ class InterviewPrepTool(BaseTool):
             }
 
         if exc.status_code >= 500:
+            # 中文说明：5xx 代表基础设施或模型调用失败，交给 workflow 标记运行失败。
             raise ToolSystemError(
                 self.name,
                 error_class="llm_unavailable" if exc.status_code == 502 else "llm_config_missing",
