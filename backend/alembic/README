@@ -1,5 +1,26 @@
 JobPilot backend Alembic migration directory.
 
-This project uses a single PostgreSQL database. Migrations should describe real
-schema changes for the current backend stage and must not claim future Agent,
-RAG, or evaluation tables before the corresponding models are implemented.
+This project uses one PostgreSQL database with pgvector enabled. Migrations
+must describe real schema changes that are implemented by the current backend
+models and services.
+
+Guidelines:
+
+- Keep migrations small and reviewable.
+- Use descriptive revision messages, for example:
+  `create knowledge tables` or `add agent workflow tables`.
+- Do not declare future Agent, RAG, evaluation, queue, auth, or export tables
+  before the corresponding SQLAlchemy models and business paths exist.
+- When changing embedding vector dimensions, add an explicit migration and
+  update `EMBEDDING_DIMENSIONS` consistently.
+- Prefer data backfills that preserve existing demo data and user scope.
+- Never hand-edit production data in a migration unless the migration explains
+  why the transformation is required.
+
+Common commands:
+
+```powershell
+uv --cache-dir .uv-cache --directory backend run alembic current
+uv --cache-dir .uv-cache --directory backend run alembic upgrade head
+uv --cache-dir .uv-cache --directory backend run alembic revision --autogenerate -m "describe schema change"
+```
