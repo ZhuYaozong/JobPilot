@@ -1,154 +1,85 @@
 # JobPilot
 
-JobPilot 是一个面向求职者的个人求职 Copilot。它把岗位收集、简历管理、匹配分析、求职材料生成和投递跟进串成一条清晰的求职工作流，帮助用户从“看到一个岗位”一路推进到“准备材料、投递并持续跟进”。
+JobPilot 是面向求职者的 AI Copilot。它把岗位收集、简历管理、匹配分析、求职材料生成、模拟面试、知识库检索和投递跟进放进同一条工作流，帮助用户从看到一个岗位一路推进到定制材料、准备面试和持续跟进。
 
-这个项目不是一个简单的 CRUD 后台，也不是一个空白聊天框。JobPilot 当前已经具备“岗位 - 简历 - 匹配 - 材料 - 投递”的核心 MVP 闭环，下一阶段会从求职工作台升级为带有受控 Agent Workflow、工具调用、RAG 知识库和运行评估的 AI 求职 Copilot。
+当前项目已经完成核心 MVP 闭环，并进入 Agent + RAG 产品化阶段：后端有真实的 FastAPI API、LangGraph 工作流、OpenAI-compatible LLM / Embedding client、PostgreSQL + pgvector 检索层；前端有 Vue 3 + Element Plus 的求职工作台、SSE 流式 AI 助手、知识库管理和多类材料生成入口。
 
-## 为什么做 JobPilot
+## Highlights
 
-求职过程中最容易散掉的不是信息不够，而是信息太分散：
+- 求职工作台：岗位、简历、匹配、材料、投递、AI 助手、知识库七个核心入口。
+- 真实 AI 工作流：解析 JD / 简历，生成匹配分析、求职信、面试准备和定制简历。
+- Agent Runtime：基于 LangGraph 1.x 的多节点工作流，支持工具调用、运行记录和 SSE 流式返回。
+- RAG 知识库：支持资料上传、手工文本、切片、embedding、pgvector 检索和 chunk 预览。
+- 交互式模拟面试：基于当前岗位、简历、匹配结果、interview_prep 和 search_knowledge 逐轮提问。
+- 定制简历版本：针对岗位生成 `ai_tailored` 简历版本，保留版本号、来源类型和变更摘要。
+- 用户作用域：开发阶段通过 `X-User-Name` 隔离 `demo` / `sandbox` / `test` 用户数据。
+- 工程约束清晰：不引入 `langchain-openai`、`langchain-community`、`langchain-text-splitters`，模型调用由自研 OpenAI-compatible client 承载。
 
-- JD 存在浏览器收藏夹里
-- 简历版本散在本地文件夹里
-- 匹配度判断靠临时感觉
-- 求职信和面试准备每次都从零开始
-- 投递之后忘记什么时候该跟进
+## Product Scope
 
-JobPilot 希望把这些动作收进一个面向求职者的产品里，让 AI 不只是“回答问题”，而是围绕真实的求职对象持续协作。
-
-## 核心能力
-
-- 岗位管理：保存目标岗位、岗位链接和 JD 原文，支持 JD 结构化解析。
-- 简历管理：保存简历原文、来源信息和版本记录，支持简历结构化解析。
-- 匹配分析：基于已解析的岗位和简历生成匹配度、优势、短板、缺失关键词和修改建议。
-- 求职材料生成：基于岗位、简历和匹配结果生成求职信草稿和面试准备提纲。
-- 投递跟进：记录投递阶段、渠道、下一步动作、待办时间、备注和阶段流转时间线。
-- AI 助手：围绕岗位、简历、投递记录和知识库设置上下文；当前是产品结构，下一阶段接入 Conversation / Message、LangGraph 工作流和真实 Agent 后端。
-- 知识库管理：管理公司资料、项目素材、面试资料等 AI 可引用资料入口；当前是产品结构，后续会接入 LangChain + pgvector 的最小 RAG 闭环。
-
-## 产品页面
-
-当前前端已经按求职者任务重构为 7 个一级入口：
-
-| 页面 | 定位 |
-| --- | --- |
-| 首页 | 查看求职状态、今日建议动作和最近工作 |
-| 简历管理 | 管理简历原文、AI 提取信息和版本记录 |
-| 岗位管理 | 保存目标岗位、岗位链接和 JD 原文 |
-| 岗位与简历匹配度 | 选择岗位和简历，分析匹配度，并生成求职材料 |
-| 投递跟进 | 管理投递阶段、下一步动作、投递网址和时间线 |
-| AI 助手 | 选择岗位、简历、投递记录和知识库作为对话上下文 |
-| 知识库管理 | 管理资料和知识库入口，供后续 AI 引用 |
-
-`/artifacts` 仍保留为历史求职材料详情页，但不再作为一级导航入口；材料生成主链路已经聚合到“岗位与简历匹配度”页面。
-
-## 下一阶段 Agent Workflow 方向
-
-JobPilot 后续 AI 助手不做“完全自由聊天机器人”，而是做一个可控、可观测、可落库的求职 Agent Workflow：
+JobPilot 当前覆盖的求职主链路：
 
 ```text
-前端发送 conversation_id / 上下文 id / 用户请求
+保存岗位或抓取岗位 URL
 ↓
-后端写入 user message，并创建 AgentRun
+上传或录入简历
 ↓
-读取业务数据、历史 messages 和 memory_summary
+解析 JD 与简历
 ↓
-构造 system prompt、任务规则、工具规则和输出格式
+生成岗位匹配分析
 ↓
-进入 LangGraph Agent Workflow
+生成求职信 / 面试准备 / 定制简历版本
 ↓
-识别 intent，选择受控 workflow 节点
+选择上下文与知识库进入 AI 助手
 ↓
-LangChain StructuredTool + Pydantic 校验工具参数
+基于工具与 RAG 继续追问、复盘、模拟面试
 ↓
-Tool Adapter 校验用户作用域、业务规则和前置条件
-↓
-调用真实业务工具、现有 LLM client 或 RAG retriever
-↓
-记录 ToolCallLog，汇总工具结果
-↓
-生成最终回复或结构化产物，并做最终 Schema 校验 / repair
-↓
-写入 assistant message / generated_artifacts，必要时更新 memory_summary
-↓
-更新 AgentRun 状态，前端展示结果
+记录投递阶段和下一步动作
 ```
 
-这条路线会保留现有 OpenAI-compatible LLM client 作为模型适配层；LangGraph 只负责流程编排，LangChain StructuredTool 负责工具抽象，核心业务逻辑继续沉在已有 service 和数据库模型里。
+## Feature Matrix
 
-## 当前真实接入的闭环
+| 模块 | 当前能力 |
+| --- | --- |
+| 首页 | 展示最近岗位、简历、匹配、材料和投递进展，给出今日建议动作 |
+| 岗位管理 | 创建、编辑、删除岗位；从 URL 抓取 JD 预览；结构化解析 JD |
+| 简历管理 | 创建、编辑、删除简历；上传 PDF / DOCX / TXT / MD；结构化解析简历；查看版本 |
+| 匹配分析 | 选择岗位和简历生成匹配分、优势、短板、缺失关键词和修改建议 |
+| 求职材料 | 生成求职信、面试准备；记录材料反馈；查看历史材料 |
+| 定制简历 | 针对岗位生成 `ai_tailored` 简历版本，版本号按 `max(version_no)+1` 递增 |
+| 投递跟进 | 创建投递记录、更新阶段、记录下一步动作和阶段事件时间线 |
+| AI 助手 | Conversation / Message 持久化，LangGraph 工具调用，SSE 流式进度与回复 |
+| 模拟面试 | 在 `mock_interview` 模式下结合岗位、简历、匹配结果、面试准备和知识库逐轮提问 |
+| 知识库 | 知识库 CRUD、文档上传/粘贴、同步切片与 embedding、重新索引、chunk 预览 |
+| RAG 检索 | Agent 工具 `search_knowledge` 使用 pgvector 在当前用户知识库内检索资料 |
 
-这些能力已经接入后端真实 API：
+## Screens And Routes
 
-- 岗位列表、详情、创建、更新、JD 解析
-- 简历列表、详情、创建、更新、简历解析
-- 简历版本只读列表
-- 匹配分析列表、详情、自动生成
-- 求职信草稿生成
-- 面试准备提纲生成
-- AI 产物列表、详情、反馈记录
-- 投递记录列表、详情、创建、更新
-- 投递阶段流转与事件时间线
-- dev-only 用户作用域隔离，基于 `X-User-Name`
+| 路由 | 页面 |
+| --- | --- |
+| `/` | 首页 |
+| `/jobs` | 岗位管理 |
+| `/resumes` | 简历管理 |
+| `/matches` | 岗位与简历匹配度 |
+| `/applications` | 投递跟进 |
+| `/assistant` | AI 助手与模拟面试 |
+| `/knowledge` | 知识库管理 |
+| `/artifacts` | 求职材料历史页 |
 
-当前还没有伪造成熟能力：
-
-- AI 助手还没有真实 Conversation / Message 后端
-- 还没有 Tool Adapter、LangChain StructuredTool 或 LangGraph Agent Workflow
-- 还没有 AgentRun / ToolCallLog 运行追踪
-- 知识库还没有真实上传、保存、索引或 RAG 检索
-- 还没有 Eval / Feedback / Agent 质量评估闭环
-- 没有正式登录认证系统
-- 没有文件上传、对象存储或导出 PDF/DOCX
-- 没有异步任务编排或生产级队列
-
-## 技术栈
-
-### Frontend
-
-- Vue 3
-- Vite
-- TypeScript
-- Vue Router
-- Axios
-- Element Plus
-
-### Backend
-
-- FastAPI
-- SQLAlchemy async
-- Alembic
-- PostgreSQL
-- Redis
-- uv
-- OpenAI-compatible Chat Completions API
-
-### Planned AI Workflow
-
-- LangChain StructuredTool
-- LangGraph
-- PostgreSQL + pgvector RAG
-- AgentRun / ToolCallLog observability
-- Eval / Feedback quality loop
-
-### Infrastructure
-
-- Docker Compose
-- PostgreSQL + pgvector extension
-- Redis
-
-## 系统结构
+## Architecture
 
 ```text
 JobPilot/
 ├── backend/
 │   ├── app/
 │   │   ├── api/          # FastAPI routers
+│   │   ├── agent/        # LangGraph workflow, prompts, tools, tool adapter
+│   │   ├── core/         # Settings
+│   │   ├── db/           # Async SQLAlchemy session
+│   │   ├── llm/          # OpenAI-compatible chat and embedding clients
 │   │   ├── models/       # SQLAlchemy models
 │   │   ├── schemas/      # Pydantic schemas
-│   │   ├── services/     # Parsing / generation / workflow services
-│   │   ├── llm/          # OpenAI-compatible LLM client
-│   │   └── db/
+│   │   └── services/     # Business services and AI generation services
 │   ├── alembic/
 │   └── tests/
 ├── frontend/
@@ -164,66 +95,120 @@ JobPilot/
 └── README.md
 ```
 
-下一阶段计划在 `backend/app/` 下新增 `agent/` 模块，用于承载 LangGraph workflow、LangChain StructuredTool registry、Tool Adapter、AgentRun / ToolCallLog 相关逻辑。
+后端分层原则：
 
-## 快速开始
+- API 层只处理 HTTP、依赖注入和响应模型。
+- Service 层承载业务校验、数据库写入和生成逻辑。
+- Agent Tool 只做参数 schema、用户作用域和业务服务适配。
+- LangGraph 只负责编排，不替代业务 service。
+- LLM / Embedding 调用通过自研 OpenAI-compatible client，避免业务代码绑定具体供应商。
 
-### 1. 启动基础设施
+## Tech Stack
+
+### Backend
+
+- FastAPI
+- SQLAlchemy async
+- Alembic
+- PostgreSQL + pgvector
+- Redis
+- LangGraph 1.x
+- LangChain-core 1.x
+- httpx
+- uv
+
+### Frontend
+
+- Vue 3
+- Vite
+- TypeScript
+- Vue Router
+- Axios
+- Element Plus
+
+### AI And Retrieval
+
+- OpenAI-compatible Chat Completions API
+- OpenAI-compatible Embeddings API
+- 自研文本切片器
+- pgvector semantic search
+- SSE streaming assistant response
+
+## Quick Start
+
+### 1. Clone And Install
+
+```powershell
+git clone https://github.com/ZhuYaozong/JobPilot.git
+cd JobPilot
+```
+
+### 2. Start Infrastructure
 
 ```powershell
 docker compose up -d
 ```
 
-默认会启动：
+默认服务：
 
-- PostgreSQL：`localhost:25432`
-- Redis：`localhost:26379`
+| Service | URL |
+| --- | --- |
+| PostgreSQL + pgvector | `127.0.0.1:25432` |
+| Redis | `127.0.0.1:26379` |
 
-### 2. 配置后端环境变量
-
-复制环境变量示例：
+### 3. Configure Environment
 
 ```powershell
 Copy-Item .env.example .env
 Copy-Item backend/.env.example backend/.env
+Copy-Item frontend/.env.example frontend/.env
 ```
 
-AI 相关能力使用 OpenAI-compatible Chat Completions 接口：
+后端最小配置：
 
-```powershell
+```env
+DATABASE_URL=postgresql+asyncpg://postgres:123456@127.0.0.1:25432/jobpilot
+REDIS_URL=redis://127.0.0.1:26379/0
+
 LLM_BASE_URL=https://api.example.com/v1
 LLM_API_KEY=your-api-key
-LLM_MODEL_NAME=your-model-name
+LLM_MODEL_NAME=your-chat-model
+
+EMBEDDING_BASE_URL=https://api.example.com/v1
+EMBEDDING_API_KEY=your-api-key
+EMBEDDING_MODEL_NAME=your-embedding-model
+EMBEDDING_DIMENSIONS=1536
 ```
 
-如果没有配置 LLM，解析和生成接口会返回清晰错误，不会伪造成功结果。
+Embedding 配置可以独立指定；如果未设置 `EMBEDDING_*`，客户端会在运行时尝试复用对应的 `LLM_*` 配置。不同 embedding 维度需要数据库迁移配合，默认维度为 1536。
 
-### 3. 执行数据库迁移
+### 4. Install Backend Dependencies
+
+```powershell
+uv --cache-dir .uv-cache --directory backend sync
+```
+
+### 5. Run Migrations
 
 ```powershell
 uv --cache-dir .uv-cache --directory backend run alembic upgrade head
 ```
 
-### 4. 启动后端
+### 6. Start Backend
 
 ```powershell
 uv --cache-dir .uv-cache --directory backend run uvicorn app.main:app --reload
 ```
 
-后端默认地址：
+Backend:
 
 ```text
 http://localhost:8000
-```
-
-健康检查：
-
-```text
 GET /health
 GET /health/db
 ```
 
-### 5. 启动前端
+### 7. Start Frontend
 
 ```powershell
 cd frontend
@@ -231,118 +216,120 @@ npm install
 npm run dev
 ```
 
-前端默认地址：
+Frontend:
 
 ```text
 http://localhost:5173
 ```
 
-## 常用命令
+## API Overview
 
-前端构建：
+所有业务 API 主要挂载在 `/api/v1` 下：
+
+| Domain | Endpoints |
+| --- | --- |
+| Resumes | `/api/v1/resumes`, `/api/v1/resumes/upload`, `/api/v1/resumes/{id}/parse` |
+| Resume Versions | `/api/v1/resume-versions`, `/api/v1/resume-versions/generate-tailored` |
+| Jobs | `/api/v1/jobs`, `/api/v1/jobs/fetch-from-url`, `/api/v1/jobs/{id}/parse` |
+| Matches | `/api/v1/matches`, `/api/v1/matches/analyze` |
+| Applications | `/api/v1/applications`, `/api/v1/applications/{id}/transition`, `/api/v1/applications/{id}/events` |
+| Artifacts | `/api/v1/artifacts`, `/api/v1/artifacts/generate-cover-letter`, `/api/v1/artifacts/generate-interview-prep` |
+| Conversations | `/api/v1/conversations`, `/api/v1/conversations/{id}/messages` |
+| Assistant | `/api/v1/assistant/run`, `/api/v1/assistant/run-stream` |
+| Knowledge | `/api/v1/knowledge/bases`, `/api/v1/knowledge/documents/{id}/chunks`, `/api/v1/knowledge/documents/{id}/reindex` |
+
+## Agent Tools
+
+当前 Agent 工具注册在 `backend/app/agent/tools/`：
+
+| Tool | Purpose |
+| --- | --- |
+| `list_user_jobs` | 查找当前用户岗位，帮助解析“最新岗位”“某公司岗位”等自然语言引用 |
+| `list_user_resumes` | 查找当前用户简历 |
+| `list_user_applications` | 查找当前用户投递记录 |
+| `analyze_match` | 基于岗位和简历生成匹配分析 |
+| `generate_cover_letter` | 基于简历、岗位和匹配结果生成求职信 |
+| `generate_interview_prep` | 生成中文面试准备提纲 |
+| `search_knowledge` | 在当前用户知识库中做语义检索 |
+| `generate_tailored_resume` | 生成针对岗位的定制简历版本 |
+
+## Development Commands
+
+Backend tests:
+
+```powershell
+uv --cache-dir .uv-cache --directory backend run pytest
+```
+
+Frontend build:
 
 ```powershell
 cd frontend
 npm run build
 ```
 
-后端测试：
-
-```powershell
-uv --cache-dir .uv-cache --directory backend run pytest
-```
-
-数据库迁移：
+Database migration:
 
 ```powershell
 uv --cache-dir .uv-cache --directory backend run alembic upgrade head
 ```
 
-停止本地服务：
+Stop local services:
 
 ```powershell
 docker compose down
 ```
 
-停止并清理本地数据卷：
+Stop and remove local data volumes:
 
 ```powershell
 docker compose down -v
 ```
 
-## API 概览
+## Current Status
 
-核心 API 均挂载在 `/api/v1` 下：
+截至切片 7'e，当前主线已合入：
 
-| 模块 | API |
-| --- | --- |
-| 简历 | `/api/v1/resumes` |
-| 简历版本 | `/api/v1/resume-versions` |
-| 岗位 | `/api/v1/jobs` |
-| 匹配分析 | `/api/v1/matches` |
-| 投递记录 | `/api/v1/applications` |
-| 求职材料 | `/api/v1/artifacts` |
-| 材料反馈 | `/api/v1/artifacts/{artifact_id}/feedback` |
+- 基础数据层、用户作用域、recent-first list 规则
+- Tool Adapter、LangGraph 三节点工作流、多工具 ReAct 循环
+- 产品化 AI Assistant、Conversation / Message / AgentRun / ToolCallLog
+- SSE 流式 Assistant，修复长任务 30s 超时问题
+- 简历文件上传：PDF / DOCX / TXT / MD
+- 岗位 URL 抓取：trafilatura 抽取 + 前端预览确认
+- RAG 数据层：KnowledgeBase / KnowledgeDocument / KnowledgeChunk
+- 自研文本切片 + OpenAI-compatible embedding + pgvector 索引状态机
+- `search_knowledge` tool 与 Agent 集成
+- Assistant 可选择知识库，文档 chunks 可预览
+- 交互式模拟面试：基于 `search_knowledge` + `interview_prep`
+- 定制简历生成：针对岗位生成简历变体
 
-主要 AI / workflow 动作：
-
-```text
-POST /api/v1/jobs/{job_id}/parse
-POST /api/v1/resumes/{resume_id}/parse
-POST /api/v1/matches/analyze
-POST /api/v1/artifacts/generate-cover-letter
-POST /api/v1/artifacts/generate-interview-prep
-POST /api/v1/applications/{application_id}/transition
-```
-
-## 当前状态
-
-JobPilot 当前处于“核心 workflow MVP 完成，Agent 化升级前”的阶段：
-
-- 前端已经从开发者资源后台重构为求职者视角的软件界面。
-- 后端核心 workflow 和 AI 生成闭环已经可用。
-- 自动化测试覆盖核心后端能力。
-- AI 助手和知识库管理还处于产品壳阶段，没有伪造成熟聊天或 RAG。
-
-按完整产品愿景估算：
-
-| 口径 | 当前完成度 |
-| --- | ---: |
-| 可演示 MVP | 65%-70% |
-| 可长期使用的个人求职 Copilot | 40%-45% |
-| 企业级 Agent Workflow / RAG / 评估体系 | 10%-15% |
-
-最近一次验证结果：
+最近一次合入前验证：
 
 ```text
+backend pytest: passed
 frontend npm run build: passed
-backend pytest: 64 passed
 ```
+
+## Known Boundaries
+
+JobPilot 仍然是开发阶段项目，以下能力没有被包装成已完成：
+
+- 没有正式注册、登录、JWT、团队空间或企业级权限。
+- 知识库索引当前是请求内同步执行，还没有生产级异步队列。
+- 没有 PDF / DOCX 导出和模板排版系统。
+- 没有生产级通知、日历提醒或邮件投递集成。
+- 没有完整 CI/CD 发布流水线。
+- 没有并发安全的简历版本唯一约束；定制简历版本号当前按 `max(version_no)+1` 生成。
 
 ## Roadmap
 
-下一阶段主线：
+- 将知识库索引从同步请求演进为后台任务。
+- 为 AgentRun / ToolCallLog 增加更完整的前端可观测界面。
+- 支持求职材料导出 PDF / DOCX。
+- 为定制简历版本增加并发锁或唯一约束。
+- 增加正式认证和更完整的权限模型。
+- 扩展 Agent 质量评估和反馈分析。
 
-1. Conversation / Message 最小数据模型。
-2. Tool Adapter + LangChain StructuredTool 封装已有能力。
-3. LangGraph 最小求职工作流 + `/assistant/run` 后端接口。
-4. AgentRun / ToolCallLog 最小运行日志。
-5. 前端 AI Copilot 接真实 Agent 后端。
-6. LangChain + pgvector RAG 知识库最小闭环。
-7. KnowledgeRetriever Tool 接入 LangGraph。
-8. Eval / Feedback / Agent 质量评估。
+## License
 
-并行的小改进：
-
-- 给投递记录补充独立 `application_url` 字段。
-- 支持从岗位页、简历页跳转到匹配页时自动预选上下文。
-- 支持求职材料导出。
-- 增加投递提醒和日程视图。
-- 增加更完整的用户认证和权限模型。
-- 优化前端代码分包，降低生产构建 chunk size。
-
-## 项目边界
-
-JobPilot 当前更关注“求职流程是否跑得通”和“产品表达是否像给求职者使用的软件”。下一阶段会引入 LangChain / LangGraph / RAG，但仍会保持一个边界：框架只做工具抽象、流程编排和检索增强，不替代核心业务 service、数据库约束和用户作用域校验。
-
-如果你关注的是 Agentic Workflow、AI 求职助手、FastAPI + Vue 全栈项目，或者想看一个项目如何从资源管理后台逐步产品化，JobPilot 会是一个很适合继续扩展的基础。
+当前仓库尚未声明开源许可证。对外使用前请先补充明确的 `LICENSE` 文件。
