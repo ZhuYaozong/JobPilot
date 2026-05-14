@@ -147,8 +147,8 @@ def test_generate_cover_letter_zh_success(
     set_job_parsed_data: Callable[[int, dict[str, Any]], None],
 ) -> None:
     async def fake_generate_text(self, prompt: str) -> str:
-        assert "Latest match result" in prompt
-        assert "Write only a Chinese cover letter draft." in prompt
+        assert "最新匹配结果" in prompt
+        assert "只写中文求职信草稿。" in prompt
         return "尊敬的招聘团队：您好！我希望申请 AI Application Engineer 岗位。我的 FastAPI 和工作流项目经验与岗位需求高度匹配。"
 
     monkeypatch.setattr(LLMClient, "generate_text", fake_generate_text)
@@ -185,7 +185,7 @@ def test_generate_cover_letter_bilingual_success(
     set_job_parsed_data: Callable[[int, dict[str, Any]], None],
 ) -> None:
     async def fake_generate_text(self, prompt: str) -> str:
-        assert "Write the Chinese version first, then the English version." in prompt
+        assert "先写中文版本，再写英文版本。" in prompt
         return """
 中文版本：
 尊敬的招聘团队：您好！我希望申请 AI Application Engineer 岗位，并能结合 FastAPI 和工作流项目经验创造价值。

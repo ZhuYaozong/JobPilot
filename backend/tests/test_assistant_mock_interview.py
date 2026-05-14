@@ -187,9 +187,9 @@ def test_mock_interview_can_chain_match_prep_and_knowledge_search(
     seen_decide_prompts: list[str] = []
 
     async def fake_llm(self, prompt: str) -> str:
-        if "Compare the structured resume" in prompt:
+        if "请比较结构化简历" in prompt:
             return _MATCH_LLM_JSON
-        if "Generate a concise Chinese interview prep draft" in prompt:
+        if "生成一份简洁的中文面试准备提纲" in prompt:
             return (
                 "岗位核心考察点:Agent workflow 与 RAG 落地。\n"
                 "可能问题:你如何设计知识库检索的失败兜底？\n"

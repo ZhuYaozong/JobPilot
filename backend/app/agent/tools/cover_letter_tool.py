@@ -34,27 +34,25 @@ _BUSINESS_DETAIL_TO_ERROR_CLASS: dict[str, str] = {
 
 # 中文说明：这些提示只给 LLM 看，帮助它把内部错误转成下一步建议，而不是暴露 error_class。
 _BUSINESS_LLM_MESSAGES: dict[str, str] = {
-    "resume_not_found": "The requested resume does not exist; ask the user for a valid resume_id.",
-    "job_posting_not_found": "The requested job posting does not exist; ask the user for a valid job_posting_id.",
+    "resume_not_found": "请求的简历不存在；请让用户提供有效的 resume_id。",
+    "job_posting_not_found": "请求的岗位不存在；请让用户提供有效的 job_posting_id。",
     "application_record_not_found": (
-        "The requested application record does not exist; tell the user the id may be wrong."
+        "请求的投递记录不存在；请提示用户 application_record_id 可能不正确。"
     ),
     "application_resume_job_mismatch": (
-        "The application record points to a different resume/job pair than the one requested. "
-        "Ask the user to confirm which application/resume/job they want."
+        "该投递记录关联的是另一组 resume/job。请让用户确认要使用哪个 application、resume 和 job。"
     ),
-    "resume_not_parsed": "The resume has not been parsed; suggest running resume parsing first.",
-    "job_posting_not_parsed": "The job posting has not been parsed; suggest running JD parsing first.",
+    "resume_not_parsed": "简历还没有解析；请建议用户先运行简历解析。",
+    "job_posting_not_parsed": "岗位还没有解析；请建议用户先运行 JD 解析。",
     "match_result_missing": (
-        "A match analysis is required before drafting a cover letter. Ask the user to run "
-        "analyze_match first."
+        "生成求职信前需要先有匹配分析。请让用户先运行 analyze_match。"
     ),
     "unsupported_language_mode": (
-        "language_mode must be 'zh' or 'bilingual'; ask the user to pick one."
+        "language_mode 必须是 'zh' 或 'bilingual'；请让用户选择其中一个。"
     ),
-    "llm_output_empty": "Cover letter generation returned empty content; suggest the user retry.",
+    "llm_output_empty": "求职信生成结果为空；请建议用户重试。",
     "llm_output_missing_chinese": (
-        "The cover letter draft was missing the requested Chinese content; suggest the user retry."
+        "求职信草稿缺少要求的中文内容；请建议用户重试。"
     ),
 }
 
@@ -69,11 +67,10 @@ class CoverLetterToolArgs(BaseModel):
 class CoverLetterTool(BaseTool):
     name = "generate_cover_letter"
     description = (
-        "Generate a cover letter draft for a resume + job posting pair. Both must"
-        " already be parsed, and a match analysis (analyze_match) must exist for"
-        " the pair first. language_mode='zh' (Chinese only) or 'bilingual' (中文 +"
-        " English). application_record_id is optional; if provided it must match"
-        " the resume/job pair."
+        "为一组 resume + job_posting 生成求职信草稿。两者必须已经解析，且该组合必须"
+        "已经存在匹配分析(analyze_match)。language_mode='zh' 表示只生成中文，"
+        "language_mode='bilingual' 表示中文 + 英文。application_record_id 可选；"
+        "如果提供，必须与这组 resume/job 匹配。"
     )
     args_schema = CoverLetterToolArgs
 

@@ -31,23 +31,21 @@ _BUSINESS_DETAIL_TO_ERROR_CLASS: dict[str, str] = {
 
 # 中文说明：这些文案给 format_response 使用，帮助模型把前置条件缺失解释成人话。
 _BUSINESS_LLM_MESSAGES: dict[str, str] = {
-    "resume_not_found": "The requested resume does not exist; ask the user for a valid resume_id.",
-    "job_posting_not_found": "The requested job posting does not exist; ask the user for a valid job_posting_id.",
+    "resume_not_found": "请求的简历不存在；请让用户提供有效的 resume_id。",
+    "job_posting_not_found": "请求的岗位不存在；请让用户提供有效的 job_posting_id。",
     "application_record_not_found": (
-        "The requested application record does not exist; tell the user the id may be wrong."
+        "请求的投递记录不存在；请提示用户 application_record_id 可能不正确。"
     ),
     "application_resume_job_mismatch": (
-        "The application record points to a different resume/job pair than requested. "
-        "Ask the user to confirm which application/resume/job they want."
+        "该投递记录关联的是另一组 resume/job。请让用户确认要使用哪个 application、resume 和 job。"
     ),
-    "resume_not_parsed": "The resume has not been parsed; suggest running resume parsing first.",
-    "job_posting_not_parsed": "The job posting has not been parsed; suggest running JD parsing first.",
+    "resume_not_parsed": "简历还没有解析；请建议用户先运行简历解析。",
+    "job_posting_not_parsed": "岗位还没有解析；请建议用户先运行 JD 解析。",
     "match_result_missing": (
-        "A match analysis is required before generating a tailored resume. Ask the user "
-        "to run analyze_match first."
+        "生成定制简历前需要先有匹配分析。请让用户先运行 analyze_match。"
     ),
-    "llm_output_invalid": "The tailored resume model returned invalid JSON; suggest retrying.",
-    "llm_output_empty": "The tailored resume model returned empty content; suggest retrying.",
+    "llm_output_invalid": "定制简历模型返回了无效 JSON；请建议用户重试。",
+    "llm_output_empty": "定制简历模型返回了空内容；请建议用户重试。",
 }
 
 
@@ -60,11 +58,10 @@ class TailoredResumeToolArgs(BaseModel):
 class TailoredResumeTool(BaseTool):
     name = "generate_tailored_resume"
     description = (
-        "Generate a job-specific resume variant as a ResumeVersion for a parsed"
-        " resume + parsed job posting pair. A latest match analysis for the pair"
-        " must already exist; the tool looks it up by resume_id + job_posting_id."
-        " application_record_id is optional and only used for validation if"
-        " provided. Output is a Markdown resume version and a change summary."
+        "为已解析的 resume + 已解析的 job_posting 生成针对岗位的 ResumeVersion。"
+        "该组合必须已经存在最新匹配分析；工具会按 resume_id + job_posting_id 查询。"
+        "application_record_id 可选，仅在提供时用于一致性校验。输出是 Markdown 简历版本"
+        "和 change_summary。"
     )
     args_schema = TailoredResumeToolArgs
 

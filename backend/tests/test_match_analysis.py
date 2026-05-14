@@ -96,8 +96,8 @@ def test_analyze_match_success(
     set_job_parsed_data: Callable[[int, dict[str, Any]], None],
 ) -> None:
     async def fake_generate_text(self, prompt: str) -> str:
-        assert "Resume structured JSON" in prompt
-        assert "Job posting structured JSON" in prompt
+        assert "简历结构化 JSON" in prompt
+        assert "岗位结构化 JSON" in prompt
         assert "FastAPI" in prompt
         return """
         {

@@ -11,9 +11,9 @@ from app.schemas.resume_parsing import ResumeParsingResult
 
 
 def build_resume_parsing_prompt(resume: Resume) -> str:
-    return f"""You are a resume parser.
-Extract structured information from the following resume.
-Return JSON only, with this shape:
+    return f"""你是 JobPilot 的简历结构化解析器。
+请从下面的简历文本中抽取结构化内容。
+只返回 JSON，不要返回解释、Markdown 或代码块。JSON 字段名必须严格保持以下英文名称和结构:
 {{
   "summary": string or null,
   "skills": string[],
@@ -24,8 +24,14 @@ Return JSON only, with this shape:
   "years_of_experience": string or null
 }}
 
-Resume title: {resume.title}
-Resume text:
+业务规则:
+- 只根据简历原文抽取信息，不要补写不存在的经历、技能、学历或年限。
+- experiences / projects / education 保持简洁，可用中文概括。
+- target_roles 只能从简历明确表达的目标岗位或经历方向中推断；不确定时返回空数组。
+- years_of_experience 无法从原文判断时返回 null。
+
+简历标题: {resume.title}
+简历正文:
 {resume.raw_text}
 """
 

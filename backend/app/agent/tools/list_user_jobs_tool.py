@@ -18,9 +18,8 @@ class ListUserJobsArgs(BaseModel):
     query: str | None = Field(
         default=None,
         description=(
-            "Optional case-insensitive substring to match against company name"
-            " or job title. Use to narrow results when the user mentioned a"
-            " company or role."
+            "可选。用于匹配 company_name 或 job_title 的大小写不敏感子串。"
+            "当用户提到公司或岗位名称但没有提供 job_posting_id 时使用。"
         ),
     )
     limit: int = Field(default=20, ge=1, le=100)
@@ -29,11 +28,9 @@ class ListUserJobsArgs(BaseModel):
 class ListUserJobsTool(BaseTool):
     name = "list_user_jobs"
     description = (
-        "List the user's saved job postings. Returns id, company_name, job_title,"
-        " city, status, and parse_status for each. Use this when the user refers"
-        " to a job by name (e.g. '腾讯的后端岗位') and you need the job_posting_id"
-        " for downstream tools. The optional 'query' argument filters by company"
-        " or title substring."
+        "列出当前用户保存的岗位。每条返回 id、company_name、job_title、city、status、"
+        "parse_status。当用户用名称指代岗位(例如“腾讯的后端岗位”)且后续工具需要"
+        " job_posting_id 时使用。可选参数 query 会按公司或岗位标题子串过滤。"
     )
     args_schema = ListUserJobsArgs
 

@@ -34,7 +34,7 @@ def _build_tools_section() -> str:
         args_schema = cls.args_schema.model_json_schema()
         parts.append(
             f"- {name}: {cls.description}\n"
-            f"  args JSON schema: {json.dumps(args_schema, ensure_ascii=False)}"
+            f"  参数 JSON schema: {json.dumps(args_schema, ensure_ascii=False)}"
         )
     return "\n".join(parts)
 

@@ -59,25 +59,27 @@ def build_cover_letter_prompt(
     )
 
     language_instruction = (
-        "Write only a Chinese cover letter draft."
+        "只写中文求职信草稿。"
         if language_mode == "zh"
-        else "Write the Chinese version first, then the English version."
+        else "先写中文版本，再写英文版本。"
     )
 
-    return f"""You are a job application writing assistant.
-Generate a concise, role-specific cover letter draft based on the structured resume,
-structured job description, and match analysis.
+    return f"""你是 JobPilot 的求职信写作助手。
+请基于结构化简历、结构化岗位描述和最新匹配分析，生成一份贴合岗位的求职信草稿。
 {language_instruction}
-Do not write unrelated boilerplate. Keep it short enough to edit as a draft.
-Return plain text only.
+输出风格:
+- 只返回纯文本，不要返回 JSON、Markdown 标题或解释说明。
+- 内容要具体关联岗位与候选人经历，不要写空泛套话。
+- 保持简洁，适合作为用户后续编辑的草稿。
+- 不要编造简历中不存在的经历、项目、指标、奖项、时间或技能。
 
-Resume structured JSON:
+简历结构化 JSON:
 {resume_json}
 
-Job posting structured JSON:
+岗位结构化 JSON:
 {job_json}
 
-Latest match result:
+最新匹配结果:
 {match_json}
 """
 

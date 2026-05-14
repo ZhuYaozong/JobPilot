@@ -11,9 +11,9 @@ from app.schemas.job_parsing import JobParsingResult
 
 
 def build_job_parsing_prompt(job: JobPosting) -> str:
-    return f"""You are a job description parser.
-Extract structured information from the following job description.
-Return JSON only, with this shape:
+    return f"""你是 JobPilot 的岗位描述结构化解析器。
+请从下面的岗位信息中抽取结构化内容。
+只返回 JSON，不要返回解释、Markdown 或代码块。JSON 字段名必须严格保持以下英文名称和结构:
 {{
   "summary": string or null,
   "responsibilities": string[],
@@ -24,10 +24,16 @@ Return JSON only, with this shape:
   "city": string or null
 }}
 
-Job title: {job.job_title}
-Company: {job.company_name}
-City: {job.city or ""}
-Job description:
+业务规则:
+- summary 用简洁中文概括岗位核心目标；如果原文不足以判断则返回 null。
+- responsibilities 只提取岗位职责，不要混入任职要求。
+- required_skills / preferred_skills / keywords 使用原文支持的信息，不要编造技能。
+- seniority / city 无法确定时返回 null。
+
+岗位名称: {job.job_title}
+公司: {job.company_name}
+城市: {job.city or ""}
+岗位描述:
 {job.jd_text}
 """
 

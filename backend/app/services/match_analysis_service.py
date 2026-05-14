@@ -19,23 +19,29 @@ def build_match_analysis_prompt(resume: Resume, job: JobPosting) -> str:
     resume_json = json.dumps(resume.parsed_json, ensure_ascii=False, indent=2)
     job_json = json.dumps(job.parsed_json, ensure_ascii=False, indent=2)
 
-    return f"""You are a job application match analyst.
-Compare the structured resume with the structured job description.
-Return JSON only, with this shape:
+    return f"""你是 JobPilot 的岗位匹配分析师。
+请比较结构化简历和结构化岗位描述，评估候选人与岗位的匹配度。
+只返回 JSON，不要返回解释、Markdown 或代码块。JSON 字段名必须严格保持以下英文名称和结构:
 {{
-  "overall_score": number from 0 to 100,
+  "overall_score": 0 到 100 的数字,
   "strengths": string[],
   "weaknesses": string[],
   "missing_keywords": string[],
   "suggestions": string[]
 }}
 
-Keep list items concise. Base the analysis on the structured JSON inputs.
+行为约束:
+- 所有判断必须基于输入的结构化 JSON，不要编造简历或岗位中没有的事实。
+- strengths 写候选人已经具备、且和岗位相关的优势。
+- weaknesses 写与岗位要求相比的短板或风险。
+- missing_keywords 写岗位要求中明显缺失或弱覆盖的关键词。
+- suggestions 写可执行的简历修改或准备建议。
+- 列表项保持简洁，优先使用中文表达。
 
-Resume structured JSON:
+简历结构化 JSON:
 {resume_json}
 
-Job posting structured JSON:
+岗位结构化 JSON:
 {job_json}
 """
 
