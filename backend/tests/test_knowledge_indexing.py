@@ -1,10 +1,8 @@
-"""Integration tests for slice 7'c2 indexing pipeline.
+"""7'c2 索引流水线集成测试。
 
-The real embedding endpoint is mocked via ``monkeypatch`` so tests are
-deterministic + cheap. We patch ``EmbeddingClient.embed`` directly rather
-than respx-mocking HTTP because the indexing service creates the client
-inside its own scope and we want to control the *behaviour* (success,
-failure, dim mismatch) not the wire format.
+真实 embedding endpoint 通过 ``monkeypatch`` mock 掉，让测试保持确定且低成本。
+这里直接 patch ``EmbeddingClient.embed``，而不是用 respx mock HTTP，因为索引服务会在
+自己的作用域里创建 client；测试关心的是行为（成功、失败、维度不匹配），不是网络格式。
 """
 
 import asyncio
@@ -26,7 +24,7 @@ from app.models.knowledge_chunk import KnowledgeChunk
 from app.models.knowledge_document import KnowledgeDocument
 
 
-# ---------- Helpers --------------------------------------------------------
+# ---------- 辅助方法 --------------------------------------------------------
 
 
 def _run(coro_factory: Callable) -> Any:
@@ -42,18 +40,18 @@ def _run(coro_factory: Callable) -> Any:
 
 
 def _fake_embedding(text: str, dim: int) -> list[float]:
-    """Deterministic fake embedding: hash the text into ``dim`` floats in
-    [-1, 1]. Order-preserving so tests can assert vector content correlates
-    with chunk content.
+    """确定性的模拟 embedding：把文本 hash 成 ``dim`` 个 [-1, 1] 浮点数。
+
+    相同文本会得到相同向量，方便测试断言向量内容与 chunk 内容存在对应关系。
     """
     seed = hashlib.sha256(text.encode("utf-8")).digest()
-    # Repeat the seed bytes to fill dim, then map each byte to [-1, 1].
+    # 重复 seed 字节直到填满 dim，再把每个字节映射到 [-1, 1]。
     raw = (seed * (dim // len(seed) + 1))[:dim]
     return [(b / 127.5) - 1.0 for b in raw]
 
 
 def _install_fake_embedder(monkeypatch, *, dim: int | None = None) -> None:
-    """Patch EmbeddingClient.embed to return fake vectors."""
+    """替换 EmbeddingClient.embed，让它返回模拟向量。"""
     target_dim = dim if dim is not None else settings.embedding_dimensions
 
     async def fake_embed(self, texts: list[str]) -> list[list[float]]:
@@ -69,14 +67,13 @@ def _install_failing_embedder(monkeypatch, exc: Exception) -> None:
     monkeypatch.setattr(EmbeddingClient, "embed", fake_embed)
 
 
-# ---------- Happy path ----------------------------------------------------
+# ---------- 成功路径 ----------------------------------------------------
 
 
 def test_upload_indexes_document_to_ready(
     client: TestClient, monkeypatch, test_marker: str,
 ) -> None:
-    """End-to-end: upload a TXT → indexing writes chunks → status=ready,
-    chunk_count > 0, embeddings persisted with the right dim."""
+    """端到端验证：上传 TXT → 索引写入 chunks → status=ready，且 embedding 维度正确。"""
     _install_fake_embedder(monkeypatch)
 
     kb_id = client.post(
@@ -84,7 +81,7 @@ def test_upload_indexes_document_to_ready(
         json={"name": f"{test_marker} index"},
     ).json()["id"]
 
-    # Long enough to produce multiple chunks at the default 800-char size.
+    # 文本长度足够在默认 800 字 chunk 大小下切出多个 chunk。
     body = (
         f"{test_marker} 我在 ByteDance 做了大规模数据管道。"
         "上线后日处理 1 TB,延迟降低 40%。\n\n"
@@ -101,7 +98,7 @@ def test_upload_indexes_document_to_ready(
     assert data["chunk_count"] > 0
     doc_id = data["id"]
 
-    # Chunks should exist with embeddings.
+    # chunk 应已存在，并且都带有 embedding。
     async def _inspect(db: AsyncSession) -> tuple[int, bool]:
         rows = (
             await db.execute(
@@ -139,14 +136,13 @@ def test_manual_document_also_indexed(
     assert data["chunk_count"] >= 1
 
 
-# ---------- Failure paths ------------------------------------------------
+# ---------- 失败路径 ------------------------------------------------
 
 
 def test_indexing_failure_lands_in_failed_status_with_error_detail(
     client: TestClient, monkeypatch, test_marker: str,
 ) -> None:
-    """When the embedding endpoint isn't configured, indexing should mark
-    the doc as failed (not 500) and surface a friendly error_detail."""
+    """embedding endpoint 未配置时，索引应把文档标记为 failed，而不是返回 500。"""
     _install_failing_embedder(
         monkeypatch, EmbeddingConfigError("missing api key"),
     )
@@ -172,7 +168,7 @@ def test_indexing_failure_lands_in_failed_status_with_error_detail(
     assert data["chunk_count"] == 0
     assert "embedding_config_missing" in data["error_detail"]
 
-    # No chunks should have been written.
+    # 失败时不应写入任何 chunk。
     doc_id = data["id"]
 
     async def _count(db: AsyncSession) -> int:
@@ -216,16 +212,16 @@ def test_remote_error_maps_to_failed(
     assert "embedding_request_failed" in data["error_detail"]
 
 
-# ---------- Reindex --------------------------------------------------------
+# ---------- 重新索引 --------------------------------------------------------
 
 
 def test_reindex_clears_failed_state_and_writes_chunks(
     client: TestClient, monkeypatch, test_marker: str,
 ) -> None:
-    """User flow:
-    1. Upload while embedding is misconfigured → status=failed
-    2. Fix config (= swap fake embedder to a working one)
-    3. POST /reindex → status=ready with chunks
+    """用户流程：
+    1. embedding 配置错误时上传，文档变为 status=failed。
+    2. 修好配置（测试里切换成可用的模拟 embedder）。
+    3. POST /reindex 后，文档变为 status=ready 并写入 chunks。
     """
     _install_failing_embedder(
         monkeypatch, EmbeddingConfigError("oops"),
@@ -244,7 +240,7 @@ def test_reindex_clears_failed_state_and_writes_chunks(
     assert upload_resp.json()["status"] == "failed"
     doc_id = upload_resp.json()["id"]
 
-    # Now install a working embedder and retry.
+    # 现在安装可用 embedder 并重试。
     _install_fake_embedder(monkeypatch)
     reindex_resp = client.post(
         f"/api/v1/knowledge/documents/{doc_id}/reindex",
@@ -259,10 +255,11 @@ def test_reindex_clears_failed_state_and_writes_chunks(
 def test_reindex_idempotent_on_ready_document(
     client: TestClient, monkeypatch, test_marker: str,
 ) -> None:
-    """Calling reindex on an already-ready document should drop old chunks
-    and write fresh ones — chunk count may stay the same, embeddings should
-    be regenerated (which we don't bother asserting since fakes are
-    deterministic per text)."""
+    """对 ready 文档调用 reindex 应删除旧 chunks 并写入新 chunks。
+
+    chunk 数量可以保持不变，embedding 应被重新生成；由于模拟向量对同一文本是确定性的，
+    这里不额外断言向量变化。
+    """
     _install_fake_embedder(monkeypatch)
 
     kb_id = client.post(
@@ -289,14 +286,13 @@ def test_reindex_idempotent_on_ready_document(
     assert after["chunk_count"] == initial_count
 
 
-# ---------- Cleanup invariants -------------------------------------------
+# ---------- 清理不变量 -------------------------------------------
 
 
 def test_reindex_drops_previous_chunks_atomically(
     client: TestClient, monkeypatch, test_marker: str,
 ) -> None:
-    """After reindexing, the document should never have BOTH old and new
-    chunks. We assert by checking chunk_index is contiguous from 0."""
+    """重新索引后，文档不应同时保留新旧 chunks；这里用 chunk_index 连续性来断言。"""
     _install_fake_embedder(monkeypatch)
 
     kb_id = client.post(
@@ -331,11 +327,10 @@ def test_reindex_drops_previous_chunks_atomically(
 def test_doc_status_pending_when_auto_index_disabled(
     client: TestClient, monkeypatch, test_marker: str,
 ) -> None:
-    """Sanity check that the test seam still works — auto_index=False is
-    used by other test files to seed pending docs cheaply.
+    """确认测试 seam 仍然可用。
 
-    We can't reach this codepath through the API (auto_index is always
-    true in production), so we exercise the service function directly.
+    其他测试会用 auto_index=False 低成本预置 pending 文档。API 路径走不到这里
+    （生产中 auto_index 恒为 true），因此直接调用 service 函数覆盖这条路径。
     """
     from app.models.knowledge_base import KnowledgeBase
     from app.models.user import User

@@ -13,19 +13,15 @@ class Settings(BaseSettings):
     llm_api_key: str | None = None
     llm_model_name: str | None = None
 
-    # Embedding endpoint is configured independently from chat completion.
-    # Real-world deployments often want a different provider / model for
-    # embeddings (e.g. chat from a local Llama, embeddings from OpenAI for
-    # higher quality). Each ``embedding_*`` falls back to its ``llm_*``
-    # counterpart at access time (see ``EmbeddingClient`` in slice 7'c2),
-    # which keeps single-provider setups zero-config while leaving room for
-    # the split deployment to take over.
+    # embedding 端点独立于聊天补全端点配置。真实部署常常会拆供应商/模型：
+    # 例如聊天走本地 Llama，向量化走中文质量更好的 OpenAI 兼容服务。
+    # 每个 ``embedding_*`` 会在调用时回退到对应的 ``llm_*``，既让单供应商部署零额外配置，
+    # 又给拆分部署留出口。
     embedding_base_url: str | None = None
     embedding_api_key: str | None = None
     embedding_model_name: str | None = None
-    # 1536 matches OpenAI text-embedding-3-small; override for other models.
-    # The DB column is fixed-dim, so changing this requires a migration —
-    # keep the value stable per deployment.
+    # 1536 对应 OpenAI text-embedding-3-small；换模型时需要同步修改。
+    # 数据库向量列是固定维度，改这里必须配套 migration，每个部署环境内要保持稳定。
     embedding_dimensions: int = 1536
 
     model_config = SettingsConfigDict(

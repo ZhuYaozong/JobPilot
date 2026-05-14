@@ -1,8 +1,7 @@
-"""HTTP-layer tests for POST /api/v1/assistant/run.
+"""POST /api/v1/assistant/run 的 HTTP 层测试。
 
-A multi-prompt fake LLM (dispatch on a unique marker in the prompt) lets us
-verify the full e2e: user message persisted, agent_run created, workflow
-runs, tool called, assistant message stored, response shape correct.
+多 prompt 模拟 LLM 会根据 prompt 中的唯一标记分发响应，用来验证完整端到端流程：
+用户消息持久化、agent_run 创建、workflow 执行、工具调用、助手消息保存，以及响应形状正确。
 """
 
 import asyncio
@@ -104,15 +103,13 @@ def _make_fake_llm(
     follow_up_response: str | None = None,
     match_response: str = _MATCH_LLM_JSON,
 ):
-    """Build a stateless fake LLM that dispatches on prompt markers.
+    """构造一个无状态模拟 LLM，根据 prompt 标记分发响应。
 
-    The ReAct loop now calls ``decide`` again after every tool, so we
-    distinguish the initial decide (tool_call_history empty) from follow-up
-    decides (history non-empty). By default the follow-up decide returns a
-    ``respond_directly`` envelope so the loop terminates cleanly after one
-    tool. ``final_text`` is the text shown to the user as the assistant reply
-    on that respond_directly path. Tests that want a different terminating
-    text or a multi-tool flow can override ``follow_up_response`` directly.
+    ReAct 循环现在会在每次工具调用后再次调用 ``decide``，因此测试里要区分
+    首次 decide（tool_call_history 为空）和后续 decide（history 非空）。
+    默认后续 decide 返回 ``respond_directly`` 信封，让循环在一次工具调用后干净结束。
+    ``final_text`` 是这条 respond_directly 路径上展示给用户的助手回复文本。
+    如果测试需要不同的终止文本或多工具流程，可以直接覆盖 ``follow_up_response``。
     """
     default_follow_up = (
         '{"action": "respond_directly", "text": ' + repr(final_text).replace("'", '"') + "}"
@@ -196,8 +193,7 @@ def test_assistant_run_creates_conversation_when_id_is_null(
     body = response.json()
     new_conversation_id = body["conversation_id"]
 
-    # A second request with that conversation_id should append to it, not
-    # create a new one.
+    # 第二个请求带同一个 conversation_id 时应追加到原会话，而不是创建新会话。
     second = client.post(
         "/api/v1/assistant/run",
         json={
@@ -208,7 +204,7 @@ def test_assistant_run_creates_conversation_when_id_is_null(
     assert second.status_code == 200
     assert second.json()["conversation_id"] == new_conversation_id
 
-    # sequence_no should be 1,2,3,4 across the two turns.
+    # 两轮对话里的 sequence_no 应连续为 1、2、3、4。
     msgs = client.get(
         f"/api/v1/conversations/{new_conversation_id}/messages",
     ).json()
@@ -246,7 +242,7 @@ def test_assistant_run_marks_agent_run_failed_when_llm_misconfigured(
     assert body["agent_run"]["status"] == "failed"
     assert body["agent_run"]["error_class"] == "llm_config_missing"
     assert body["assistant_message"] is None
-    # user_message should still have been written.
+    # 即使运行失败，user_message 仍应写入。
     assert body["user_message"]["content"].endswith("doomed")
 
 
@@ -255,9 +251,8 @@ def test_assistant_run_handles_tool_business_error_via_format_response(
     monkeypatch,
     test_marker: str,
 ) -> None:
-    # decide picks the tool, but with a nonexistent resume_id. The tool
-    # returns ok=False, which format_response should turn into a sensible
-    # natural-language reply. Run still succeeds at the agent level.
+    # decide 选择了工具，但传入不存在的 resume_id。工具返回 ok=False 后，
+    # format_response 应把它整理成自然语言回复；AgentRun 层面仍算成功收束。
     decide_json = (
         '{"action": "call_tool", "tool": "analyze_match",'
         ' "args": {"resume_id": 999999999, "job_posting_id": 999999998}}'

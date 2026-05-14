@@ -25,9 +25,8 @@ async def list_conversations(
     limit: ListLimit = 20,
     offset: ListOffset = 0,
 ) -> list[Conversation]:
-    # Recent-first by last_run_at when present (so just-used conversations
-    # bubble to the top), falling back to updated_at for fresh conversations
-    # that have not yet completed a run.
+    # 优先按 last_run_at 倒序，让刚聊过的会话浮到顶部；新建但还没完成 AgentRun 的会话
+    # 没有 last_run_at，则退回 updated_at。
     statement = (
         select(Conversation)
         .where(Conversation.user_id == current_user.id)
@@ -67,9 +66,10 @@ async def update_conversation(
     db: DbSession,
     current_user: CurrentUserDep,
 ) -> Conversation:
-    """Rename a conversation (or update its status). Only the title field is
-    exposed in the UI today; the schema also accepts ``status`` for future
-    use (archive / pin / etc.)."""
+    """重命名会话，或更新会话状态。
+
+    当前 UI 只暴露 title；schema 预留 ``status``，后续可接归档、置顶等能力。
+    """
     conversation = await _require_owned_conversation(
         db, conversation_id, current_user.id,
     )
@@ -96,21 +96,18 @@ async def delete_conversation(
     db: DbSession,
     current_user: CurrentUserDep,
 ) -> Response:
-    """Hard-delete a conversation and every row it owns.
+    """硬删除一个会话及其拥有的所有行。
 
-    The FK columns on messages / agent_runs / memory_summaries don't have
-    ``ON DELETE CASCADE`` (the slice-1 migration left them as plain FKs), so
-    we tear the dependency graph down manually:
+    messages / agent_runs / memory_summaries 上的外键没有 ``ON DELETE CASCADE``，
+    因此这里手工按依赖顺序拆图：
 
         tool_call_logs → agent_runs → memory_summaries / messages → conversation
 
-    All deletes happen in one transaction so we never leave half-deleted
-    state if the user closes the tab mid-request.
+    所有删除在一个事务里完成，即使用户中途关页面，也不会留下半删除状态。
     """
     await _require_owned_conversation(db, conversation_id, current_user.id)
 
-    # tool_call_logs FK→agent_runs. Resolve agent_run ids first so we can
-    # bulk-delete logs in a single query without joining inside the DELETE.
+    # tool_call_logs 依赖 agent_runs。先查出 agent_run ids，后面就能用一条 DELETE 批量删日志。
     agent_run_ids = (
         await db.execute(
             select(AgentRun.id).where(AgentRun.conversation_id == conversation_id),

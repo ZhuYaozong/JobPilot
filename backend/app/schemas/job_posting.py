@@ -45,9 +45,10 @@ class JobURLFetchRequest(BaseModel):
 
 
 class JobURLFetchPreview(BaseModel):
-    """Preview-only payload from POST /jobs/fetch-from-url — nothing is
-    persisted yet. The frontend uses this to pre-fill the create form; the
-    user then submits a regular POST /jobs to save."""
+    """POST /jobs/fetch-from-url 返回的预览对象。
+
+    此时不会写数据库；前端只用它预填创建表单，用户确认后再走常规 POST /jobs 保存。
+    """
 
     jd_text: str
     title: str | None

@@ -35,21 +35,19 @@ async def create_resume(
 async def upload_resume(
     db: DbSession,
     current_user: CurrentUserDep,
-    file: UploadFile = File(..., description="PDF / DOCX / TXT / MD resume"),
+    file: UploadFile = File(..., description="PDF / DOCX / TXT / MD 简历文件"),
     title: str | None = Form(
         default=None,
-        description="Override title; defaults to the filename stem.",
+        description="可选标题；不填时默认使用文件名主干。",
     ),
     auto_parse: bool = Form(
         default=True,
-        description="If true (default), run LLM parsing immediately after extraction.",
+        description="为 true 时，文本抽取后立即运行 LLM 简历解析。",
     ),
 ) -> Resume:
-    """Accept a file upload, extract text, persist + (optionally) parse.
+    """接收简历文件，抽取文本，保存后按需立即解析。
 
-    The extracted text drives the same downstream pipeline that the manual
-    "paste raw text" flow uses — we share the parsing service so behaviour
-    stays consistent across both entry points.
+    文件上传和手动粘贴最终都走同一个解析 service，保证两种入口的解析行为一致。
     """
     raw_bytes = await file.read()
     try:
@@ -77,14 +75,12 @@ async def upload_resume(
     await db.refresh(resume)
 
     if auto_parse:
-        # parse_resume mutates the resume in place; HTTPException from the
-        # LLM layer leaves the row at parse_status="pending" which the UI
-        # can flag for a manual retry from the detail page.
+        # parse_resume 会原地更新 resume；如果 LLM 层抛 HTTPException，行会保留在
+        # parse_status="pending"，前端详情页可以提示用户手动重试解析。
         try:
             resume = await parse_resume(db, resume)
         except HTTPException:
-            # Surface the parsing failure code to the client but keep the
-            # resume row — they can retry parse_resume_detail from the UI.
+            # 解析失败要把错误返回给客户端，但不能删掉已上传的简历，方便用户稍后重试。
             await db.refresh(resume)
             raise
 
@@ -94,9 +90,8 @@ async def upload_resume(
 def _derive_title_from_filename(filename: str) -> str:
     """``backend-resume-v3.pdf`` → ``backend-resume-v3``.
 
-    Falls back to a date-stamped placeholder when the filename is unhelpful
-    (e.g. ``upload.pdf`` from the upload widget's anonymous mode). Anything
-    weird in the name (paths, slashes) is stripped first.
+    如果文件名没有信息量，例如上传控件给出的 ``upload.pdf``，就回退到带时间戳的
+    占位标题。处理前会先去掉路径和斜杠，避免浏览器传入奇怪的完整路径。
     """
     sanitised = filename.replace("\\", "/").rsplit("/", 1)[-1].strip()
     stem = re.sub(r"\.[^.]+$", "", sanitised).strip()

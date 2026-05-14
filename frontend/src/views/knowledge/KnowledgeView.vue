@@ -1,6 +1,6 @@
 <template>
   <div class="knowledge">
-    <!-- ========== Page header ========== -->
+    <!-- ========== 页面头部 ========== -->
     <header class="page-head">
       <div>
         <p class="page-head__eyebrow">资料中心</p>
@@ -26,9 +26,9 @@
       </div>
     </header>
 
-    <!-- ========== Workspace ========== -->
+    <!-- ========== 工作区 ========== -->
     <div class="workspace">
-      <!-- ---------- KB list ---------- -->
+      <!-- ---------- 知识库列表 ---------- -->
       <aside class="list-pane">
         <header class="list-pane__head">
           <h2>知识库列表</h2>
@@ -95,7 +95,7 @@
         </div>
       </aside>
 
-      <!-- ---------- Detail ---------- -->
+      <!-- ---------- 详情 ---------- -->
       <main class="detail-pane">
         <div v-if="!selectedKb" class="detail-empty">
           <div class="detail-empty__orb" />
@@ -217,7 +217,7 @@
       </main>
     </div>
 
-    <!-- ========== Create KB drawer ========== -->
+    <!-- ========== 创建知识库抽屉 ========== -->
     <el-drawer
       v-model="createKbDrawerOpen"
       title="新建知识库"
@@ -253,7 +253,7 @@
       </template>
     </el-drawer>
 
-    <!-- ========== Upload document drawer ========== -->
+    <!-- ========== 上传文档抽屉 ========== -->
     <el-drawer
       v-model="uploadDocDrawerOpen"
       title="添加文档"
@@ -383,7 +383,7 @@
       </template>
     </el-drawer>
 
-    <!-- ========== Chunk preview drawer ========== -->
+    <!-- ========== 切片预览抽屉 ========== -->
     <el-drawer
       v-model="chunksDrawerOpen"
       :title="chunksDrawerTitle"
@@ -437,7 +437,7 @@ import type {
 import { formatRelativeTime } from "@/utils/format";
 import { getErrorMessage } from "@/utils/http";
 
-// ---------- State -----------------------------------------------------------
+// ---------- 状态 -----------------------------------------------------------
 
 const knowledgeBases = ref<KnowledgeBaseListItem[]>([]);
 const documents = ref<KnowledgeDocumentListItem[]>([]);
@@ -447,8 +447,8 @@ const kbsLoading = ref(false);
 const docsLoading = ref(false);
 const kbCreatePending = ref(false);
 const docCreatePending = ref(false);
-// Per-document spinner state — indexing is synchronous so we just track
-// which doc ids are mid-flight to disable the button.
+// 单文档加载态：索引在服务端同步执行，因此这里只记录正在处理的 doc id，
+// 用来禁用对应按钮。
 const reindexingDocIds = ref<Set<number>>(new Set());
 
 const createKbDrawerOpen = ref(false);
@@ -485,7 +485,7 @@ const chunksDrawerTitle = computed(() =>
   chunksDocTitle.value ? `切片预览:${chunksDocTitle.value}` : "切片预览",
 );
 
-// ---------- Effects ---------------------------------------------------------
+// ---------- 副作用 ---------------------------------------------------------
 
 watch(selectedKbId, async (id) => {
   if (id === null) {
@@ -497,7 +497,7 @@ watch(selectedKbId, async (id) => {
 
 onMounted(loadKnowledgeBases);
 
-// ---------- Data loading ----------------------------------------------------
+// ---------- 数据加载 ----------------------------------------------------
 
 async function loadKnowledgeBases() {
   kbsLoading.value = true;
@@ -525,7 +525,7 @@ async function loadDocuments(kbId: number) {
   }
 }
 
-// ---------- KB handlers -----------------------------------------------------
+// ---------- 知识库处理器 -----------------------------------------------------
 
 function selectKb(id: number) {
   selectedKbId.value = id;
@@ -606,7 +606,7 @@ async function handleDeleteKb(kb: KnowledgeBaseListItem) {
   }
 }
 
-// ---------- Document handlers ----------------------------------------------
+// ---------- 文档处理器 ----------------------------------------------
 
 function openUploadDocDrawer() {
   if (!selectedKbId.value) return;
@@ -672,14 +672,13 @@ async function handleCreateManualDocument() {
 
 async function handleReindexDocument(doc: KnowledgeDocumentListItem) {
   if (reindexingDocIds.value.has(doc.id)) return;
-  // Set spinner state via a fresh Set so Vue picks up the reactive update.
+  // 用新的 Set 设置加载态，确保 Vue 能捕捉到响应式更新。
   const inflight = new Set(reindexingDocIds.value);
   inflight.add(doc.id);
   reindexingDocIds.value = inflight;
   try {
     const updated = await reindexKnowledgeDocument(doc.id);
-    // Patch the local list so the status pill flips immediately. We don't
-    // refetch the whole list because that loses scroll position.
+    // 直接更新本地列表，让状态标签即时变化；不重新拉整页列表，避免丢失滚动位置。
     const idx = documents.value.findIndex((d) => d.id === doc.id);
     if (idx >= 0) {
       documents.value.splice(idx, 1, updated);
@@ -744,7 +743,7 @@ async function handleDeleteDocument(doc: KnowledgeDocumentListItem) {
   }
 }
 
-// ---------- Formatters ------------------------------------------------------
+// ---------- 格式化方法 ------------------------------------------------------
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -798,7 +797,7 @@ function statusTone(status: string): string {
   margin: 0 auto;
 }
 
-/* ============ Page header ============ */
+/* ============ 页面头部 ============ */
 .page-head {
   display: flex;
   align-items: flex-end;
@@ -878,7 +877,7 @@ function statusTone(status: string): string {
   color: #667085;
 }
 
-/* ============ Buttons ============ */
+/* ============ 按钮 ============ */
 .primary-btn {
   display: inline-flex;
   align-items: center;
@@ -951,7 +950,7 @@ function statusTone(status: string): string {
   background: #fff5f5;
 }
 
-/* ============ Workspace ============ */
+/* ============ 工作区 ============ */
 .workspace {
   display: grid;
   grid-template-columns: minmax(280px, 0.85fr) minmax(0, 2fr);
@@ -959,7 +958,7 @@ function statusTone(status: string): string {
   align-items: start;
 }
 
-/* ============ List pane ============ */
+/* ============ 列表面板 ============ */
 .list-pane {
   display: flex;
   flex-direction: column;
@@ -1138,7 +1137,7 @@ function statusTone(status: string): string {
   color: #b42318;
 }
 
-/* ============ Empty / detail ============ */
+/* ============ 空态 / 详情 ============ */
 .empty {
   display: flex;
   flex-direction: column;
@@ -1273,7 +1272,7 @@ function statusTone(status: string): string {
   color: #b45309;
 }
 
-/* ============ Block / docs ============ */
+/* ============ 内容块 / 文档 ============ */
 .block {
   display: flex;
   flex-direction: column;
@@ -1470,7 +1469,7 @@ function statusTone(status: string): string {
   color: #344054;
 }
 
-/* ============ Callout ============ */
+/* ============ 提示说明块 ============ */
 .callout {
   display: flex;
   align-items: flex-start;
@@ -1506,7 +1505,7 @@ function statusTone(status: string): string {
   color: #475467;
 }
 
-/* ============ Drawer tabs (reused 7'a pattern) ============ */
+/* ============ 抽屉标签（复用 7'a 模式） ============ */
 .drawer-hint {
   margin: 0 0 16px;
   font-size: 12px;
@@ -1672,7 +1671,7 @@ function statusTone(status: string): string {
   color: #b42318;
 }
 
-/* ============ Responsive ============ */
+/* ============ 响应式 ============ */
 @media (max-width: 1180px) {
   .workspace {
     grid-template-columns: 1fr;

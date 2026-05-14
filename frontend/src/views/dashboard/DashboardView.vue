@@ -1,6 +1,6 @@
 <template>
   <div class="dashboard">
-    <!-- ============ Hero: greeting + 今日主任务 ============ -->
+    <!-- ============ 主视觉：问候 + 今日主任务 ============ -->
     <section class="hero">
       <div class="hero__greeting">
         <p class="hero__eyebrow">今日工作台</p>
@@ -27,7 +27,7 @@
       </div>
     </section>
 
-    <!-- ============ Alerts: 求职健康度提醒 ============ -->
+    <!-- ============ 提醒：求职健康度提醒 ============ -->
     <section v-if="!loading" class="alerts">
       <div v-if="alertCards.length" class="alerts__grid">
         <RouterLink
@@ -55,7 +55,7 @@
       </div>
     </section>
 
-    <!-- ============ Stat strip: 5 个核心数字 ============ -->
+    <!-- ============ 统计条：5 个核心数字 ============ -->
     <section class="stats">
       <article
         v-for="stat in statCards"
@@ -72,7 +72,7 @@
       </article>
     </section>
 
-    <!-- ============ Recent: 最近活动 (2×2) ============ -->
+    <!-- ============ 最近活动：2×2 ============ -->
     <section class="recent">
       <header class="recent__head">
         <h2>最近活动</h2>
@@ -530,7 +530,7 @@ onMounted(fetchOverview);
   margin: 0 auto;
 }
 
-/* =================== Hero =================== */
+/* =================== 主视觉 =================== */
 .hero {
   position: relative;
   display: grid;
@@ -699,7 +699,7 @@ onMounted(fetchOverview);
   color: #0f766e;
 }
 
-/* =================== Alerts =================== */
+/* =================== 提醒 =================== */
 .alerts__grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -820,7 +820,7 @@ onMounted(fetchOverview);
   color: #475467;
 }
 
-/* =================== Stat strip =================== */
+/* =================== 统计条 =================== */
 .stats {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -899,7 +899,7 @@ onMounted(fetchOverview);
   color: #98a2b3;
 }
 
-/* =================== Recent grid =================== */
+/* =================== 最近活动网格 =================== */
 .recent__head {
   display: flex;
   align-items: baseline;
@@ -1047,7 +1047,7 @@ onMounted(fetchOverview);
   background: #fff5f5;
 }
 
-/* =================== Helpers =================== */
+/* =================== 辅助样式 =================== */
 .status-dot {
   width: 6px;
   height: 6px;
@@ -1080,7 +1080,7 @@ onMounted(fetchOverview);
   font-weight: 600;
 }
 
-/* =================== Responsive =================== */
+/* =================== 响应式 =================== */
 @media (max-width: 1180px) {
   .hero {
     grid-template-columns: 1fr;

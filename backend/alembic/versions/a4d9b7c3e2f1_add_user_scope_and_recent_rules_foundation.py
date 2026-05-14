@@ -1,8 +1,8 @@
-"""add user scope foundation
+"""增加用户隔离基础
 
-Revision ID: a4d9b7c3e2f1
-Revises: f938bb597dcc
-Create Date: 2026-04-24 18:45:00.000000
+修订 ID: a4d9b7c3e2f1
+上一修订: f938bb597dcc
+创建时间: 2026-04-24 18:45:00.000000
 
 """
 
@@ -12,7 +12,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-# revision identifiers, used by Alembic.
+# Alembic 使用的修订标识。
 revision: str = "a4d9b7c3e2f1"
 down_revision: Union[str, Sequence[str], None] = "f938bb597dcc"
 branch_labels: Union[str, Sequence[str], None] = None
@@ -20,7 +20,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Upgrade schema."""
+    """升级 schema。"""
     op.add_column("users", sa.Column("username", sa.String(length=64), nullable=True))
     op.add_column(
         "users",
@@ -109,7 +109,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Downgrade schema."""
+    """降级 schema。"""
     for table_name in (
         "application_records",
         "generated_artifacts",

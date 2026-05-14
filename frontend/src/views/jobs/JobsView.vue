@@ -1,6 +1,6 @@
 <template>
   <div class="jobs">
-    <!-- ========== Page header ========== -->
+    <!-- ========== 页面头部 ========== -->
     <header class="page-head">
       <div>
         <p class="page-head__eyebrow">岗位管理</p>
@@ -22,9 +22,9 @@
       </div>
     </header>
 
-    <!-- ========== Two-column workspace ========== -->
+    <!-- ========== 双栏工作区 ========== -->
     <div class="workspace">
-      <!-- ---------- List ---------- -->
+      <!-- ---------- 列表 ---------- -->
       <aside class="list-pane">
         <header class="list-pane__head">
           <h2>岗位列表</h2>
@@ -74,7 +74,7 @@
         </div>
       </aside>
 
-      <!-- ---------- Detail ---------- -->
+      <!-- ---------- 详情 ---------- -->
       <main class="detail-pane">
         <div v-if="detailLoading" class="detail-loading">
           <div class="detail-loading__spinner" />
@@ -88,7 +88,7 @@
         </div>
 
         <article v-else class="detail">
-          <!-- Hero stripe: 核心信息 + 主操作 -->
+          <!-- 主视觉条：核心信息 + 主操作 -->
           <section class="detail-hero">
             <div class="detail-hero__main">
               <p class="detail-hero__company">{{ selectedJob.company_name }}</p>
@@ -140,7 +140,7 @@
             </div>
           </section>
 
-          <!-- Hint callout -->
+          <!-- 提示说明块 -->
           <aside class="callout" :class="`callout--${calloutTone}`">
             <div class="callout__icon">{{ calloutIcon }}</div>
             <div>
@@ -149,7 +149,7 @@
             </div>
           </aside>
 
-          <!-- Source URL -->
+          <!-- 来源 URL -->
           <section v-if="selectedJob.source_url" class="link-card">
             <span class="link-card__label">岗位链接</span>
             <a
@@ -163,7 +163,7 @@
             </a>
           </section>
 
-          <!-- JD original text -->
+          <!-- JD 原文 -->
           <section class="block">
             <header class="block__head">
               <h3>JD 原文</h3>
@@ -174,7 +174,7 @@
             <pre class="block__pre">{{ selectedJob.jd_text }}</pre>
           </section>
 
-          <!-- AI parsed result -->
+          <!-- AI 解析结果 -->
           <details class="parsed-block">
             <summary>
               <span class="parsed-block__title">AI 解析结果</span>
@@ -194,7 +194,7 @@
       </main>
     </div>
 
-    <!-- ========== Create drawer ========== -->
+    <!-- ========== 创建抽屉 ========== -->
     <el-drawer
       v-model="createDrawerOpen"
       title="新增岗位"
@@ -221,7 +221,7 @@
         </button>
       </div>
 
-      <!-- URL mode -->
+      <!-- URL 模式 -->
       <div v-if="createMode === 'url'" class="url-pane">
         <p class="drawer-hint">
           粘贴一个岗位链接（公司官网 careers 页 / Greenhouse / Lever 等公开页效果最好），
@@ -250,8 +250,7 @@
           {{ fetchHint }}
         </div>
 
-        <!-- Once we have a preview, fall through to the same form as
-             manual mode so the user can review + edit before saving. -->
+        <!-- 拿到预览后复用手动模式的表单，方便用户保存前检查和编辑。 -->
         <el-form
           v-if="fetchPreviewReady"
           label-position="top"
@@ -281,7 +280,7 @@
         </el-form>
       </div>
 
-      <!-- Manual mode -->
+      <!-- 手动模式 -->
       <div v-else class="url-pane">
         <p class="drawer-hint">粘贴 JD 原文，也可以一起保存岗位链接。</p>
 
@@ -362,8 +361,8 @@ const selectedJob = ref<JobPosting | null>(null);
 const createDrawerOpen = ref(false);
 const jdCopied = ref(false);
 
-// Drawer modes — URL fetch first (the recommended path post-7'b),
-// manual paste as a fallback for sites our naive fetcher can't handle.
+// 抽屉模式：优先 URL 抓取（7'b 后的推荐路径），
+// 对当前抓取器处理不了的网站，再回落到手动粘贴。
 const createMode = ref<"url" | "manual">("url");
 const fetchUrlInput = ref("");
 const fetchPending = ref(false);
@@ -461,7 +460,7 @@ function closeCreateDrawer() {
 }
 
 function handleDrawerClose(done: () => void) {
-  // Allow closing even when fields are dirty; keep it lightweight here.
+  // 即使表单有未保存字段也允许关闭，这里保持轻量，不额外弹确认。
   done();
 }
 
@@ -474,9 +473,8 @@ async function handleFetchFromUrl() {
   fetchHintTone.value = "info";
   try {
     const preview = await fetchJobFromUrl(url);
-    // Fill the form so the user can review + edit before saving. We only
-    // overwrite empty fields so re-running the fetch on a tweaked URL
-    // doesn't blow away the user's manual edits to e.g. company name.
+    // 自动填充表单，让用户保存前可以检查和编辑。这里只覆盖空字段，
+    // 避免用户调整 URL 后重新抓取时，把已经手动修过的公司名等内容覆盖掉。
     if (!createForm.value.company_name.trim() && preview.company_hint) {
       createForm.value.company_name = preview.company_hint;
     }
@@ -489,9 +487,8 @@ async function handleFetchFromUrl() {
     if (!createForm.value.source_url.trim()) {
       createForm.value.source_url = preview.source_url;
     }
-    // JD text is the high-confidence field — always replace it on fetch so
-    // the latest fetch is what the user sees. They can still edit before
-    // saving.
+    // JD 文本是高置信字段，每次抓取都直接替换，确保用户看到的是最新抓取结果。
+    // 保存前用户仍然可以继续编辑。
     createForm.value.jd_text = preview.jd_text;
 
     fetchPreviewReady.value = true;
@@ -655,7 +652,7 @@ onMounted(async () => {
   margin: 0 auto;
 }
 
-/* ============ Page header ============ */
+/* ============ 页面头部 ============ */
 .page-head {
   display: flex;
   align-items: flex-end;
@@ -715,7 +712,7 @@ onMounted(async () => {
   color: #667085;
 }
 
-/* ============ Buttons ============ */
+/* ============ 按钮 ============ */
 .primary-btn {
   display: inline-flex;
   align-items: center;
@@ -813,7 +810,7 @@ onMounted(async () => {
   background: rgba(15, 118, 110, 0.1);
 }
 
-/* ============ Workspace layout ============ */
+/* ============ 工作区布局 ============ */
 .workspace {
   display: grid;
   grid-template-columns: minmax(280px, 0.85fr) minmax(0, 2fr);
@@ -821,7 +818,7 @@ onMounted(async () => {
   align-items: start;
 }
 
-/* ============ List pane ============ */
+/* ============ 列表面板 ============ */
 .list-pane {
   display: flex;
   flex-direction: column;
@@ -959,7 +956,7 @@ onMounted(async () => {
   color: #1d4ed8;
 }
 
-/* ============ List skeleton ============ */
+/* ============ 列表骨架屏 ============ */
 .list-skel {
   display: flex;
   flex-direction: column;
@@ -980,7 +977,7 @@ onMounted(async () => {
   100% { background-position: -200% 0; }
 }
 
-/* ============ Empty / loading ============ */
+/* ============ 空态 / 加载态 ============ */
 .empty {
   display: flex;
   flex-direction: column;
@@ -1062,7 +1059,7 @@ onMounted(async () => {
   line-height: 1.65;
 }
 
-/* ============ Detail pane ============ */
+/* ============ 详情面板 ============ */
 .detail-pane {
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 14px;
@@ -1078,7 +1075,7 @@ onMounted(async () => {
   padding: 24px 28px 28px;
 }
 
-/* Hero stripe */
+/* 主视觉条 */
 .detail-hero {
   display: flex;
   align-items: flex-start;
@@ -1149,7 +1146,7 @@ onMounted(async () => {
   max-width: 320px;
 }
 
-/* Callout */
+/* 提示说明块 */
 .callout {
   display: flex;
   align-items: flex-start;
@@ -1201,7 +1198,7 @@ onMounted(async () => {
   color: #475467;
 }
 
-/* Link card */
+/* 链接卡片 */
 .link-card {
   display: flex;
   align-items: center;
@@ -1238,7 +1235,7 @@ onMounted(async () => {
   font-size: 12px;
 }
 
-/* Block: JD text */
+/* 内容块：JD 文本 */
 .block {
   display: flex;
   flex-direction: column;
@@ -1273,7 +1270,7 @@ onMounted(async () => {
   word-break: break-word;
 }
 
-/* Parsed block */
+/* 解析结果块 */
 .parsed-block {
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 10px;
@@ -1336,7 +1333,7 @@ onMounted(async () => {
   color: #98a2b3;
 }
 
-/* Spinner inside primary button */
+/* 主按钮内部的加载指示器 */
 .spinner {
   width: 12px;
   height: 12px;
@@ -1346,7 +1343,7 @@ onMounted(async () => {
   animation: spin 0.8s linear infinite;
 }
 
-/* ============ Drawer ============ */
+/* ============ 抽屉 ============ */
 .drawer-hint {
   margin: 0 0 16px;
   font-size: 12px;
@@ -1366,7 +1363,7 @@ onMounted(async () => {
   gap: 10px;
 }
 
-/* URL-fetch tab (slice 7'b) — same shell as ResumesView.vue's upload tab */
+/* URL 抓取标签（7'b），复用 ResumesView.vue 上传标签的外壳样式 */
 .drawer-tabs {
   display: flex;
   gap: 8px;
@@ -1440,7 +1437,7 @@ onMounted(async () => {
   color: #b45309;
 }
 
-/* ============ Responsive ============ */
+/* ============ 响应式 ============ */
 @media (max-width: 1180px) {
   .workspace {
     grid-template-columns: 1fr;

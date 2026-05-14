@@ -1,11 +1,11 @@
-"""Multi-turn history & memory_summary tests for the assistant pipeline.
+"""Assistant 流水线的多轮历史与 memory_summary 测试。
 
-These tests go through the HTTP layer and assert two slice-4 behaviours:
+这些测试通过 HTTP 层验证第 4 刀留下的两个关键行为：
 
-1. The decide / format_response prompts on turn N+1 include the content of
-   turn N's user message — proving conversation history is wired through.
-2. When the conversation crosses ``SUMMARIZE_MESSAGE_THRESHOLD``,
-   ``maybe_summarize`` fires and a row appears in ``memory_summaries``.
+1. 第 N+1 轮的 decide / format_response prompt 会包含第 N 轮用户消息，
+   证明会话历史已经正确接入工作流。
+2. 当会话消息数越过 ``SUMMARIZE_MESSAGE_THRESHOLD`` 后，
+   ``maybe_summarize`` 会触发，并在 ``memory_summaries`` 中写入一行摘要。
 """
 
 import asyncio
@@ -40,8 +40,7 @@ def _run(coro_factory: Callable[[AsyncSession], Any]) -> Any:
 def test_second_turn_decide_prompt_contains_first_turn_user_text(
     client: TestClient, monkeypatch, test_marker: str,
 ) -> None:
-    """First turn writes content; second turn's decide prompt must include
-    the first turn's user text under the 对话历史 section."""
+    """第一轮写入内容后，第二轮 decide prompt 必须在“对话历史”里包含第一轮用户文本。"""
     assert client.get("/health/db").status_code == 200
 
     seen_prompts: list[str] = []
@@ -74,25 +73,23 @@ def test_second_turn_decide_prompt_contains_first_turn_user_text(
     )
     assert second.status_code == 200, second.text
 
-    # The decide prompt fired on each turn. The second turn's prompt should
-    # contain the first turn's user content + assistant content under 对话历史.
+    # 每一轮都会触发 decide prompt。第二轮 prompt 应在“对话历史”里包含
+    # 第一轮用户内容和助手内容。
     decide_prompts = [p for p in seen_prompts if "请严格按以下两种 JSON" in p]
     assert len(decide_prompts) == 2
     second_decide = decide_prompts[1]
     assert "对话历史" in second_decide
-    assert "alpha" in second_decide  # user msg from turn 1
-    assert "好的,继续聊" in second_decide  # assistant msg from turn 1
+    assert "alpha" in second_decide  # 第一轮用户消息。
+    assert "好的,继续聊" in second_decide  # 第一轮助手消息。
 
 
 def test_summarize_fires_when_message_threshold_reached(
     client: TestClient, monkeypatch, test_marker: str,
 ) -> None:
-    """Seed messages straight into the DB so the next turn crosses the
-    threshold, then send one real turn and verify ``memory_summaries`` is
-    populated with the LLM-produced summary text."""
+    """先直接向 DB 写入消息让下一轮越过阈值，再发真实请求并验证摘要已写入。"""
     assert client.get("/health/db").status_code == 200
 
-    # We need to insert messages BEFORE the API call. Use a fresh engine.
+    # 必须在 API 调用前插入消息，因此使用一个全新的 engine。
     async def _seed(db: AsyncSession) -> int:
         user = (
             await db.execute(select(User).where(User.username == "test"))
@@ -100,8 +97,8 @@ def test_summarize_fires_when_message_threshold_reached(
         conversation = Conversation(user_id=user.id, title=f"{test_marker} sum conv")
         db.add(conversation)
         await db.flush()
-        # Seed SUMMARIZE_MESSAGE_THRESHOLD - 1 messages so the next user
-        # message + assistant message crosses the threshold.
+        # 预置 SUMMARIZE_MESSAGE_THRESHOLD - 1 条消息，
+        # 让下一条用户消息 + 助手消息刚好越过阈值。
         seed_count = SUMMARIZE_MESSAGE_THRESHOLD - 1
         for i in range(1, seed_count + 1):
             db.add(
@@ -155,14 +152,14 @@ def test_summarize_fires_when_message_threshold_reached(
 def test_summary_not_written_below_threshold(
     client: TestClient, monkeypatch, test_marker: str,
 ) -> None:
-    """A fresh conversation with one turn should NOT trigger summarisation."""
+    """只有一轮的新会话不应触发摘要生成。"""
     assert client.get("/health/db").status_code == 200
 
     async def fake_llm(self, prompt: str) -> str:
         if "请严格按以下两种 JSON" in prompt:
             return '{"action": "respond_directly", "text": "ok"}'
         if "对话摘要生成器" in prompt:
-            # If this fires, the threshold logic is wrong.
+            # 如果走到这里，说明阈值判断逻辑有误。
             raise AssertionError("summary should not fire for a 2-message conversation")
         raise AssertionError(f"unexpected prompt:\n{prompt[:200]}")
 

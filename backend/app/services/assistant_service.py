@@ -1,19 +1,16 @@
-"""Coordinator for one assistant turn.
+"""单轮 Assistant 对话的协调服务。
 
-Responsibilities:
-1. Resolve (or create) the conversation, scoped to the current user.
-2. Persist the inbound user message with the right ``sequence_no``.
-3. Pre-load conversation history + any existing memory_summary so the
-   workflow's decide / format_response nodes see multi-turn context.
-4. Open an ``AgentRun`` (status=running) and pass its id into the workflow so
-   ``ToolCallLog`` rows link back correctly.
-5. Run the LangGraph workflow.
-6. On success: persist the assistant message, mark the AgentRun succeeded,
-   bump ``conversation.last_run_at``; upsert ``memory_summaries`` if the
-   workflow produced a new summary.
-7. On system-level failure: mark the AgentRun failed; do **not** write an
-   assistant message; surface the error to the caller via the response.
-8. Build the response DTO with full tool-call traces for the UI.
+这个模块把 HTTP 请求和 LangGraph workflow 串起来，职责包括：
+1. 解析或创建当前用户自己的 conversation。
+2. 写入用户消息，并分配正确的 ``sequence_no``。
+3. 预加载最近对话历史和已有 memory_summary，让 workflow 的 decide / format_response
+   节点具备多轮上下文。
+4. 创建 ``AgentRun(status=running)``，并把 id 传入 workflow，使 ToolCallLog 能正确归属。
+5. 执行 LangGraph workflow。
+6. 成功时写入助手消息，标记 AgentRun succeeded，更新 conversation.last_run_at；
+   如果 workflow 产出新摘要，则 upsert memory_summaries。
+7. 系统级失败时只标记 AgentRun failed，不写助手消息，并把错误通过响应暴露给调用方。
+8. 重新查询必要行，组装带完整工具调用轨迹的响应 DTO。
 """
 
 import asyncio
@@ -47,8 +44,8 @@ from app.schemas.assistant import (
 from app.schemas.message import MessageRead
 
 
-# How many recent turns (post-summary) to put in the decide / format_response
-# prompts. Larger windows cost tokens; the summary covers earlier history.
+# decide / format_response prompt 中保留的最近消息数。窗口越大越耗 token；
+# 更早的历史由 memory_summary 覆盖。
 HISTORY_WINDOW = 8
 
 
@@ -58,23 +55,20 @@ async def run_assistant_turn(
     payload: AssistantRunRequest,
     llm_client: LLMClient | None = None,
 ) -> AssistantRunResponse:
-    # Snapshot the user id up-front. After the workflow's tool adapter calls
-    # ``ctx.db.rollback()`` mid-request, every ORM instance attached to this
-    # session is expired — a later sync ``current_user.id`` access can trigger
-    # a lazy load outside an async greenlet and surface as MissingGreenlet.
+    # 提前保存 user id。workflow 中的工具适配器可能在请求中途 rollback session，
+    # 导致所有挂在 session 上的 ORM 实例过期；之后同步读取 current_user.id 可能触发
+    # async greenlet 外的 lazy load，抛 MissingGreenlet。
     current_user_id = current_user.id
 
     conversation = await _get_or_create_conversation(
         db, current_user, payload.conversation_id,
         first_user_text=payload.content,
     )
-    # Store the user's clean text in the message row (no hint prefix) so the
-    # UI displays exactly what the user typed.
+    # 数据库里只保存用户原文，不保存 context hint，保证 UI 展示的就是用户输入。
     user_message = await _append_user_message(db, conversation, current_user, payload.content)
 
-    # Build the workflow-facing user_text. If the right-side selector pre-
-    # picked a resume/job/application, prepend a labelled hint so the agent
-    # can short-circuit list_user_* tools when the user said "这个岗位".
+    # workflow 看到的是“上下文提示 + 用户问题”。如果右侧选择器已经选中简历/岗位/投递，
+    # Agent 就能在用户说“这个岗位”时直接用 id，不必再调用 list_user_* 猜测。
     context_hint, selected_knowledge_base_id = await _build_context_hint(
         db, current_user.id, payload.context,
     )
@@ -94,15 +88,13 @@ async def run_assistant_turn(
     await db.commit()
     await db.refresh(agent_run)
 
-    # Capture every primary key for the same reason as current_user_id above.
+    # 主键也提前快照，理由同 current_user_id：后续 rollback 后不再依赖 ORM 实例属性。
     conversation_id = conversation.id
     user_message_id = user_message.id
     agent_run_id = agent_run.id
 
-    # Pre-load multi-turn context. The current user_message is excluded from
-    # the history window because the prompts pass it separately as
-    # ``user_text``. ``message_count_before_user`` lets maybe_summarize decide
-    # whether the conversation has crossed the summarisation threshold.
+    # 预加载多轮上下文。当前用户消息会作为 user_text 单独进 prompt，所以历史窗口里要排除它。
+    # message_count_before_user 用来判断本轮结束后是否达到摘要阈值。
     existing_summary_text, summary_cutoff_message_id = await _load_existing_summary(
         db, conversation_id,
     )
@@ -180,9 +172,8 @@ async def run_assistant_turn(
             error_detail="workflow returned no text",
         )
 
-    # Re-fetch into a fresh transaction. db.get checks the identity map first
-    # but issues a SELECT for any expired attributes, so the returned objects
-    # are reliably loaded.
+    # 重新进入干净事务后再取一次对象。db.get 会先查 identity map，
+    # 但对已过期的属性仍会发起 SELECT，因此这里拿到的对象状态是可靠加载过的。
     db.expire_all()
     conversation = await db.get(Conversation, conversation_id)
     agent_run = await db.get(AgentRun, agent_run_id)
@@ -196,9 +187,8 @@ async def run_assistant_turn(
         agent_run_id=agent_run_id,
     )
 
-    # If maybe_summarize produced a new summary, upsert it now. The cutoff
-    # advances to this turn's assistant message so the next call's history
-    # window starts after it.
+    # 如果 maybe_summarize 产出了新摘要，这里立即 upsert。
+    # 截止消息推进到本轮助手回复，下一轮加载最近历史时就会从摘要之后开始。
     new_summary = final_state.get("new_summary")
     if new_summary:
         await _upsert_memory_summary(
@@ -209,11 +199,10 @@ async def run_assistant_turn(
             based_on_until_message_id=assistant_message_id,
         )
 
-    # Derive intent for traceability. In the ReAct loop the final ``action``
-    # is usually respond_directly, but the agent may have called several tools
-    # along the way. Walk tool_call_history from the end and pick the last
-    # non-discovery tool (list_user_* are pure lookups). Falls back to "chat"
-    # when no tool was called at all.
+    # 为可观测性推导本轮意图。ReAct 循环最后的 ``action`` 通常是
+    # respond_directly，但中途可能已经调用过多个工具；因此从
+    # tool_call_history 末尾向前找最后一个非发现类工具（list_user_* 只是查询）。
+    # 如果本轮完全没有工具调用，则回落为 "chat"。
     intent = (
         "mock_interview"
         if _is_mock_interview_mode(payload.context)
@@ -223,9 +212,8 @@ async def run_assistant_turn(
     agent_run.status = "succeeded"
     agent_run.intent = intent
     agent_run.finished_at = finished_at
-    # A non-blocking summarize failure is recorded as error_detail (not
-    # error_class) so the run still counts as succeeded but operators can see
-    # the soft failure in the trace.
+    # 摘要失败不阻断本轮对话，因此只记录到 error_detail（不写 error_class）。
+    # 这样 agent_run 仍然算成功，但排查 trace 时能看到这个软失败。
     summary_error = final_state.get("summary_error")
     if summary_error:
         agent_run.error_detail = f"non_blocking_summary_failure: {summary_error}"
@@ -247,30 +235,26 @@ async def run_assistant_turn_stream(
     payload: AssistantRunRequest,
     llm_client: LLMClient | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
-    """Streaming counterpart to :func:`run_assistant_turn`.
+    """``run_assistant_turn`` 的流式版本。
 
-    Yields a sequence of events that the SSE endpoint serialises as
-    ``event: <type>\\ndata: <json>\\n\\n`` frames. The shape:
+    这里会产出一串事件，SSE endpoint 会把它们序列化成
+    ``event: <type>\\ndata: <json>\\n\\n`` 帧。事件形态如下：
 
-    - ``started`` — once, immediately after the user message is persisted.
-      Lets the UI replace its optimistic placeholder with the server-side
-      message and remember the (possibly new) ``conversation_id``.
-    - ``phase`` — every time a node changes the high-level activity
-      ("deciding" / "formatting" / "summarizing"). Drives the chat's typing
-      indicator copy.
-    - ``tool_call_started`` / ``tool_call_completed`` — bracket each tool
-      invocation so the UI can show a live trace of "正在查询岗位……" etc.
-    - ``message`` — exactly once on success, carries the final assistant
-      message + agent_run summary (same DTOs as the legacy /run response).
-    - ``error`` — exactly once on failure, carries error_class + detail and
-      the agent_run summary so the UI can offer "重试".
-    - ``done`` — always last; signals the consumer to close the connection.
+    - ``started``：用户消息入库后立即发送一次。前端用它把 optimistic
+      占位消息替换成服务端真实消息，并记录可能刚创建的 ``conversation_id``。
+    - ``phase``：工作流节点切换高层阶段时发送，例如 deciding / formatting /
+      summarizing，用于驱动聊天输入中的“思考中”状态文案。
+    - ``tool_call_started`` / ``tool_call_completed``：每次工具调用前后成对发送，
+      让前端能展示“正在查询岗位……”这类实时轨迹。
+    - ``message``：成功时只发送一次，携带最终助手消息和 agent_run 摘要；
+      DTO 结构与旧版 /run 响应保持一致。
+    - ``error``：失败时只发送一次，携带 error_class、detail 和 agent_run 摘要，
+      前端可据此展示“重试”入口。
+    - ``done``：永远作为最后一个事件，提示消费端可以关闭连接。
 
-    Implementation note: the workflow is driven concurrently via
-    ``asyncio.create_task``; an ``asyncio.Queue`` bridges the workflow's
-    in-node ``emit_event`` callbacks to this generator so each event can be
-    yielded the instant it happens, not deferred until the whole turn
-    completes.
+    实现上用 ``asyncio.create_task`` 并发驱动工作流，再用 ``asyncio.Queue``
+    把工作流节点内部的 ``emit_event`` 回调桥接到当前 generator。这样事件一发生
+    就能被 yield 出去，而不是等整轮对话全部结束后再一次性返回。
     """
     current_user_id = current_user.id
 
@@ -305,9 +289,8 @@ async def run_assistant_turn_stream(
     user_message_id = user_message.id
     agent_run_id = agent_run.id
 
-    # Tell the UI the message has been persisted server-side. We refetch via
-    # _fetch_message_row to get the same flat row the legacy endpoint returns
-    # — keeps the contract aligned between /run and /run-stream.
+    # 告诉前端用户消息已经在服务端落库。这里通过 _fetch_message_row 重新查询，
+    # 拿到与旧版 /run endpoint 一致的扁平行结构，保持 /run 与 /run-stream 契约一致。
     user_message_dto = await _fetch_message_row(db, user_message_id)
     yield {
         "event": "started",
@@ -372,9 +355,8 @@ async def run_assistant_turn_stream(
 
     workflow_task = asyncio.create_task(_drive_workflow())
 
-    # Relay in-flight events. We race ``queue.get()`` against
-    # ``workflow_done_signal`` so the loop exits as soon as the workflow
-    # finishes, then drain any events that arrived just before completion.
+    # 转发 workflow 运行中的事件。这里让 ``queue.get()`` 和完成信号竞速：
+    # workflow 一结束就跳出循环，再把结束前刚入队的事件 drain 掉。
     try:
         while True:
             get_task = asyncio.create_task(event_queue.get())
@@ -392,12 +374,10 @@ async def run_assistant_turn_stream(
         while not event_queue.empty():
             yield event_queue.get_nowait()
     finally:
-        # Make sure the workflow task itself has surfaced (it should be done
-        # already given we waited on the signal, but await it to clear any
-        # pending exceptions).
+        # 等待 workflow_task 本身收尾；按信号它应该已经完成，但 await 一次可以清掉挂起异常。
         await workflow_task
 
-    # ----- Finalize ---------------------------------------------------------
+    # ----- 收尾 --------------------------------------------------------------
 
     if workflow_exception is not None:
         if isinstance(workflow_exception, (WorkflowDecideError, ToolSystemError)):
@@ -473,8 +453,7 @@ async def run_assistant_turn_stream(
         yield {"event": "done", "data": {}}
         return
 
-    # Success path mirrors run_assistant_turn line-for-line so both endpoints
-    # leave the DB in identical state.
+    # 成功路径逐步对齐 run_assistant_turn，确保两个 endpoint 最终留下完全一致的数据库状态。
     db.expire_all()
     conversation_fresh = await db.get(Conversation, conversation_id)
     agent_run_fresh = await db.get(AgentRun, agent_run_id)
@@ -532,11 +511,10 @@ async def run_assistant_turn_stream(
 
 
 def _derive_intent(tool_call_history: list[dict[str, Any]]) -> str:
-    """Pick a short label for ``agent_runs.intent`` from the tools called.
+    """根据本轮工具调用推导 ``agent_runs.intent``。
 
-    Action tools (analyze_match, generate_cover_letter, ...) take priority
-    over discovery tools (list_user_*). If only list tools fired, we report
-    the last one so eval / metrics can still see what the user looked at.
+    动作工具（analyze_match、generate_cover_letter 等）优先于发现类工具（list_user_*）。
+    如果本轮只调用了列表工具，就记录最后一个，方便 eval / metrics 仍能看到用户在查什么。
     """
     if not tool_call_history:
         return "chat"
@@ -556,18 +534,17 @@ async def _build_context_hint(
     user_id: int,
     context: ContextSelection | None,
 ) -> tuple[str | None, int | None]:
-    """Resolve the UI-side selection to human-readable labels for the prompt.
+    """把 UI 侧选择器里的 id 解析成 prompt 可读的上下文提示。
 
-    The hint format is intentionally short and labelled — the LLM sees:
+    这个提示刻意短而有标签，LLM 会看到类似：
 
         [当前上下文]
         - 简历:Backend Resume v2 (#7)
         - 岗位:腾讯 · 后端工程师 (#12)
         - 投递记录:#3
 
-    Lookups silently ignore missing rows or other-user rows: we don't want a
-    transient mismatch (e.g. selector still pointing at a freshly-deleted
-    resume) to fail the whole assistant call.
+    如果某个 id 已被删除或不属于当前用户，就静默跳过。右侧选择器可能短暂指向刚删除的行，
+    这种 UI 状态不应该让整轮 Assistant 请求失败。
     """
     if context is None:
         return None, None
@@ -613,9 +590,7 @@ async def _build_context_hint(
             )
 
     if context.application_record_id is not None:
-        # We don't render a friendly label for applications yet; the id
-        # alone is enough for the LLM to call list_user_applications if
-        # it wants details.
+        # 投递记录暂时没有友好标题；id 已足够让 LLM 需要时调用 list_user_applications 补详情。
         lines.append(f"- 投递记录:#{context.application_record_id}")
 
     if context.knowledge_base_id is not None:
@@ -643,12 +618,10 @@ _MAX_TITLE_CHARS = 28
 
 
 def _derive_title(first_user_text: str) -> str:
-    """Generate a conversation title from the user's first message.
+    """从第一条用户消息派生会话标题。
 
-    Strategy: collapse whitespace + truncate to ``_MAX_TITLE_CHARS`` chars
-    (with an ellipsis if we cut anything off). Falls back to a date-stamped
-    placeholder when the message is empty after trimming — should not
-    happen given content is min_length=1, but defensive.
+    策略很简单：折叠空白后截到 ``_MAX_TITLE_CHARS``，超长时加省略号。理论上 content
+    有 min_length=1，不会是空；这里仍保留时间占位标题作为防御。
     """
     cleaned = " ".join(first_user_text.split()).strip()
     if not cleaned:
@@ -706,8 +679,11 @@ async def _load_existing_summary(
     db: AsyncSession,
     conversation_id: int,
 ) -> tuple[str | None, int | None]:
-    """Return ``(summary_text, based_on_until_message_id)`` if a summary
-    exists for this conversation, else ``(None, None)``."""
+    """读取会话摘要。
+
+    有摘要时返回 ``(summary_text, based_on_until_message_id)``；没有摘要时返回
+    ``(None, None)``。
+    """
     result = await db.execute(
         select(
             MemorySummary.summary_text,
@@ -728,15 +704,12 @@ async def _load_recent_history(
     after_message_id: int | None,
     limit: int,
 ) -> list[dict[str, str]]:
-    """Return up to ``limit`` most-recent messages (oldest first) for the
-    decide / format_response prompts.
+    """为 decide / format_response prompt 读取最近消息，返回顺序为从旧到新。
 
-    - ``exclude_message_id`` is the just-written user message; the prompts
-      receive it separately as ``user_text``, so we drop it here to avoid
-      duplication.
-    - ``after_message_id`` is the cutoff covered by the existing memory
-      summary. Anything at or before this id is already in the summary, so we
-      exclude it from the recent-history window.
+    - ``exclude_message_id`` 是刚写入的当前用户消息，prompt 会通过 ``user_text`` 单独接收，
+      这里排除它以避免重复。
+    - ``after_message_id`` 是已有摘要覆盖到的消息 id；小于等于该 id 的内容已在摘要里，
+      不再放入最近窗口。
     """
     conditions = [
         Message.conversation_id == conversation_id,
@@ -752,7 +725,7 @@ async def _load_recent_history(
         .limit(limit),
     )
     rows = list(result.all())
-    rows.reverse()  # oldest first
+    rows.reverse()  # prompt 里按自然阅读顺序呈现：旧消息在前，新消息在后。
     return [{"role": row.role, "content": row.content} for row in rows]
 
 
@@ -835,9 +808,8 @@ async def _finalize_failed_run(
     error_class: str,
     error_detail: str,
 ) -> AssistantRunResponse:
-    # Mid-request rollback to clear any partial state left by the workflow.
-    # The session's instances will be expired afterwards; we never touch
-    # them again, only re-fetch by id.
+    # 请求中途失败时先 rollback，清掉 workflow 可能留下的半事务状态。
+    # rollback 后 ORM 实例会过期，所以后面只按 id 重新读取，不再碰旧实例属性。
     try:
         await db.rollback()
     except Exception:  # noqa: BLE001 — best effort, mirrors tool_adapter pattern
@@ -871,14 +843,11 @@ async def _build_response(
     assistant_message_id: int | None,
     agent_run_id: int,
 ) -> AssistantRunResponse:
-    # We deliberately re-SELECT every row inside this async context with
-    # explicit ``select(col1, col2, ...)`` queries (column tuples — no ORM
-    # hydration), then build response objects from plain Python values. The
-    # tool adapter calls ``ctx.db.rollback()`` mid-request which expires every
-    # ORM instance attached to this session; subsequent sync ``getattr`` from
-    # Pydantic's ``from_attributes`` could otherwise trigger a lazy-load
-    # outside of an async greenlet and surface as MissingGreenlet.
-    # AsyncSession.expire_all is synchronous (no I/O) — do NOT await it.
+    # 这里刻意重新 select 每一行，并且只 select 具体列，得到普通 tuple 后手工构造 DTO。
+    # 工具适配器可能在请求中途 rollback，使 session 上的 ORM 实例全部过期；如果直接让
+    # Pydantic from_attributes 同步 getattr，可能触发 async greenlet 外的 lazy-load，
+    # 最终抛 MissingGreenlet。列元组没有这个问题。
+    # AsyncSession.expire_all 是同步方法（无 I/O），不要 await。
     db.expire_all()
 
     agent_run_row = (

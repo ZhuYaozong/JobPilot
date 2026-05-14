@@ -1,8 +1,8 @@
-"""create knowledge_bases / documents / chunks tables (RAG slice 7'c1)
+"""创建 knowledge_bases / documents / chunks 表（RAG 7'c1）
 
-Revision ID: b71f4c8a92e1
-Revises: adee26c60e7e
-Create Date: 2026-05-13 09:00:00.000000
+修订 ID: b71f4c8a92e1
+上一修订: adee26c60e7e
+创建时间: 2026-05-13 09:00:00.000000
 
 """
 
@@ -16,7 +16,7 @@ from sqlalchemy.dialects import postgresql
 from app.core.config import settings
 
 
-# revision identifiers, used by Alembic.
+# Alembic 使用的修订标识。
 revision: str = "b71f4c8a92e1"
 down_revision: Union[str, Sequence[str], None] = "adee26c60e7e"
 branch_labels: Union[str, Sequence[str], None] = None
@@ -24,16 +24,14 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Enable pgvector + create the three RAG tables.
+    """启用 pgvector，并创建三张 RAG 表。
 
-    The embedding column dim is read from settings.embedding_dimensions at
-    migration runtime — pin it before running migrations against a new
-    deployment so the column matches the embedding model that deployment
-    will use. Changing the dim later requires a follow-up migration.
+    embedding 列的维度会在迁移运行时读取 settings.embedding_dimensions。
+    新环境跑迁移前要先固定这个值，确保列维度与该环境使用的 embedding 模型一致。
+    如果后续要改维度，需要再补一条迁移。
     """
-    # Idempotent on managed Postgres that already has the extension enabled
-    # (Neon, Supabase). On bare RDS the role running alembic needs
-    # ``CREATE`` on the database; document this in the deployment notes.
+    # 托管 Postgres（Neon、Supabase）可能已经启用了扩展，这条语句保持幂等。
+    # 裸 RDS 上运行 alembic 的角色需要数据库级 ``CREATE`` 权限，部署说明里要标清楚。
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")
 
     op.create_table(
@@ -140,10 +138,8 @@ def upgrade() -> None:
         sa.Column("user_id", sa.Integer(), nullable=False),
         sa.Column("chunk_index", sa.Integer(), nullable=False),
         sa.Column("content", sa.Text(), nullable=False),
-        # Embedding is nullable on creation — slice 7'c1 inserts chunks
-        # without embeddings to keep this slice scoped to "data layer only".
-        # 7'c2 will backfill via the indexing service. Nullable also lets
-        # us reset+reindex after failures without dropping the row.
+        # 创建时允许 embedding 为空：7'c1 只做数据层，会先写入没有 embedding 的 chunks。
+        # 7'c2 再通过索引服务回填。可空也方便失败后 reset+reindex，而不用删除整行。
         sa.Column(
             "embedding",
             Vector(settings.embedding_dimensions),
@@ -178,12 +174,11 @@ def upgrade() -> None:
         ["user_id"],
         unique=False,
     )
-    # HNSW vector index for fast ANN search. cosine_ops matches our intended
-    # similarity metric — embeddings are L2-normalised by most providers so
-    # cosine and inner-product give the same ranking, but cosine is more
-    # forgiving if normalisation drifts.
-    # m=16 / ef_construction=64 are the pgvector defaults — fine for our
-    # expected volume (<100k chunks per user); tune later if needed.
+    # HNSW 向量索引用于快速 ANN 检索。cosine_ops 对应当前目标相似度指标；
+    # 多数 provider 会输出 L2-normalized embedding，此时 cosine 与 inner-product 排序一致，
+    # 但如果归一化有漂移，cosine 更宽容。
+    # m=16 / ef_construction=64 是 pgvector 默认值，按当前预估量级
+    #（单用户 <100k chunks）够用，后续有需要再调参。
     op.execute(
         "CREATE INDEX ix_knowledge_chunks_embedding_hnsw "
         "ON knowledge_chunks USING hnsw (embedding vector_cosine_ops) "
@@ -192,7 +187,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Downgrade schema."""
+    """降级 schema。"""
     op.execute("DROP INDEX IF EXISTS ix_knowledge_chunks_embedding_hnsw")
     op.drop_index(
         op.f("ix_knowledge_chunks_user_id"), table_name="knowledge_chunks",
@@ -221,5 +216,4 @@ def downgrade() -> None:
         table_name="knowledge_bases",
     )
     op.drop_table("knowledge_bases")
-    # Intentionally do NOT drop the vector extension — other code may still
-    # depend on it after a partial downgrade.
+    # 这里刻意不删除 vector 扩展，部分降级后其他代码仍可能依赖它。

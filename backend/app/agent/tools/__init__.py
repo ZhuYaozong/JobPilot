@@ -1,23 +1,20 @@
-"""Tool registry.
+"""Agent 工具注册表。
 
-中文说明：这是 Agent 可调用工具的唯一注册表。workflow 只通过工具名查这里，
+这是 Agent 可调用工具的唯一注册表。workflow 只通过工具名查这里，
 不要在 prompt 或 workflow 里手写单独的工具分支，避免注册表和提示词漂移。
 
-Workflow code routes by ``state["tool_name"]`` through this dict. Adding a new
-tool is a two-line change here plus one new module under ``tools/``.
+workflow 会用 ``state["tool_name"]`` 从这个字典里取工具类。新增工具时，只需要在
+``tools/`` 下新增模块，再把类加入这个注册表。
 
-Tools fall into three rough categories:
+工具大致分三类：
 
-- **Read tools** (``list_user_*``): cheap, no LLM, no side effects. Used by
-  the agent to resolve vague references like "我最新的简历" or "腾讯的岗位"
-  into concrete IDs before calling action tools. Cheap enough that we let the
-  ReAct loop call them freely.
-- **Retrieval tools** (``search_knowledge``): semantic search over the user's
-  uploaded knowledge base content. One embedding call per invocation.
-- **Action tools** (``analyze_match``, ``generate_cover_letter``,
-  ``generate_interview_prep``, ``generate_tailored_resume``): call the
-  underlying business service, take seconds, write rows. Each typically
-  called once per turn.
+- **读工具**(``list_user_*``)：便宜、无 LLM、无副作用，用来把“我最新的简历”
+  “腾讯的岗位”这类模糊指代解析成具体 id，ReAct 循环可以放心多次调用。
+- **检索工具**(``search_knowledge``)：对用户上传的知识库内容做语义检索，每次调用会
+  发起一次 embedding 请求。
+- **动作工具**(``analyze_match``、``generate_cover_letter``、
+  ``generate_interview_prep``、``generate_tailored_resume``)：调用业务 service，
+  通常耗时数秒并写入数据库，一轮对话里一般只调用一次。
 """
 
 from app.agent.tool_adapter import BaseTool
@@ -30,7 +27,7 @@ from app.agent.tools.match_analysis_tool import MatchAnalysisTool
 from app.agent.tools.search_knowledge_tool import SearchKnowledgeTool
 from app.agent.tools.tailored_resume_tool import TailoredResumeTool
 
-# 中文说明：key 必须等于工具暴露给 LLM 的技术名；前端展示中文名由 labels 映射负责。
+# key 必须等于工具暴露给 LLM 的技术名；前端展示中文名由 labels 映射负责。
 TOOL_REGISTRY: dict[str, type[BaseTool]] = {
     ListUserJobsTool.name: ListUserJobsTool,
     ListUserResumesTool.name: ListUserResumesTool,

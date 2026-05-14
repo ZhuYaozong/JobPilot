@@ -1,6 +1,6 @@
 <template>
   <div class="apps">
-    <!-- ========== Page header ========== -->
+    <!-- ========== 页面头部 ========== -->
     <header class="page-head">
       <div>
         <p class="page-head__eyebrow">求职进度</p>
@@ -27,7 +27,7 @@
       </div>
     </header>
 
-    <!-- ========== Empty state ========== -->
+    <!-- ========== 空态 ========== -->
     <div v-if="applicationsLoading" class="board-loading">
       <div class="board-loading__spinner" />
       <p>正在加载投递记录…</p>
@@ -45,7 +45,7 @@
       </p>
     </div>
 
-    <!-- ========== Board ========== -->
+    <!-- ========== 看板 ========== -->
     <div v-else class="board">
       <article
         v-for="column in boardColumns"
@@ -90,7 +90,7 @@
       </article>
     </div>
 
-    <!-- ========== Detail drawer ========== -->
+    <!-- ========== 详情抽屉 ========== -->
     <el-drawer
       v-model="detailDrawerOpen"
       direction="rtl"
@@ -117,7 +117,7 @@
       </div>
 
       <div v-else-if="selectedApplication" class="drawer-body">
-        <!-- Hero stripe -->
+        <!-- 主视觉条 -->
         <section class="drawer-hero">
           <span
             class="stage-pill"
@@ -141,7 +141,7 @@
           </div>
         </section>
 
-        <!-- Callout -->
+        <!-- 提示说明块 -->
         <aside class="callout" :class="`callout--${selectedApplication.next_action ? 'warn' : 'muted'}`">
           <div class="callout__icon">{{ selectedApplication.next_action ? '!' : '·' }}</div>
           <div>
@@ -150,7 +150,7 @@
           </div>
         </aside>
 
-        <!-- Job source URL -->
+        <!-- 岗位来源 URL -->
         <section v-if="selectedJobDetail?.source_url" class="link-card">
           <span class="link-card__label">岗位链接</span>
           <a
@@ -164,7 +164,7 @@
           </a>
         </section>
 
-        <!-- Next action + notes -->
+        <!-- 下一步动作 + 备注 -->
         <section class="block">
           <header class="block__head">
             <h3>下一步动作</h3>
@@ -181,7 +181,7 @@
           <pre class="block__pre">{{ selectedApplication.notes }}</pre>
         </section>
 
-        <!-- Timeline -->
+        <!-- 时间线 -->
         <section class="block">
           <header class="block__head">
             <h3>推进时间线</h3>
@@ -212,7 +212,7 @@
           <p v-else class="loading-line">当前还没有推进记录。</p>
         </section>
 
-        <!-- Transition form -->
+        <!-- 阶段流转表单 -->
         <section class="block transition-form">
           <header class="block__head">
             <h3>推进到下一阶段</h3>
@@ -281,7 +281,7 @@
       </template>
     </el-drawer>
 
-    <!-- ========== Create drawer ========== -->
+    <!-- ========== 创建抽屉 ========== -->
     <el-drawer
       v-model="createDrawerOpen"
       title="新增投递"
@@ -438,7 +438,7 @@ interface ColumnDef {
   key: string;
   label: string;
   tone: "neutral" | "info" | "warn" | "accent" | "ok" | "danger";
-  // Stages collapsed into this column (rejected + withdrawn → closed).
+  // 折叠进当前列的阶段（rejected + withdrawn 合并为 closed）。
   stages: string[];
 }
 
@@ -845,7 +845,7 @@ function readNumericQuery(key: string): number | undefined {
 onMounted(async () => {
   await Promise.all([fetchReferences(), fetchApplications()]);
 
-  // Consume ?job=N prefill query (set by Jobs detail page).
+  // 消费 ?job=N 预填查询参数（由岗位详情页设置）。
   const jobId = readNumericQuery("job");
   if (jobId) {
     createForm.value.job_posting_id = jobId;
@@ -867,7 +867,7 @@ onMounted(async () => {
   margin: 0 auto;
 }
 
-/* ============ Page header ============ */
+/* ============ 页面头部 ============ */
 .page-head {
   display: flex;
   align-items: flex-end;
@@ -927,7 +927,7 @@ onMounted(async () => {
   color: #667085;
 }
 
-/* ============ Buttons ============ */
+/* ============ 按钮 ============ */
 .primary-btn {
   display: inline-flex;
   align-items: center;
@@ -996,7 +996,7 @@ onMounted(async () => {
   cursor: not-allowed;
 }
 
-/* ============ Loading / empty ============ */
+/* ============ 加载态 / 空态 ============ */
 .board-loading {
   display: grid;
   place-items: center;
@@ -1061,7 +1061,7 @@ onMounted(async () => {
   to { transform: rotate(360deg); }
 }
 
-/* ============ Board ============ */
+/* ============ 看板 ============ */
 .board {
   display: grid;
   grid-template-columns: repeat(7, minmax(220px, 1fr));
@@ -1137,7 +1137,7 @@ onMounted(async () => {
   color: #cbd5e1;
 }
 
-/* ============ App card ============ */
+/* ============ 投递卡片 ============ */
 .app-card {
   display: flex;
   flex-direction: column;
@@ -1224,7 +1224,7 @@ onMounted(async () => {
   background: #f59e0b;
 }
 
-/* ============ Drawer header & body ============ */
+/* ============ 抽屉头部与主体 ============ */
 .drawer-header {
   display: flex;
   flex-direction: column;
@@ -1278,7 +1278,7 @@ onMounted(async () => {
   gap: 18px;
 }
 
-/* Drawer hero */
+/* 抽屉主视觉 */
 .drawer-hero {
   display: flex;
   flex-direction: column;
@@ -1347,7 +1347,7 @@ onMounted(async () => {
   color: #b45309;
 }
 
-/* Callout */
+/* 提示说明块 */
 .callout {
   display: flex;
   align-items: flex-start;
@@ -1394,7 +1394,7 @@ onMounted(async () => {
   color: #475467;
 }
 
-/* Link card */
+/* 链接卡片 */
 .link-card {
   display: flex;
   align-items: center;
@@ -1431,7 +1431,7 @@ onMounted(async () => {
   font-size: 12px;
 }
 
-/* Block */
+/* 内容块 */
 .block {
   display: flex;
   flex-direction: column;
@@ -1481,7 +1481,7 @@ onMounted(async () => {
   word-break: break-word;
 }
 
-/* Timeline */
+/* 时间线 */
 .timeline {
   display: flex;
   flex-direction: column;
@@ -1576,7 +1576,7 @@ onMounted(async () => {
   text-align: center;
 }
 
-/* Transition form */
+/* 阶段流转表单 */
 .transition-form {
   padding: 16px;
   border: 1px solid rgba(37, 99, 235, 0.16);
@@ -1584,7 +1584,7 @@ onMounted(async () => {
   background: linear-gradient(135deg, #f5f9ff, #f0f6ff);
 }
 
-/* Form note */
+/* 表单提示 */
 .form-note {
   margin: 0 0 14px;
   padding: 10px 12px;
@@ -1623,7 +1623,7 @@ onMounted(async () => {
   margin-left: auto;
 }
 
-/* ============ Responsive ============ */
+/* ============ 响应式 ============ */
 @media (max-width: 1280px) {
   .board {
     grid-template-columns: repeat(4, minmax(220px, 1fr));

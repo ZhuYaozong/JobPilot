@@ -12,7 +12,7 @@ import type {
 
 const BASES = "/api/v1/knowledge/bases";
 
-// ---------- Knowledge bases ----------
+// ---------- 知识库 ----------
 
 export async function listKnowledgeBases(
   params: { limit?: number; offset?: number; include_archived?: boolean } = {},
@@ -48,7 +48,7 @@ export async function deleteKnowledgeBase(kbId: number) {
   await apiClient.delete(`${BASES}/${kbId}`);
 }
 
-// ---------- Documents ----------
+// ---------- 文档 ----------
 
 export async function listKnowledgeDocuments(
   kbId: number,
@@ -111,10 +111,9 @@ export async function deleteKnowledgeDocument(documentId: number) {
 }
 
 export async function reindexKnowledgeDocument(documentId: number) {
-  // Indexing is synchronous on the server (slice 7'c2). For small docs it
-  // returns in 1-3s; longer pieces may take longer because each chunk hits
-  // the embedding endpoint. Use the same generous timeout as other
-  // LLM-driven endpoints.
+  // 后端索引是同步执行的（7'c2）。小文档通常 1-3s 返回；
+  // 长文档因为每个 chunk 都要请求 embedding endpoint，耗时会更久。
+  // 因此这里沿用 LLM 驱动接口的宽松超时。
   const response = await apiClient.post<KnowledgeDocument>(
     `/api/v1/knowledge/documents/${documentId}/reindex`,
     undefined,

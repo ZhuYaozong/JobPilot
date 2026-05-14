@@ -1,6 +1,6 @@
 <template>
   <div class="resumes">
-    <!-- ========== Page header ========== -->
+    <!-- ========== 页面头部 ========== -->
     <header class="page-head">
       <div>
         <p class="page-head__eyebrow">简历管理</p>
@@ -22,9 +22,9 @@
       </div>
     </header>
 
-    <!-- ========== Two-column workspace ========== -->
+    <!-- ========== 双栏工作区 ========== -->
     <div class="workspace">
-      <!-- ---------- List ---------- -->
+      <!-- ---------- 列表 ---------- -->
       <aside class="list-pane">
         <header class="list-pane__head">
           <h2>简历列表</h2>
@@ -70,7 +70,7 @@
         </div>
       </aside>
 
-      <!-- ---------- Detail ---------- -->
+      <!-- ---------- 详情 ---------- -->
       <main class="detail-pane">
         <div v-if="detailLoading" class="detail-loading">
           <div class="detail-loading__spinner" />
@@ -84,7 +84,7 @@
         </div>
 
         <article v-else class="detail">
-          <!-- Hero stripe -->
+          <!-- 主视觉条 -->
           <section class="detail-hero">
             <div class="detail-hero__main">
               <p class="detail-hero__source">{{ formatSourceType(selectedResume.source_type) }}</p>
@@ -137,7 +137,7 @@
             </div>
           </section>
 
-          <!-- Hint callout -->
+          <!-- 提示说明块 -->
           <aside class="callout" :class="`callout--${calloutTone}`">
             <div class="callout__icon">{{ calloutIcon }}</div>
             <div>
@@ -146,7 +146,7 @@
             </div>
           </aside>
 
-          <!-- Source URL -->
+          <!-- 来源 URL -->
           <section v-if="selectedResume.source_file_url" class="link-card">
             <span class="link-card__label">来源文件</span>
             <a
@@ -160,7 +160,7 @@
             </a>
           </section>
 
-          <!-- Raw text -->
+          <!-- 原始文本 -->
           <section class="block">
             <header class="block__head">
               <h3>简历原文</h3>
@@ -171,7 +171,7 @@
             <pre class="block__pre">{{ selectedResume.raw_text }}</pre>
           </section>
 
-          <!-- AI parsed result -->
+          <!-- AI 解析结果 -->
           <details class="parsed-block">
             <summary>
               <span class="parsed-block__title">AI 提取的信息</span>
@@ -188,7 +188,7 @@
             </p>
           </details>
 
-          <!-- Versions -->
+          <!-- 版本列表 -->
           <section class="block">
             <header class="block__head">
               <h3>版本记录</h3>
@@ -216,7 +216,7 @@
       </main>
     </div>
 
-    <!-- ========== Create drawer ========== -->
+    <!-- ========== 创建抽屉 ========== -->
     <el-drawer
       v-model="createDrawerOpen"
       title="新增简历"
@@ -242,7 +242,7 @@
         </button>
       </div>
 
-      <!-- Upload mode -->
+      <!-- 上传模式 -->
       <div v-if="createMode === 'upload'" class="upload-pane">
         <p class="drawer-hint">
           上传 PDF / DOCX / TXT / Markdown 简历，系统会自动抽取文本并解析关键字段。
@@ -305,7 +305,7 @@
         </el-form>
       </div>
 
-      <!-- Paste mode -->
+      <!-- 粘贴模式 -->
       <div v-else class="upload-pane">
         <p class="drawer-hint">粘贴简历原文，保存后可以继续解析和匹配岗位。</p>
 
@@ -404,13 +404,12 @@ const selectedResume = ref<Resume | null>(null);
 const createDrawerOpen = ref(false);
 const rawCopied = ref(false);
 
-// Drawer can run in two modes — upload (file) or paste (raw text). Default
-// is upload because the manual paste path is mostly a legacy escape hatch
-// after slice 7'a; we keep it so power users (or markdown-native folks)
-// can still hand-craft a resume row.
+// 抽屉支持两种模式：上传文件或粘贴原始文本。默认走上传，因为 7'a 后手动粘贴
+// 主要作为保留的兜底入口；仍然保留它，是为了让高级用户或习惯写 Markdown 的用户
+// 可以手动构造一条简历记录。
 const createMode = ref<"upload" | "paste">("upload");
 
-// Upload state.
+// 上传态。
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const pendingFile = ref<File | null>(null);
 const dragActive = ref(false);
@@ -511,7 +510,7 @@ function closeCreateDrawer() {
   resetUploadState();
 }
 
-// ---------- Upload helpers --------------------------------------------------
+// ---------- 上传辅助方法 --------------------------------------------------
 
 const defaultUploadTitle = computed(() => {
   const name = pendingFile.value?.name ?? "";
@@ -744,7 +743,7 @@ onMounted(async () => {
   margin: 0 auto;
 }
 
-/* ============ Page header ============ */
+/* ============ 页面头部 ============ */
 .page-head {
   display: flex;
   align-items: flex-end;
@@ -804,7 +803,7 @@ onMounted(async () => {
   color: #667085;
 }
 
-/* ============ Buttons ============ */
+/* ============ 按钮 ============ */
 .primary-btn {
   display: inline-flex;
   align-items: center;
@@ -902,7 +901,7 @@ onMounted(async () => {
   background: rgba(15, 118, 110, 0.1);
 }
 
-/* ============ Workspace ============ */
+/* ============ 工作区 ============ */
 .workspace {
   display: grid;
   grid-template-columns: minmax(280px, 0.85fr) minmax(0, 2fr);
@@ -910,7 +909,7 @@ onMounted(async () => {
   align-items: start;
 }
 
-/* ============ List pane ============ */
+/* ============ 列表面板 ============ */
 .list-pane {
   display: flex;
   flex-direction: column;
@@ -1030,7 +1029,7 @@ onMounted(async () => {
   color: #b45309;
 }
 
-/* ============ Skel / empty / loading ============ */
+/* ============ 骨架屏 / 空态 / 加载态 ============ */
 .list-skel {
   display: flex;
   flex-direction: column;
@@ -1132,7 +1131,7 @@ onMounted(async () => {
   line-height: 1.65;
 }
 
-/* ============ Detail pane ============ */
+/* ============ 详情面板 ============ */
 .detail-pane {
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 14px;
@@ -1223,7 +1222,7 @@ onMounted(async () => {
   max-width: 320px;
 }
 
-/* Callout */
+/* 提示说明块 */
 .callout {
   display: flex;
   align-items: flex-start;
@@ -1275,7 +1274,7 @@ onMounted(async () => {
   color: #475467;
 }
 
-/* Link card */
+/* 链接卡片 */
 .link-card {
   display: flex;
   align-items: center;
@@ -1312,7 +1311,7 @@ onMounted(async () => {
   font-size: 12px;
 }
 
-/* Block */
+/* 内容块 */
 .block {
   display: flex;
   flex-direction: column;
@@ -1352,7 +1351,7 @@ onMounted(async () => {
   word-break: break-word;
 }
 
-/* Parsed block */
+/* 解析结果块 */
 .parsed-block {
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 10px;
@@ -1415,7 +1414,7 @@ onMounted(async () => {
   color: #98a2b3;
 }
 
-/* Versions */
+/* 版本列表 */
 .versions {
   display: flex;
   flex-direction: column;
@@ -1483,7 +1482,7 @@ onMounted(async () => {
   text-align: center;
 }
 
-/* Spinner */
+/* 加载指示器 */
 .spinner {
   width: 12px;
   height: 12px;
@@ -1493,7 +1492,7 @@ onMounted(async () => {
   animation: spin 0.8s linear infinite;
 }
 
-/* Drawer */
+/* 抽屉 */
 .drawer-hint {
   margin: 0 0 16px;
   font-size: 12px;
@@ -1506,7 +1505,7 @@ onMounted(async () => {
   gap: 4px;
 }
 
-/* ============ Drawer tab + upload dropzone (slice 7'a) ============ */
+/* ============ 抽屉标签与上传投放区（7'a） ============ */
 .drawer-tabs {
   display: flex;
   gap: 8px;
@@ -1676,7 +1675,7 @@ onMounted(async () => {
   gap: 10px;
 }
 
-/* Responsive */
+/* 响应式 */
 @media (max-width: 1180px) {
   .workspace {
     grid-template-columns: 1fr;

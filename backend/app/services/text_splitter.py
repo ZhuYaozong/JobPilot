@@ -1,14 +1,11 @@
-"""Recursive character-based text splitter.
+"""递归字符切片器。
 
-A small (~80 LOC) Chinese-aware splitter written ourselves rather than
-pulling in langchain-text-splitters. Behaviour matches LangChain's
-``RecursiveCharacterTextSplitter`` in spirit but with separator priorities
-tuned for mixed CN/EN job-search content (resume notes, JDs, project
-write-ups).
+这是一个很小的中文友好切片器，项目约束是不引 ``langchain-text-splitters``。
+行为上接近 LangChain 的 ``RecursiveCharacterTextSplitter``，但分隔符优先级按中英
+混合求职内容调过：简历笔记、JD、项目复盘里经常同时出现中文标点和英文技术词。
 
-The output preserves ``char_start / char_end`` offsets into the original
-text so the agent's ``search_knowledge`` tool (slice 7'c3) can later show
-"原文片段" with the surrounding context.
+输出保留相对原文的 ``char_start / char_end`` 偏移，方便 ``search_knowledge`` 后续
+展示“原文片段”和周边上下文。
 """
 
 from __future__ import annotations
@@ -16,9 +13,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
-# Separator priority — try each in order. Mixing CN/EN punctuation matters
-# because Chinese paragraphs often end in 。 with no following \n, and JDs
-# pasted from web pages often have stray ASCII full-stops.
+# 分隔符按优先级依次尝试。中文段落常用“。”且不一定有换行，网页复制的 JD 又经常混入
+# 英文句号，所以中英文标点都要覆盖。
 DEFAULT_SEPARATORS: tuple[str, ...] = (
     "\n\n",
     "\n",
@@ -33,18 +29,16 @@ DEFAULT_SEPARATORS: tuple[str, ...] = (
     "，",
     ",",
     " ",
-    "",  # final fallback: split mid-character
+    "",  # 最后兜底：没有任何分隔符时按字符硬切。
 )
 
 
 @dataclass(frozen=True)
 class TextChunk:
-    """One contiguous slice of the source text.
+    """原文中的一个连续切片。
 
-    ``char_start`` and ``char_end`` are byte-character offsets into the
-    *original* text passed to :func:`split_text`, **not** the post-overlap
-    concatenation. This lets callers grab surrounding context later by
-    slicing the source directly.
+    ``char_start`` 和 ``char_end`` 指向传入 :func:`split_text` 的原始文本，
+    不是加 overlap 后的新文本。这样调用方后续可以直接按原文偏移取上下文。
     """
 
     text: str
@@ -59,22 +53,16 @@ def split_text(
     chunk_overlap: int = 100,
     separators: tuple[str, ...] = DEFAULT_SEPARATORS,
 ) -> list[TextChunk]:
-    """Recursively split ``text`` into chunks of at most ``chunk_size`` chars.
+    """递归切分文本，保证每个 chunk 不超过 ``chunk_size`` 字符。
 
-    Algorithm:
-    1. Pick the first separator from ``separators`` that appears in the
-       remaining text. Split on it.
-    2. For each segment, if it still exceeds ``chunk_size``, recurse with
-       the *next* separator. This biases splits toward "natural" boundaries
-       (paragraph → sentence → comma → word).
-    3. Greedy-pack segments back together up to ``chunk_size``, emitting
-       a chunk when the next segment would overflow.
-    4. Add ``chunk_overlap`` characters of trailing text from the previous
-       chunk to the start of each subsequent chunk for retrieval recall.
+    算法分四步：
+    1. 从 ``separators`` 里选择第一个出现在当前文本段中的分隔符。
+    2. 如果某个片段仍超过 ``chunk_size``，就用下一个分隔符继续递归，优先按自然边界
+       切开：段落 → 句子 → 逗号 → 单词/字符。
+    3. 把小片段贪心打包回 chunk，直到再放下一个片段会超长。
+    4. 每个后续 chunk 前面补上前一个 chunk 尾部的 ``chunk_overlap`` 字符，提高检索召回。
 
-    Returns chunks in source order; total emitted character count >= input
-    length (because of overlap). Always returns at least one chunk for
-    non-empty input.
+    返回顺序与原文一致；因为 overlap，输出总字符量可能大于输入。非空输入至少返回一个 chunk。
     """
     if chunk_size <= 0:
         raise ValueError("chunk_size must be > 0")
@@ -85,9 +73,7 @@ def split_text(
     if not cleaned.strip():
         return []
 
-    # Recursive split into segments small enough that *every* one is
-    # ``<= chunk_size``. ``segments`` keeps absolute (start, end) offsets
-    # so packing later can compute the chunk's own offsets correctly.
+    # 先递归切成足够小的片段。segments 保存原文绝对偏移，后续打包时才能算出最终 chunk 的范围。
     segments = _recursive_split_with_offsets(
         cleaned, 0, len(cleaned), chunk_size, list(separators),
     )
@@ -102,17 +88,15 @@ def _recursive_split_with_offsets(
     chunk_size: int,
     separators: list[str],
 ) -> list[tuple[int, int]]:
-    """Split ``text[start:end]`` into spans each <= chunk_size.
+    """把 ``text[start:end]`` 切成多个不超过 ``chunk_size`` 的原文区间。
 
-    ``separators`` is consumed front-to-back: the head is tried first, the
-    rest is passed to deeper recursion if a segment is still oversized.
+    ``separators`` 从前往后消耗；当前分隔符切完仍过长的片段，会交给下一层递归继续切。
     """
     span_text = text[start:end]
     if len(span_text) <= chunk_size:
         return [(start, end)] if span_text.strip() else []
 
-    # Find a separator that actually appears in this span. We avoid
-    # ``str.split`` because we need offsets, not just substrings.
+    # 找一个当前片段里真实存在的分隔符。这里不用 ``str.split``，因为我们需要原文偏移。
     sep_index = -1
     for idx, sep in enumerate(separators):
         if sep == "":
@@ -123,8 +107,7 @@ def _recursive_split_with_offsets(
             break
 
     if sep_index == -1:
-        # No usable separator at all (shouldn't happen because "" is last
-        # in the default list); fall back to hard cut at chunk_size.
+        # 理论上不会发生，因为默认分隔符最后有 ""；保守起见仍按 chunk_size 硬切。
         return [
             (s, min(s + chunk_size, end))
             for s in range(start, end, chunk_size)
@@ -134,8 +117,7 @@ def _recursive_split_with_offsets(
     next_separators = separators[sep_index + 1:]
 
     if sep == "":
-        # Hard slice — last resort when no punctuation/whitespace anywhere.
-        # Yields runs of exactly chunk_size (last possibly shorter).
+        # 没有任何标点/空白时的最后兜底：按 chunk_size 硬切，最后一段可能较短。
         return [
             (s, min(s + chunk_size, end))
             for s in range(start, end, chunk_size)
@@ -149,9 +131,7 @@ def _recursive_split_with_offsets(
             piece_start, piece_end = cursor, end
             cursor = end
         else:
-            # Keep the separator on the LEFT piece so concatenated text
-            # retains the original characters. Many CN punctuations are
-            # 1 char so this is cheap.
+            # 分隔符留在左侧片段里，保证拼接后不丢原字符；中文标点多为 1 字符，成本很低。
             piece_start, piece_end = cursor, idx + len(sep)
             cursor = idx + len(sep)
 
@@ -159,7 +139,7 @@ def _recursive_split_with_offsets(
             if text[piece_start:piece_end].strip():
                 out.append((piece_start, piece_end))
         else:
-            # Still too big — descend with the next separator.
+            # 当前分隔符切完仍过大，交给下一优先级分隔符继续递归。
             out.extend(
                 _recursive_split_with_offsets(
                     text, piece_start, piece_end, chunk_size, next_separators,
@@ -174,13 +154,11 @@ def _pack_with_overlap(
     chunk_size: int,
     chunk_overlap: int,
 ) -> list[TextChunk]:
-    """Greedy-pack neighbouring segments into chunks up to ``chunk_size``.
+    """把相邻小片段贪心打包成不超过 ``chunk_size`` 的 chunks。
 
-    Between consecutive chunks we prepend the trailing ``chunk_overlap``
-    characters of the previous chunk so retrieval recall doesn't suffer at
-    chunk boundaries. The overlap region is taken from the *source text*
-    (not "the last N chars of the previous chunk after concatenation"), so
-    it stays meaningful even when individual segments are tiny.
+    相邻 chunks 之间会把前一个 chunk 末尾的 ``chunk_overlap`` 字符补到下一个 chunk
+    开头，避免答案刚好落在边界时检索不到。overlap 从原文取，而不是从“已经拼好的
+    前一个 chunk”取，这样即使小片段很多，偏移也仍然清晰。
     """
     if not segments:
         return []
@@ -194,7 +172,7 @@ def _pack_with_overlap(
             cur_end = seg_end
             continue
         chunks.append(TextChunk(text=text[cur_start:cur_end], char_start=cur_start, char_end=cur_end))
-        # Start the next chunk with overlap_from_prev + the new segment.
+        # 下一个 chunk 从前一个 chunk 的尾部 overlap 开始，再接当前新片段。
         overlap_start = max(cur_start, cur_end - chunk_overlap)
         cur_start = overlap_start
         cur_end = seg_end

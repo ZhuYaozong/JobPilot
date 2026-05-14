@@ -1,8 +1,7 @@
-"""Unit tests for BaseTool's template-method invoke().
+"""BaseTool 模板方法 invoke() 的单元测试。
 
-Uses a FakeTool with a mode arg so each test exercises exactly one branch of
-the error contract: success, business-error return, system-error raise,
-unexpected exception, and pydantic validation failure.
+这里使用带 mode 参数的 FakeTool，让每个测试只覆盖错误契约中的一个分支：成功、业务错误返回、系统错误抛出、
+意外异常，以及 pydantic 参数校验失败。
 """
 
 import asyncio
@@ -34,7 +33,7 @@ class FakeArgs(BaseModel):
 
 class FakeTool(BaseTool):
     name = "fake_tool"
-    description = "Test fixture for BaseTool's invoke template method."
+    description = "BaseTool invoke 模板方法的测试夹具。"
     args_schema = FakeArgs
 
     async def _execute(
@@ -53,13 +52,12 @@ class FakeTool(BaseTool):
             }
         if args.mode == "system_error":
             raise ToolSystemError(self.name, "test_system", "boom")
-        # "raise_unexpected"
+        # "raise_unexpected" 分支用于模拟未预期异常。
         raise RuntimeError("unexpected explosion")
 
 
 async def _setup_agent_run(db: AsyncSession) -> tuple[User, int]:
-    """Create the minimum DB state a tool call needs: user, conversation,
-    agent_run."""
+    """创建一次工具调用所需的最小 DB 状态：user、conversation、agent_run。"""
     user = (
         await db.execute(select(User).where(User.username == "test"))
     ).scalar_one()
@@ -99,7 +97,7 @@ async def _fetch_logs(db: AsyncSession, agent_run_id: int) -> list[ToolCallLog]:
 
 
 def test_invoke_success_path_writes_success_log(client: TestClient) -> None:
-    assert client.get("/health/db").status_code == 200  # ensures user fixtures
+    assert client.get("/health/db").status_code == 200  # 确保用户 fixture 已准备好。
 
     async def _scenario(db: AsyncSession) -> None:
         user, agent_run_id = await _setup_agent_run(db)
@@ -205,7 +203,7 @@ def test_invoke_invalid_args_raises_validation_error_and_logs(
         assert logs[0].status == "failed"
         assert logs[0].error_class == "validation_error"
         assert logs[0].arguments_json == {"mode": "not_a_valid_choice"}
-        # Validation failures do not run _execute, so latency is zero.
+        # 参数校验失败不会运行 _execute，因此延迟记为 0。
         assert logs[0].latency_ms == 0
 
     _run_scenario(_scenario)

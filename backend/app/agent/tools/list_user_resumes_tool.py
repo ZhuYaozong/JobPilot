@@ -31,7 +31,7 @@ class ListUserResumesTool(BaseTool):
         args: ListUserResumesArgs,
         ctx: ToolContext,
     ) -> dict[str, Any]:
-        # 中文说明：列表工具只返回定位下游动作所需字段，不把简历正文暴露给 decide prompt。
+        # 列表工具只返回定位下游动作所需字段，不把简历正文暴露给 decide prompt。
         statement = select(
             Resume.id,
             Resume.title,
@@ -41,7 +41,7 @@ class ListUserResumesTool(BaseTool):
         ).where(Resume.user_id == ctx.current_user.id)
 
         if args.query:
-            # 中文说明：这里是标题子串过滤，不做全文检索；简历正文分析由 parse/match 工具完成。
+            # 这里是标题子串过滤，不做全文检索；简历正文分析由 parse/match 工具完成。
             statement = statement.where(Resume.title.ilike(f"%{args.query}%"))
 
         statement = statement.order_by(
@@ -50,7 +50,7 @@ class ListUserResumesTool(BaseTool):
 
         rows = (await ctx.db.execute(statement)).all()
 
-        # 中文说明：DTO 手工构造，避免 ORM from_attributes 在 async session 下触发 MissingGreenlet。
+        # DTO 手工构造，避免 ORM from_attributes 在 async session 下触发 MissingGreenlet。
         resumes = [
             {
                 "id": row.id,

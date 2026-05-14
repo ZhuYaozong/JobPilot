@@ -1,25 +1,22 @@
 /* ============================================================================
- * base.css — global styles for the JobPilot shell.
+ * base.css：JobPilot 外壳的全局样式。
  *
- * After the 6'a / 6'b page redesigns, every primary view uses `<style scoped>`
- * to define its own classes. This file holds only the rules that the un-scoped
- * shell still depends on:
- *   1. CSS variables + reset
- *   2. App shell layout (`.app-shell / .app-sidebar / .app-main / .app-content`)
- *   3. Sidebar brand + nav + user menu (used by AppSidebar template)
- *   4. AppHeader (route eyebrow / title / description)
- *   5. Element Plus overrides (theme consistency)
- *   6. Utility helpers used across components: `.eyebrow`, `.muted`,
- *      `.page-stack`, `.section-card`, `.stat-card`, `.empty-card`,
- *      `.json-block` (latter four power the still-globally-styled
- *      ArtifactsView and its legacy generic components).
+ * 6'a / 6'b 页面重设计后，所有主视图都使用 `<style scoped>` 定义自己的类。
+ * 这个文件只保留未 scoped 的应用外壳仍然依赖的规则：
+ *   1. CSS 变量和 reset。
+ *   2. 应用外壳布局（`.app-shell / .app-sidebar / .app-main / .app-content`）。
+ *   3. 侧边栏品牌区、导航和用户菜单（AppSidebar 模板使用）。
+ *   4. AppHeader（路由 eyebrow / title / description）。
+ *   5. Element Plus 覆盖样式，用于保持主题一致。
+ *   6. 跨组件工具类：`.eyebrow`、`.muted`、`.page-stack`、`.section-card`、
+ *      `.stat-card`、`.empty-card`、`.json-block`。后四者仍支撑全局样式版本的
+ *      ArtifactsView 和旧通用组件。
  *
- * Anything not in the list above lived in older versions and was removed
- * after the 6'b cleanup. If you need a new "shared" rule, prefer adding it
- * scoped inside the consuming component instead of growing this file.
+ * 不在上面列表里的旧规则已经在 6'b 清理中移除。如果后续需要新的“共享”规则，
+ * 优先把它写在消费组件的 scoped 样式里，避免继续膨胀这个全局文件。
  * ========================================================================= */
 
-/* ---------- Tokens ----------------------------------------------------- */
+/* ---------- 设计变量 ----------------------------------------------------- */
 
 :root {
   color: #0f172a;
@@ -65,7 +62,7 @@ button,
 input,
 textarea { font: inherit; }
 
-/* ---------- App shell -------------------------------------------------- */
+/* ---------- 应用外壳 -------------------------------------------------- */
 
 .app-shell {
   display: flex;
@@ -101,9 +98,9 @@ textarea { font: inherit; }
   padding: 18px 40px 48px;
 }
 
-/* Full-bleed mode for pages that manage their own layout (e.g. Assistant):
-   hide the verbose route header and remove the content area's padding +
-   scroll so the page can occupy the entire viewport below the sidebar. */
+/* 全出血模式用于自行管理布局的页面（例如 Assistant）：
+   隐藏冗长的路由头部，并移除内容区 padding 和滚动，
+   让页面可以占满侧边栏右侧的完整视口。 */
 .app-main--bleed .app-header { display: none; }
 
 .app-main--bleed .app-content {
@@ -111,7 +108,7 @@ textarea { font: inherit; }
   overflow: hidden;
 }
 
-/* ---------- AppHeader (route title / eyebrow / description) ----------- */
+/* ---------- AppHeader（路由标题 / eyebrow / 描述） ----------- */
 
 .app-header {
   display: flex;
@@ -140,7 +137,7 @@ textarea { font: inherit; }
   line-height: 1.7;
 }
 
-/* ---------- Sidebar brand --------------------------------------------- */
+/* ---------- 侧边栏品牌区 --------------------------------------------- */
 
 .brand {
   display: flex;
@@ -184,7 +181,7 @@ textarea { font: inherit; }
   font-size: 12px;
 }
 
-/* ---------- Sidebar nav ----------------------------------------------- */
+/* ---------- 侧边栏导航 ----------------------------------------------- */
 
 .nav-groups {
   display: grid;
@@ -263,7 +260,7 @@ textarea { font: inherit; }
   background: var(--accent);
 }
 
-/* Make the AI Assistant nav item visually distinct from other primary entries. */
+/* 让 AI 助手导航项与其他一级入口在视觉上区分开。 */
 .nav-section--primary .nav-link:nth-of-type(2) .nav-icon {
   color: #ffffff;
   background: linear-gradient(135deg, #2563eb, #0f766e);
@@ -291,10 +288,9 @@ textarea { font: inherit; }
   font-size: 12px;
 }
 
-/* ---------- Sidebar user / avatar -------------------------------------
-   The actual workspace-switcher widget is rendered by AppSidebar with its
-   own scoped styles; we only own the avatar look here since it's used in
-   the un-scoped .sidebar-avatar element. */
+/* ---------- 侧边栏用户 / 头像 -------------------------------------
+   真正的工作区切换组件由 AppSidebar 渲染，并带有自己的 scoped 样式；
+   这里仅保留头像样式，因为未 scoped 的 .sidebar-avatar 元素仍然会用到它。 */
 
 .sidebar-avatar {
   display: grid;
@@ -308,7 +304,7 @@ textarea { font: inherit; }
   font-weight: 800;
 }
 
-/* ---------- Utilities -------------------------------------------------- */
+/* ---------- 工具类 -------------------------------------------------- */
 
 .eyebrow {
   margin: 0;
@@ -321,10 +317,10 @@ textarea { font: inherit; }
 
 .muted { color: var(--muted); }
 
-/* ---------- Legacy: page-stack + generic cards ------------------------
-   Only ArtifactsView (a hidden route) and the four generic components
-   (SectionCard / StatCard / EmptyStateCard / JsonBlock) still use these.
-   New views should declare their own scoped styles instead. */
+/* ---------- 旧版：page-stack + 通用卡片 ------------------------
+   只有隐藏路由 ArtifactsView 和四个通用组件
+   （SectionCard / StatCard / EmptyStateCard / JsonBlock）还在使用这些规则。
+   新视图应当声明自己的 scoped 样式。 */
 
 .page-stack {
   display: grid;
@@ -449,7 +445,7 @@ textarea { font: inherit; }
   color: var(--muted);
 }
 
-/* ---------- Element Plus overrides ------------------------------------ */
+/* ---------- Element Plus 覆盖样式 ------------------------------------ */
 
 .el-button {
   border-radius: 8px;
@@ -486,11 +482,10 @@ textarea { font: inherit; }
     0 0 0 3px rgba(15, 118, 110, 0.12);
 }
 
-/* ---------- Responsive ------------------------------------------------- */
+/* ---------- 响应式 ------------------------------------------------- */
 
 @media (max-width: 1180px) {
-  /* On narrow viewports we let the document scroll naturally instead of
-     locking app-shell to a fixed 100vh. */
+  /* 窄视口下让文档自然滚动，不再把 app-shell 锁定为固定 100vh。 */
   body {
     height: auto;
     min-height: 100vh;
@@ -532,12 +527,11 @@ textarea { font: inherit; }
 }
 
 /* ============================================================================
- * Legacy classes — preserved only for ArtifactsView (hidden /artifacts route).
+ * 旧版类：仅为 ArtifactsView（隐藏的 /artifacts 路由）保留。
  *
- * Every other view migrated to `<style scoped>` during 6'b. ArtifactsView still
- * uses the old global layout (page-stack + resource-workspace + detail-stack
- * + create-form-grid) so we keep the necessary rules here. If/when Artifacts
- * is rewritten scoped, this whole section can be deleted.
+ * 其他视图已经在 6'b 迁移到 `<style scoped>`。ArtifactsView 仍使用旧全局布局
+ *（page-stack + resource-workspace + detail-stack + create-form-grid），
+ * 因此这里保留必要规则。等 ArtifactsView 改成 scoped 后，本段可以整体删除。
  * ========================================================================= */
 
 .resource-workspace {

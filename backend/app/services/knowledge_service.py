@@ -1,13 +1,10 @@
-"""Business logic for knowledge bases and their documents.
+"""知识库和文档的业务逻辑层。
 
-Kept separate from the API layer so future entry points (agent tool,
-batch import job) can reuse the same CRUD + ownership checks without
-re-implementing them. The API layer is responsible only for HTTP shape
-translation.
+它和 API 层分开，是为了让未来的 Agent 工具、批量导入任务等入口复用同一套 CRUD
+和归属校验逻辑，不在多个 router 里重复实现。API 层只负责 HTTP 请求/响应形状转换。
 
-Slice 7'c1 deliberately stops at "document text persisted, status =
-pending". Chunking + embedding live in slice 7'c2; see ``knowledge_chunks``
-table comment for the indexing state machine.
+7'c1 只保证“文档正文已保存，状态为 pending”；7'c2 开始接入切片和 embedding。
+索引状态机见 ``KnowledgeDocument.status`` 与 ``knowledge_chunks`` 相关模型注释。
 """
 
 from __future__ import annotations
@@ -37,7 +34,7 @@ from app.services.knowledge_indexing_service import (
 
 
 # ============================================================================
-# Knowledge base CRUD
+# 知识库 CRUD
 # ============================================================================
 
 
@@ -49,10 +46,10 @@ async def list_knowledge_bases(
     limit: int = 50,
     offset: int = 0,
 ) -> list[tuple[KnowledgeBase, int]]:
-    """Return ``(kb, document_count)`` pairs scoped to the user.
+    """返回当前用户可见的 ``(kb, document_count)`` 列表。
 
-    Recent-first by updated_at; archived KBs hidden by default but kept
-    accessible via the include_archived flag for the admin / cleanup UI.
+    默认按 updated_at 最近优先；已归档知识库默认隐藏，但可通过 include_archived 打开，
+    方便后续管理或清理界面使用。
     """
     base_q = select(KnowledgeBase).where(KnowledgeBase.user_id == user.id)
     if not include_archived:
@@ -66,7 +63,7 @@ async def list_knowledge_bases(
     if not kbs:
         return []
 
-    # Single round-trip for counts — N+1 here would be embarrassing.
+    # 文档数量用一条 group by 查询拿齐，避免每个 KB 再查一次造成 N+1。
     count_rows = (
         await db.execute(
             select(
@@ -159,16 +156,18 @@ async def update_knowledge_base(
 async def delete_knowledge_base(
     db: AsyncSession, kb: KnowledgeBase,
 ) -> None:
-    """Cascade delete: documents + chunks both have ON DELETE CASCADE so
-    a single DELETE on the parent walks the whole tree. We still load+delete
-    via the ORM (not a raw SQL delete) so SQLAlchemy event hooks fire if/when
-    we add them later."""
+    """级联删除知识库。
+
+    documents 和 chunks 都有 ON DELETE CASCADE，所以删父知识库即可清掉整棵树。
+    这里仍走 ORM delete，而不是裸 SQL delete；如果未来加 SQLAlchemy 事件钩子，
+    这条路径可以自然触发。
+    """
     await db.delete(kb)
     await db.commit()
 
 
 # ============================================================================
-# Document CRUD
+# 文档 CRUD
 # ============================================================================
 
 
@@ -243,14 +242,13 @@ async def upload_document(
     embedding_client: EmbeddingClient | None = None,
     auto_index: bool = True,
 ) -> KnowledgeDocument:
-    """Extract text → persist → run indexing pipeline (synchronously).
+    """抽取文件文本、保存文档，并同步执行索引流水线。
 
-    Indexing failures don't roll back the document — the row lands in
-    status=failed with error_detail set so the user can fix config + click
-    "重新索引" from the UI.
+    索引失败不会回滚文档本身；文档会进入 ``status=failed``，并写入 ``error_detail``。
+    用户修复配置后可以在 UI 点击“重新索引”。
 
-    ``auto_index=False`` is for tests that want to seed pending docs
-    without burning fake embedding tokens; production paths always index.
+    ``auto_index=False`` 只给测试使用，用来种 pending 文档而不消耗模拟 embedding。
+    生产路径默认都会立即索引。
     """
     try:
         extracted = extract_text_from_upload(filename, content_type, payload)
@@ -266,9 +264,8 @@ async def upload_document(
         source_url=None,
     )
     if auto_index:
-        # index_document may rollback the session on failure, leaving the
-        # original ``doc`` instance detached / expired. Always take its
-        # return value so the caller serialises against a hydrated row.
+        # index_document 失败时可能 rollback session，使原始 doc 实例 detached/expired。
+        # 一定接住返回值，确保后续序列化的是重新加载过的安全对象。
         doc = await index_document(db, doc, embedding_client=embedding_client)
     return doc
 
@@ -284,10 +281,10 @@ async def create_manual_document(
     embedding_client: EmbeddingClient | None = None,
     auto_index: bool = True,
 ) -> KnowledgeDocument:
-    """Counterpart to upload_document for the "粘贴文本" entry point.
+    """“粘贴文本”入口对应的文档创建逻辑。
 
-    Mirrors the resume "manual paste" path: useful when the user wants to
-    capture a note that doesn't live in a file (e.g. interviewer feedback).
+    它和简历的“手动粘贴”路径类似，适合保存不在文件里的资料，例如面试官反馈、
+    公司背景笔记或临时复盘。
     """
     trimmed = (body or "").strip()
     if len(trimmed) < 30:
@@ -315,10 +312,10 @@ async def reindex_document(
     *,
     embedding_client: EmbeddingClient | None = None,
 ) -> KnowledgeDocument:
-    """Public-facing wrapper around the indexing service's reindex routine.
+    """面向 API 的重新索引包装函数。
 
-    Kept here so API handlers only ever import from ``knowledge_service`` —
-    routes stay agnostic to whether reindexing is sync/async/queued.
+    router 只依赖 ``knowledge_service``，不用知道重新索引当前是同步执行、后台任务，
+    还是未来的队列任务。
     """
     return await _reindex_document_via_indexer(
         db, document, embedding_client=embedding_client,
@@ -328,8 +325,7 @@ async def reindex_document(
 async def delete_document(
     db: AsyncSession, doc: KnowledgeDocument,
 ) -> None:
-    # ON DELETE CASCADE on knowledge_chunks.document_id removes the
-    # embeddings too — no manual fan-out needed.
+    # knowledge_chunks.document_id 上有 ON DELETE CASCADE，删除文档会自动清掉向量行。
     await db.delete(doc)
     await db.commit()
 
@@ -337,10 +333,10 @@ async def delete_document(
 async def reset_document_chunks(
     db: AsyncSession, doc: KnowledgeDocument,
 ) -> None:
-    """Drop all chunks for a document and reset it to pending.
+    """删除某文档所有 chunks，并把索引状态重置为 pending。
 
-    Used by the future reindex path (7'c2 or a manual UI action). We keep
-    this helper in 7'c1 so the data layer is fully usable from the start.
+    重新索引和手动 UI 操作都会需要这个能力。它保留在 service 层，避免 router 直接懂
+    chunks 表结构。
     """
     from sqlalchemy import delete as sa_delete
 
@@ -354,7 +350,7 @@ async def reset_document_chunks(
 
 
 # ============================================================================
-# Internals
+# 内部辅助函数
 # ============================================================================
 
 
@@ -369,10 +365,8 @@ async def _persist_extracted_document(
 ) -> KnowledgeDocument:
     content_hash = hashlib.sha256(extracted.text.encode("utf-8")).hexdigest()
 
-    # Duplicate detection: if the same user already uploaded byte-identical
-    # text into the same KB, return the existing row instead of creating a
-    # duplicate. (Different KBs are allowed; users genuinely use "公司资料"
-    # and "项目素材" with overlap.)
+    # 同一用户在同一知识库内上传字节完全一致的文本时，直接返回已有行，避免重复索引。
+    # 不同知识库允许重复，因为用户确实会在“公司资料”“项目素材”等库里保存重叠内容。
     existing = (
         await db.execute(
             select(KnowledgeDocument).where(

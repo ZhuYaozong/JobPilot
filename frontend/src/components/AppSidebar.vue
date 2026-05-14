@@ -112,9 +112,9 @@ const navGroups: SidebarNavGroup[] = [
 </script>
 
 <style scoped>
-/* Workspace switcher (replaces the old AppHeader user menu). The details/
-   summary structure keeps it lightweight — no portal-based dropdown
-   needed since this section sits in the sidebar's natural flow. */
+/* 工作区切换器（替代旧 AppHeader 用户菜单）。
+   details / summary 结构足够轻量；这块本来就在侧边栏自然文档流中，
+   因此不需要 portal 下拉层。 */
 .sidebar-user__summary {
   display: flex;
   align-items: center;

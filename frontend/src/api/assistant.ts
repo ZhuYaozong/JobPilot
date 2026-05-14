@@ -9,10 +9,9 @@ import type {
   MessageRead,
 } from "@/types/assistant";
 
-// ReAct loops can chain several LLM calls; give the legacy /run endpoint a
-// long-enough fallback timeout so it doesn't bail at 30s on heavy turns.
-// Primary chat path uses streaming (runAssistantStream) and isn't bound by
-// axios timeouts at all.
+// ReAct 循环可能串起多次 LLM 调用；旧版 /run endpoint 需要一个足够长的兜底超时，
+// 避免复杂轮次在 30s 左右提前失败。主聊天路径使用 runAssistantStream 流式接口，
+// 不受 axios 超时限制。
 const ASSISTANT_FALLBACK_TIMEOUT_MS = 300000;
 
 export async function runAssistant(payload: AssistantRunRequest) {
@@ -25,14 +24,13 @@ export async function runAssistant(payload: AssistantRunRequest) {
 }
 
 /**
- * Stream the assistant's response via SSE. Returns when the server emits its
- * terminal ``done`` event (or when ``signal`` is aborted). The callbacks are
- * invoked synchronously as events arrive, so the chat UI can show phased
- * status without waiting for the full turn to complete.
+ * 通过 SSE 流式接收助手回复。服务端发出终止事件 ``done`` 后返回；
+ * 如果 ``signal`` 被中止，也会提前结束。事件到达时会同步触发 callbacks，
+ * 因此前端可以展示分阶段状态，而不用等整轮对话全部完成。
  *
- * Uses ``fetch`` instead of ``EventSource`` because EventSource is GET-only
- * and we need to POST the request body. The SSE parser is intentionally
- * minimal — JobPilot's server only emits single-line ``data:`` fields.
+ * 这里使用 ``fetch`` 而不是 ``EventSource``，因为 EventSource 只能 GET，
+ * 而当前接口需要 POST 请求体。SSE 解析器刻意保持极简，JobPilot 服务端只会发出
+ * 单行 ``data:`` 字段。
  */
 export async function runAssistantStream(
   payload: AssistantRunRequest,
@@ -52,8 +50,8 @@ export async function runAssistantStream(
   });
 
   if (!response.ok) {
-    // Try to extract a useful error message from the body. FastAPI returns
-    // ``{"detail": "..."}`` for HTTPExceptions; fall back to status text.
+    // 尝试从响应体提取更有用的错误信息。FastAPI 的 HTTPException 会返回
+    // ``{"detail": "..."}``，取不到时再回落到 status text。
     let detail: string | null = null;
     try {
       const body = await response.json();
@@ -61,7 +59,7 @@ export async function runAssistantStream(
         detail = body.detail;
       }
     } catch {
-      // Not JSON — ignore.
+      // 不是 JSON，忽略并走兜底错误。
     }
     throw new Error(detail || `Assistant stream HTTP ${response.status}`);
   }
@@ -81,8 +79,8 @@ export async function runAssistantStream(
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
 
-      // SSE frames are separated by a blank line ("\n\n"). Split off complete
-      // frames; whatever is left after the last "\n\n" stays in the buffer.
+      // SSE 帧用空行（"\n\n"）分隔。这里先切出完整帧，
+      // 最后一个 "\n\n" 后剩下的半帧继续留在 buffer 里等待下一批数据。
       let separatorIndex = buffer.indexOf("\n\n");
       while (separatorIndex !== -1) {
         const frame = buffer.slice(0, separatorIndex);
@@ -95,7 +93,7 @@ export async function runAssistantStream(
     try {
       reader.releaseLock();
     } catch {
-      // releaseLock can throw if the reader is already errored — ignore.
+      // 如果 reader 已经进入错误态，releaseLock 可能抛错；这里忽略即可。
     }
   }
 }
@@ -111,7 +109,7 @@ function handleFrame(frame: string, callbacks: AssistantStreamCallbacks) {
     } else if (line.startsWith("data:")) {
       dataLines.push(line.slice(5).trim());
     }
-    // Other SSE fields (id, retry) are unused on our wire.
+    // 当前协议没有使用其他 SSE 字段（id、retry）。
   }
 
   if (!dataLines.length) return;
@@ -120,8 +118,7 @@ function handleFrame(frame: string, callbacks: AssistantStreamCallbacks) {
   try {
     payload = JSON.parse(dataLines.join("\n"));
   } catch {
-    // Server promises valid JSON for every data line; if we see otherwise
-    // it's safer to drop the frame than to crash the chat.
+    // 服务端承诺每个 data 行都是合法 JSON；如果遇到异常帧，丢弃它比让聊天界面崩溃更稳。
     return;
   }
 
@@ -155,8 +152,7 @@ function dispatch(
     case "done":
       return;
     default:
-      // Unknown event types are ignored to forward-compatibly tolerate the
-      // backend adding new ones without breaking older clients.
+      // 未知事件类型直接忽略，便于后端以后新增事件时不破坏旧客户端。
       return;
   }
 }

@@ -1,8 +1,7 @@
-"""Tests for search_knowledge — slice 7'c3 retrieval tool.
+"""search_knowledge 检索工具测试，对应 7'c3。
 
-The tool itself is intentionally small, but it sits on the hot path between
-Agent -> embedding client -> pgvector -> ACL filtering. These tests seed rows
-directly so each invariant is visible without an LLM in the loop.
+工具本身刻意保持轻量，但它位于 Agent -> embedding client -> pgvector -> ACL filtering 的关键路径上。
+这些测试直接预置数据行，让每个不变量都能在不引入 LLM 的情况下被看见。
 """
 
 import asyncio

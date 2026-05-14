@@ -18,7 +18,7 @@ export function formatDateTime(value: string | null | undefined): string {
   });
 }
 
-/** Relative time in Chinese ("刚刚" / "5 分钟前" / "昨天" / "12 月 3 日"). */
+/** 输出中文相对时间，例如“刚刚”/“5 分钟前”/“昨天”/“12 月 3 日”。 */
 export function formatRelativeTime(value: string | null | undefined): string {
   if (!value) {
     return "-";
@@ -62,7 +62,7 @@ export function formatRelativeTime(value: string | null | undefined): string {
   });
 }
 
-/** Group conversations by 今天 / 昨天 / 更早 buckets for the sidebar. */
+/** 按今天 / 昨天 / 更早为侧边栏分组对话。 */
 export function bucketByRecency<T>(
   items: T[],
   getTimestamp: (item: T) => string | null | undefined,

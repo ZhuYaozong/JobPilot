@@ -1,1 +1,1 @@
-"""JobPilot backend application package."""
+"""JobPilot 后端应用包。"""

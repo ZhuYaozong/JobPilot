@@ -1,14 +1,10 @@
-"""Decide-node repair-loop tests.
+"""decide 节点修复循环测试。
 
-We exercise the LangGraph workflow directly (bypassing the HTTP layer) and
-control the LLM via a stateful fake that returns different responses on
-consecutive calls. Three scenarios:
+这里直接驱动 LangGraph workflow，绕过 HTTP 层，并用带状态的模拟 LLM 控制连续调用时的不同返回值。覆盖三种场景：
 
-1. First decide returns unparseable text; the repair attempt returns a valid
-   ``respond_directly`` envelope; workflow finishes with that text.
-2. Both decide attempts return unparseable text; workflow sets
-   ``decide_error_class=decide_repair_failed`` and exits without final_text.
-3. Decide returns valid JSON immediately; the repair branch never fires.
+1. 首次 decide 返回无法解析的文本；修复轮返回合法的 ``respond_directly`` 信封；workflow 用该文本结束。
+2. 两次 decide 都返回无法解析的文本；workflow 设置 ``decide_error_class=decide_repair_failed``，并在没有 final_text 的情况下退出。
+3. decide 第一次就返回合法 JSON；修复分支不会触发。
 """
 
 import asyncio
@@ -81,14 +77,14 @@ def test_repair_succeeds_after_one_bad_decide_output(
     async def fake_llm(self, prompt: str) -> str:
         call_count["n"] += 1
         if call_count["n"] == 1:
-            # First decide: invalid JSON
+            # 第一次 decide：非法 JSON。
             assert "请严格按以下两种 JSON" in prompt
             return "this is not JSON at all"
         if call_count["n"] == 2:
-            # Repair: valid respond_directly
+            # 修复轮：合法的 respond_directly。
             assert "修正之前的错误回复" in prompt
             return '{"action": "respond_directly", "text": "你好,我可以帮你做什么?"}'
-        # No more LLM calls expected — direct_text bypasses format_response LLM.
+        # 不应再有更多 LLM 调用，direct_text 会绕过 format_response LLM。
         raise AssertionError(f"unexpected extra LLM call #{call_count['n']}")
 
     monkeypatch.setattr(LLMClient, "generate_text", fake_llm)
@@ -161,7 +157,7 @@ def test_repair_branch_skipped_when_first_decide_is_valid(
             raise AssertionError("repair prompt should not have fired")
         if call_count["n"] == 1:
             return '{"action": "respond_directly", "text": "你好"}'
-        # direct_text → no format_response LLM call expected.
+        # direct_text 路径不应再调用 format_response LLM。
         raise AssertionError(f"unexpected extra LLM call #{call_count['n']}")
 
     monkeypatch.setattr(LLMClient, "generate_text", fake_llm)

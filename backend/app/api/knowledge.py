@@ -1,10 +1,10 @@
-"""HTTP layer for knowledge bases + documents.
+"""知识库与文档的 HTTP API 层。
 
-Two resource paths:
-- /api/v1/knowledge/bases               → KB CRUD
-- /api/v1/knowledge/bases/{id}/documents → docs within a KB
+当前有两组资源路径：
+- /api/v1/knowledge/bases                → 知识库 CRUD
+- /api/v1/knowledge/bases/{id}/documents → 某个知识库下的文档 CRUD
 
-Indexing endpoints (re-index, search) ship in slice 7'c2 / 7'c3.
+索引相关接口在 7'c2/7'c3 增量加入：重新索引、chunk 预览和 Agent 检索工具。
 """
 
 from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile
@@ -27,16 +27,17 @@ from app.services import knowledge_service
 router = APIRouter(prefix="/api/v1/knowledge", tags=["knowledge"])
 
 
-# ---------- Knowledge bases ----------------------------------------------
+# ---------- 知识库 --------------------------------------------------------
 
 
 def _to_kb_list_item(
     kb: KnowledgeBase, document_count: int,
 ) -> KnowledgeBaseListItem:
-    """Hand-build the schema instead of ``from_attributes`` because
-    document_count is not a column on the model — it comes from a joined
-    count in the service. Keeping this explicit avoids a future ORM
-    refactor accidentally hiding the missing field at runtime."""
+    """手工构造列表 DTO，而不是完全依赖 ``from_attributes``。
+
+    ``document_count`` 不是 KnowledgeBase 表字段，而是 service 层 join/count 算出来的。
+    显式构造可以避免未来 ORM 重构时误以为该字段会自动从模型上读到。
+    """
     return KnowledgeBaseListItem(
         id=kb.id,
         name=kb.name,
@@ -135,7 +136,7 @@ async def delete_knowledge_base(
     return Response(status_code=204)
 
 
-# ---------- Documents -----------------------------------------------------
+# ---------- 文档 ----------------------------------------------------------
 
 
 def _to_doc_list_item(doc: KnowledgeDocument) -> KnowledgeDocumentListItem:
@@ -164,8 +165,7 @@ async def list_documents(
     limit: ListLimit = 50,
     offset: ListOffset = 0,
 ) -> list[KnowledgeDocumentListItem]:
-    # 404 first if the KB isn't theirs — keeps document listing under the
-    # same ACL invariant as direct KB reads.
+    # 先校验知识库归属；文档列表和直接读取知识库必须遵守同一条 ACL 规则。
     await knowledge_service.get_knowledge_base_for_user_or_404(
         db, kb_id, current_user,
     )
@@ -204,8 +204,10 @@ async def upload_document(
 
 
 class _ManualDocumentBody(BaseModel):
-    """Inline schema for paste-text documents — kept local since it's the
-    only endpoint that needs it."""
+    """粘贴文本建档接口专用 schema。
+
+    只有这个 endpoint 需要它，放在本文件内能减少全局 schema 模块的噪声。
+    """
 
     title: str
     body: str
@@ -292,13 +294,11 @@ async def reindex_document(
     db: DbSession,
     current_user: CurrentUserDep,
 ) -> KnowledgeDocumentRead:
-    """Re-run chunking + embedding for a document.
+    """对文档重新执行切片和 embedding。
 
-    Common use: a previous run landed in ``status=failed`` (e.g. embedding
-    endpoint was misconfigured). After the user fixes config, this endpoint
-    drops the old chunks and re-indexes from scratch. Indexing runs
-    synchronously inside the request — see :mod:`knowledge_indexing_service`
-    for the state machine.
+    常见场景是上一次因为 embedding 配置缺失或供应商失败落到 ``status=failed``。
+    用户修复配置后调用这里，会删除旧 chunks 并从头索引。索引仍在请求内同步执行；
+    状态机细节见 :mod:`knowledge_indexing_service`。
     """
     doc = await knowledge_service.get_document_for_user_or_404(
         db, document_id, current_user,

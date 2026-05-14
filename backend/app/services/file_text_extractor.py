@@ -1,17 +1,14 @@
-"""Generic file → plain-text extraction.
+"""通用文件到纯文本的抽取模块。
 
-Supports PDF / DOCX / TXT / Markdown uploads. Used by both:
-- Resume upload (POST /api/v1/resumes/upload) — slice 7'a
-- Knowledge base document upload (POST /api/v1/knowledge/.../documents) — 7'c1
+当前支持 PDF / DOCX / TXT / Markdown 上传，被两类业务复用：
+- 简历上传（POST /api/v1/resumes/upload）：7'a
+- 知识库文档上传（POST /api/v1/knowledge/.../documents）：7'c1
 
-Scope intentionally small: text-only extraction. Scanned-image PDFs return
-empty / near-empty text; OCR fallback is deferred to a later slice. Encrypted
-files surface a friendly error to the caller.
+范围刻意保持小而清晰：只做文本抽取。扫描件 PDF 会得到空文本或接近空文本，
+OCR 兜底留到后续迭代；加密或损坏文件会向调用方返回可直接展示给用户的错误。
 
-The module is intentionally framework-agnostic — no FastAPI / SQLAlchemy
-imports. Callers catch :class:`FileExtractionError` and decide whether to
-map it to HTTP 400 (resumes / knowledge upload), a chat reply, or something
-else.
+本模块也刻意不绑定框架，不引 FastAPI / SQLAlchemy。调用方捕获
+:class:`FileExtractionError` 后，再自行决定映射为 HTTP 400、聊天回复或其他业务结果。
 """
 
 from __future__ import annotations
@@ -20,23 +17,21 @@ import io
 from dataclasses import dataclass
 
 
-# 5 MB cap — comfortably above a typical text-heavy resume (≈100 KB) and
-# most career-page PDFs. Bumped per-deployment via env later if real users
-# hit the wall.
+# 5 MB 上限已经明显高于常见纯文本简历（约 100 KB）和大多数招聘页面 PDF。
+# 如果真实用户频繁撞到这个限制，后续可以按部署环境改成 env 配置。
 MAX_FILE_BYTES = 5 * 1024 * 1024
 
-# Trimmed text shorter than this almost always means OCR-only PDFs, blank
-# files, or extraction failures masquerading as success. Surface the issue
-# so the user knows to retry with a text-bearing copy instead of moving on
-# to LLM parsing / chunking with garbage input.
+# 归一化后的文本如果短于这个阈值，通常意味着 OCR-only PDF、空文件，
+# 或“看似成功但实际没有抽到内容”的解析失败。这里尽早暴露问题，
+# 避免把垃圾输入继续送进 LLM 解析或 RAG 切片。
 MIN_EXTRACTED_CHARS = 30
 
 
 class FileExtractionError(Exception):
-    """Raised when we cannot reliably turn the upload into plain text.
+    """上传内容无法可靠转换为纯文本时抛出。
 
-    ``user_message`` is what the API echoes back — kept short and actionable
-    so the UI can show it verbatim without further translation.
+    ``user_message`` 会被 API 原样返回，因此保持短小、明确、可行动，
+    前端无需再做二次翻译即可展示。
     """
 
     def __init__(self, user_message: str) -> None:
@@ -55,11 +50,10 @@ def extract_text_from_upload(
     content_type: str | None,
     payload: bytes,
 ) -> ExtractedFile:
-    """Dispatch on file extension first, falling back to content_type.
+    """优先按文件扩展名分发，必要时再回落到 content_type。
 
-    Filename extension is more reliable than the browser-supplied MIME type
-    (which is often ``application/octet-stream`` for downloads). The
-    content_type is only consulted as a tie-breaker for extension-less files.
+    文件扩展名通常比浏览器提供的 MIME type 更可靠，下载文件尤其容易被标成
+    ``application/octet-stream``。因此 content_type 只作为无扩展名文件的兜底判断。
     """
     if len(payload) > MAX_FILE_BYTES:
         size_mb = MAX_FILE_BYTES // (1024 * 1024)
@@ -116,10 +110,10 @@ def extract_text_from_upload(
 
 
 def _extract_pdf(payload: bytes) -> str:
-    """Pull text out of a PDF using pdfplumber.
+    """使用 pdfplumber 从 PDF 中抽取文本。
 
-    Imported lazily so the rest of the backend doesn't pay the import cost
-    (pdfplumber pulls in pdfminer.six + pillow, ~50ms on first import).
+    这里采用懒加载，避免后端其他路径承担导入成本。pdfplumber 会连带导入
+    pdfminer.six 和 pillow，首次导入通常约几十毫秒。
     """
     import pdfplumber  # noqa: PLC0415 — lazy import for cold-start cost
 
@@ -135,11 +129,10 @@ def _extract_pdf(payload: bytes) -> str:
 
 
 def _extract_docx(payload: bytes) -> str:
-    """Pull text out of a DOCX using python-docx.
+    """使用 python-docx 从 DOCX 中抽取文本。
 
-    python-docx yields paragraphs in document order — we join them with
-    newlines so downstream consumers (LLM parsing, RAG chunking) see
-    structure roughly equivalent to "<body>".
+    python-docx 会按文档顺序返回段落；这里用换行拼接，让下游的 LLM 解析和
+    RAG 切片能看到接近正文结构的文本。
     """
     from docx import Document  # noqa: PLC0415 — lazy import
 
@@ -156,9 +149,9 @@ def _extract_docx(payload: bytes) -> str:
         if text:
             parts.append(text)
 
-    # Tables show up separately from paragraphs in python-docx; pull cell
-    # text out too so e.g. a resume that uses a side-bar table for skills,
-    # or a knowledge-base doc with structured info, isn't silently dropped.
+    # python-docx 会把表格和段落分开暴露，因此这里也抽取单元格文本。
+    # 很多简历会用侧边栏表格放技能，知识库文档也可能用表格承载结构化信息，
+    # 如果忽略表格就会静默丢失关键内容。
     for table in document.tables:
         for row in table.rows:
             cells = [(cell.text or "").strip() for cell in row.cells]
@@ -170,11 +163,10 @@ def _extract_docx(payload: bytes) -> str:
 
 
 def _decode_text(payload: bytes) -> str:
-    """Decode UTF-8 with a graceful fallback to GBK / UTF-16.
+    """优先按 UTF-8 解码，再温和回落到 GBK / UTF-16。
 
-    Most resumes / notes posted online are UTF-8 these days, but legacy
-    Windows exports from Chinese-locale machines can still be GBK; trying
-    a few common encodings keeps those users from hitting a wall.
+    现在大多数在线简历和笔记都是 UTF-8，但中文 Windows 环境导出的老文件
+    仍可能是 GBK。尝试几个常见编码，可以减少用户因为编码问题被挡住的概率。
     """
     for encoding in ("utf-8", "gbk", "utf-16"):
         try:
@@ -185,11 +177,10 @@ def _decode_text(payload: bytes) -> str:
 
 
 def _normalise_whitespace(text: str) -> str:
-    """Trim each line + collapse runs of blank lines.
+    """裁剪每行行尾空白，并压缩连续空行。
 
-    Token budget is precious; PDFs especially tend to insert empty lines
-    between every paragraph. Collapsing them costs nothing and shortens
-    downstream LLM prompts noticeably.
+    Token 预算很宝贵，PDF 尤其容易在段落之间插入大量空行。压缩这些空行不损失信息，
+    还能显著缩短下游 LLM prompt。
     """
     lines = [line.rstrip() for line in text.splitlines()]
     out: list[str] = []

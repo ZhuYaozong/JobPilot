@@ -1,13 +1,11 @@
-"""Pydantic schemas for /api/v1/knowledge.
+"""``/api/v1/knowledge`` 的 Pydantic schema。
 
-Three resource families:
-- KnowledgeBase  (container)
-- KnowledgeDocument  (a single uploaded doc inside a KB)
-- KnowledgeChunk  (preview-only — full list returned by document detail
-  endpoint in 7'c2; chunks are not user-creatable directly)
+这里有三类资源：
+- KnowledgeBase：知识库容器。
+- KnowledgeDocument：知识库里的单份文档。
+- KnowledgeChunk：只读预览对象，用户不能直接创建 chunk。
 
-The naming mirrors the existing resume / job schema modules so the API
-shape stays consistent.
+命名风格和 resume / job schema 保持一致，便于前端按相同方式组织 API 类型。
 """
 
 from datetime import datetime
@@ -16,7 +14,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 
-# ---------- Knowledge base ------------------------------------------------
+# ---------- 知识库 --------------------------------------------------------
 
 
 class KnowledgeBaseCreate(BaseModel):
@@ -36,8 +34,8 @@ class KnowledgeBaseListItem(BaseModel):
     name: str
     description: str | None
     status: str
-    # Convenience counter so the sidebar can show "N 份资料" without an
-    # extra round trip per KB. Populated by the service layer at read time.
+    # 便捷计数：侧栏展示“N 份资料”时不需要为每个知识库再发一次请求。
+    # 该字段由 service 层查询时填充，不是数据库列。
     document_count: int
     created_at: datetime
     updated_at: datetime
@@ -49,7 +47,7 @@ class KnowledgeBaseRead(KnowledgeBaseListItem):
     pass
 
 
-# ---------- Document ------------------------------------------------------
+# ---------- 文档 ----------------------------------------------------------
 
 
 class KnowledgeDocumentListItem(BaseModel):

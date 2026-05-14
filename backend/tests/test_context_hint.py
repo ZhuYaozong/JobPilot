@@ -1,7 +1,6 @@
-"""Verify that AssistantRunRequest.context flows into the decide prompt.
+"""验证 AssistantRunRequest.context 会进入 decide prompt。
 
-The hint is added as a labelled prefix to the workflow's user_text, so the
-LLM sees something like:
+上下文提示会作为带标签的前缀拼到 workflow 的 user_text 前面，因此 LLM 会看到类似：
 
     [当前上下文]
     - 简历:Backend Resume v2 (#7)
@@ -10,8 +9,7 @@ LLM sees something like:
     [用户问题]
     帮我分析匹配度
 
-The persisted user message in the database keeps just the clean question so
-the UI displays exactly what the user typed.
+数据库中持久化的用户消息只保留干净问题，确保 UI 展示的就是用户实际输入。
 """
 
 import asyncio
@@ -46,12 +44,10 @@ def _run(coro_factory: Callable[[AsyncSession], Any]) -> Any:
 def test_context_hint_appears_in_decide_prompt(
     client: TestClient, monkeypatch, test_marker: str,
 ) -> None:
-    """When the request carries context.resume_id + job_posting_id, the
-    decide prompt receives a [当前上下文] section with the human-readable
-    labels of both rows."""
+    """请求携带 context.resume_id + job_posting_id 时，decide prompt 应带上可读上下文。"""
     assert client.get("/health/db").status_code == 200
 
-    # Seed a resume and a job under the test user.
+    # 在 test 用户下预置一份简历和一个岗位。
     async def _seed(db: AsyncSession) -> tuple[int, int]:
         user = (
             await db.execute(select(User).where(User.username == "test"))
@@ -111,11 +107,10 @@ def test_context_hint_appears_in_decide_prompt(
     assert "MyHintRole" in decide_prompt
     assert f"#{job_id}" in decide_prompt
     assert "[用户问题]" in decide_prompt
-    # The original user question is still in the prompt (as the user-message
-    # section), even with the hint prepended.
+    # 即使前面拼了上下文提示，原始用户问题仍应出现在 prompt 的用户问题区段里。
     assert user_question in decide_prompt
 
-    # Persisted user message in DB is the original clean text — no hint.
+    # DB 中持久化的用户消息仍是原始干净文本，不包含上下文提示。
     conversation_id = response.json()["conversation_id"]
 
     async def _verify(db: AsyncSession) -> None:
@@ -136,8 +131,7 @@ def test_context_hint_appears_in_decide_prompt(
 def test_context_with_no_selection_produces_no_hint(
     client: TestClient, monkeypatch, test_marker: str,
 ) -> None:
-    """An empty context object (or None) must not introduce a [当前上下文]
-    block, so chat-only requests stay clean."""
+    """空 context 对象（或 None）不应引入 [当前上下文] 块，保持纯聊天请求干净。"""
     assert client.get("/health/db").status_code == 200
 
     seen_prompts: list[str] = []
@@ -167,8 +161,7 @@ def test_context_with_no_selection_produces_no_hint(
 def test_context_with_invalid_resume_id_silently_omits_hint(
     client: TestClient, monkeypatch, test_marker: str,
 ) -> None:
-    """If the UI sends a resume_id that doesn't belong to this user (or no
-    longer exists), we drop that line from the hint rather than failing."""
+    """UI 传入无权访问或不存在的 resume_id 时，应静默丢弃该上下文行而不是失败。"""
     assert client.get("/health/db").status_code == 200
 
     seen_prompts: list[str] = []
@@ -195,15 +188,14 @@ def test_context_with_invalid_resume_id_silently_omits_hint(
         None,
     )
     assert decide_prompt is not None
-    # All resolutions failed → no context block at all.
+    # 所有上下文解析都失败时，不应生成上下文块。
     assert "[当前上下文]" not in decide_prompt
 
 
 def test_context_hint_includes_selected_knowledge_base(
     client: TestClient, monkeypatch, test_marker: str,
 ) -> None:
-    """A selected knowledge base should reach the decide prompt as a clear
-    search_knowledge constraint while keeping the persisted message clean."""
+    """选中的知识库应进入 decide prompt 作为清晰检索约束，同时保持持久化消息干净。"""
     assert client.get("/health/db").status_code == 200
 
     async def _seed(db: AsyncSession) -> int:

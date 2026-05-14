@@ -19,14 +19,14 @@ ListLimit = Annotated[
     Query(
         ge=1,
         le=MAX_LIST_LIMIT,
-        description="Maximum number of recent-first records to return.",
+        description="返回最近优先记录的最大数量。",
     ),
 ]
 ListOffset = Annotated[
     int,
     Query(
         ge=0,
-        description="Zero-based offset applied after recent-first ordering.",
+        description="最近优先排序后的零基偏移量。",
     ),
 ]
 

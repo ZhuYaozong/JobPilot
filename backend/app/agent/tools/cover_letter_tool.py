@@ -1,11 +1,10 @@
 """把 cover_letter_service.generate_cover_letter 包装成 Agent 工具。
 
-中文说明：求职信生成会写入 GeneratedArtifact，因此属于动作工具。这里负责把
+求职信生成会写入 GeneratedArtifact，因此属于动作工具。这里负责把
 service 层 HTTPException 分类成 Agent 能继续处理的业务错或系统错。
 
-Mirrors MatchAnalysisTool's pattern: business errors come back as
-``{"ok": False, "error_class": ..., ...}`` so the LLM can react; system errors
-propagate as ``ToolSystemError`` to fail the agent run.
+这里沿用 MatchAnalysisTool 的模式：业务错误以 ``{"ok": False, "error_class": ..., ...}``
+返回，让 LLM 能继续引导用户；系统错误则抛出 ``ToolSystemError``，让本次 agent_run 失败。
 """
 
 from typing import Any, Literal
@@ -32,7 +31,7 @@ _BUSINESS_DETAIL_TO_ERROR_CLASS: dict[str, str] = {
     "Generated cover letter must contain Chinese content": "llm_output_missing_chinese",
 }
 
-# 中文说明：这些提示只给 LLM 看，帮助它把内部错误转成下一步建议，而不是暴露 error_class。
+# 这些提示只给 LLM 看，帮助它把内部错误转成下一步建议，而不是暴露 error_class。
 _BUSINESS_LLM_MESSAGES: dict[str, str] = {
     "resume_not_found": "请求的简历不存在；请让用户提供有效的 resume_id。",
     "job_posting_not_found": "请求的岗位不存在；请让用户提供有效的 job_posting_id。",
@@ -82,7 +81,7 @@ class CoverLetterTool(BaseTool):
         args: CoverLetterToolArgs,
         ctx: ToolContext,
     ) -> dict[str, Any]:
-        # 中文说明：application_record_id 是可选上下文，但如果传入会由 service 校验一致性。
+        # application_record_id 是可选上下文，但如果传入会由 service 校验一致性。
         request = CoverLetterGenerateRequest(
             resume_id=args.resume_id,
             job_posting_id=args.job_posting_id,
@@ -99,7 +98,7 @@ class CoverLetterTool(BaseTool):
         except HTTPException as exc:
             return self._http_exception_to_result(exc)
 
-        # 中文说明：返回 artifact_id 与正文，方便 format_response 直接告诉用户产物已生成。
+        # 返回 artifact_id 与正文，方便 format_response 直接告诉用户产物已生成。
         return {
             "ok": True,
             "data": {
@@ -121,7 +120,7 @@ class CoverLetterTool(BaseTool):
         error_class = _BUSINESS_DETAIL_TO_ERROR_CLASS.get(detail)
 
         if error_class is not None:
-            # 中文说明：已知业务错返回 ok=false，保留本轮对话继续收束的机会。
+            # 已知业务错返回 ok=false，保留本轮对话继续收束的机会。
             return {
                 "ok": False,
                 "error_class": error_class,
@@ -130,7 +129,7 @@ class CoverLetterTool(BaseTool):
             }
 
         if exc.status_code >= 500:
-            # 中文说明：模型服务不可用时失败 AgentRun，避免把基础设施问题伪装成用户可修复输入。
+            # 模型服务不可用时失败 AgentRun，避免把基础设施问题伪装成用户可修复输入。
             raise ToolSystemError(
                 self.name,
                 error_class="llm_unavailable" if exc.status_code == 502 else "llm_config_missing",

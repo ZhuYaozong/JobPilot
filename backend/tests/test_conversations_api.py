@@ -1,4 +1,4 @@
-"""GET /api/v1/conversations and /{id}/messages tests."""
+"""GET /api/v1/conversations 与 /{id}/messages 测试。"""
 
 import asyncio
 from typing import Any, Callable
@@ -54,9 +54,8 @@ async def _seed_conversation_with_messages(
 def test_list_conversations_returns_recent_first(
     client: TestClient, test_marker: str,
 ) -> None:
-    # Bump last_run_at on the seeded conversation so it ranks high enough
-    # to show up in the top-100 result regardless of how many older
-    # conversations the shared test DB has accumulated.
+    # 抬高预置会话的 last_run_at，让它在共享测试库积累很多旧会话时，
+    # 仍然能排进 top-100 结果。
     cid = _run(
         lambda db: _seed_conversation_with_recent_run(db, test_marker),
     )
@@ -157,7 +156,7 @@ def test_delete_conversation_cascades_messages(
 ) -> None:
     cid = _run(lambda db: _seed_conversation_with_messages(db, test_marker, 3))
 
-    # Sanity: messages exist before delete.
+    # 基础确认：删除前消息确实存在。
     pre = client.get(f"/api/v1/conversations/{cid}/messages")
     assert pre.status_code == 200
     assert len(pre.json()) == 3
@@ -165,8 +164,7 @@ def test_delete_conversation_cascades_messages(
     response = client.delete(f"/api/v1/conversations/{cid}")
     assert response.status_code == 204
 
-    # After delete the conversation is gone (404) and listing no longer
-    # surfaces it.
+    # 删除后会话应不存在（404），列表也不再展示它。
     post = client.get(f"/api/v1/conversations/{cid}/messages")
     assert post.status_code == 404
 
@@ -195,9 +193,7 @@ def test_delete_conversation_rejects_other_users(client: TestClient) -> None:
 def test_assistant_run_auto_titles_new_conversation_from_first_message(
     client: TestClient, monkeypatch, test_marker: str,
 ) -> None:
-    """The first user message of a freshly-created conversation should become
-    its title (truncated), replacing the old "新建对话 YYYY-MM-DD HH:MM"
-    placeholder."""
+    """新建会话的第一条用户消息应成为标题（截断后），替代旧的日期占位标题。"""
     from app.llm.client import LLMClient
     from tests.test_assistant_api import _make_fake_llm
 
@@ -209,8 +205,7 @@ def test_assistant_run_auto_titles_new_conversation_from_first_message(
         ),
     )
 
-    # Put the marker first so the truncated title (28-char cap) still keeps
-    # enough of the marker prefix for the assertion below.
+    # 把 marker 放在最前面，确保标题被 28 字符截断后仍保留足够前缀用于断言。
     first_question = f"{test_marker} 帮我看下今天该做什么"
     response = client.post(
         "/api/v1/assistant/run",
@@ -219,16 +214,14 @@ def test_assistant_run_auto_titles_new_conversation_from_first_message(
     assert response.status_code == 200
     conv_id = response.json()["conversation_id"]
 
-    # Look up the conversation directly by id rather than going through the
-    # listing endpoint — the shared test DB can hold more than 100 rows,
-    # which the listing's hard cap would otherwise hide.
+    # 直接按 id 查询会话，而不走列表 endpoint。共享测试库可能超过 100 行，
+    # 列表硬上限会把目标会话藏掉。
     title = _run(
         lambda db: _fetch_conversation_title(db, conv_id),
     )
     assert title is not None
-    # The title should reflect the user's question, not the date-stamped
-    # placeholder. test_marker is ~48 chars but the title caps at 28 + "…",
-    # so we only assert the stable "pytest-jobpilot-" prefix.
+    # 标题应反映用户问题，而不是带日期的占位标题。test_marker 约 48 字符，
+    # 标题上限是 28 + "…"，所以只断言稳定的 "pytest-jobpilot-" 前缀。
     assert "pytest-jobpilot-" in title
     assert "新建对话" not in title
 

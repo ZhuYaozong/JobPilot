@@ -1,4 +1,4 @@
-"""OpenAI-compatible Chat Completions 客户端。
+"""OpenAI 兼容的 Chat Completions 客户端。
 
 业务层只依赖这个很薄的封装：输入 prompt，返回纯文本 content。
 这样后续替换模型供应商时，不需要改解析、生成或 Agent workflow 代码。

@@ -28,9 +28,8 @@ export interface JobPostingCreate {
 
 export type JobPostingUpdate = Partial<JobPostingCreate>;
 
-/** Preview payload returned by POST /api/v1/jobs/fetch-from-url. Nothing is
- * persisted server-side; the frontend uses these fields to pre-fill the
- * create Drawer and the user submits a regular POST /jobs to save. */
+/** POST /api/v1/jobs/fetch-from-url 返回的预览载荷。服务端不会持久化这些内容；
+ * 前端只用它们预填创建抽屉，最终仍由用户提交常规 POST /jobs 保存。 */
 export interface JobURLFetchPreview {
   jd_text: string;
   title: string | null;

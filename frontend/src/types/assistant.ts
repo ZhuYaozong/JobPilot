@@ -73,9 +73,8 @@ export interface ConversationListItem {
 }
 
 /**
- * Phases the assistant moves through during a single turn. The streaming
- * endpoint emits one ``phase`` event per transition so the UI can keep the
- * typing indicator informative ("正在思考……" → "正在整理回答……").
+ * 助手单轮执行会经过的阶段。流式 endpoint 每次阶段切换都会发出一个
+ * ``phase`` 事件，前端据此让输入状态从“正在思考……”切换到“正在整理回答……”等文案。
  */
 export type AssistantPhase = "deciding" | "formatting" | "summarizing";
 

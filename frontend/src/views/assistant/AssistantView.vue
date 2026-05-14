@@ -94,7 +94,7 @@ import type { ResumeListItem } from "@/types/resume";
 import { formatRelativeTime } from "@/utils/format";
 import { getErrorMessage } from "@/utils/http";
 
-// --- Data state -------------------------------------------------------------
+// --- 数据状态 -------------------------------------------------------------
 
 const conversations = ref<ConversationListItem[]>([]);
 const conversationsLoading = ref(false);
@@ -108,17 +108,16 @@ const isRunning = ref(false);
 const lastError = ref<string | null>(null);
 const lastFailedUserText = ref<string | null>(null);
 
-// Streaming progress — driven by SSE events from /assistant/run-stream so the
-// MessageThread can show "正在思考……" / "正在查询岗位……" / "正在整理回答……"
-// instead of a single static placeholder for the whole turn.
+// 流式进度由 /assistant/run-stream 的 SSE 事件驱动，让 MessageThread 可以展示
+// “正在思考……”/“正在查询岗位……”/“正在整理回答……”等分阶段状态，
+// 而不是整轮对话只显示一个静态占位。
 const runningPhase = ref<AssistantPhase | null>(null);
 const runningTool = ref<string | null>(null);
-// Inline trace shown above the pending bubble while the turn is still
-// running. We replace it with the persisted tool_calls list from the final
-// agent_run once the message event arrives.
+// 本轮仍在运行时，待回复气泡上方显示的临时工具轨迹。
+// message 事件到达后，会用最终 agent_run 中持久化的 tool_calls 列表替换它。
 const liveToolTrace = ref<ToolCallTrace[]>([]);
 
-// Right-pane reference lists for the selectors.
+// 右侧选择器需要的参考列表。
 const resumes = ref<ResumeListItem[]>([]);
 const jobs = ref<JobPostingListItem[]>([]);
 const applications = ref<ApplicationRecordListItem[]>([]);
@@ -131,7 +130,7 @@ const contextApplicationId = ref<number | null>(null);
 const contextKnowledgeBaseId = ref<number | null>(null);
 const assistantMode = ref<AssistantMode>("chat");
 
-// --- Derived ----------------------------------------------------------------
+// --- 派生状态 ----------------------------------------------------------------
 
 const activeConversation = computed<ConversationListItem | null>(() =>
   conversations.value.find((c) => c.id === conversationId.value) ?? null,
@@ -203,7 +202,7 @@ interface PromptChip {
 }
 
 const suggestedPrompts = computed<PromptChip[]>(() => {
-  // Show empty when there are messages so prompts don't overlap the input.
+  // 已有消息时不显示建议 prompt，避免它们和输入区互相挤压。
   if (messages.value.length > 0) return [];
 
   const hasContext = !!(contextResumeId.value && contextJobId.value);
@@ -248,7 +247,7 @@ const suggestedPrompts = computed<PromptChip[]>(() => {
   ];
 });
 
-// --- Side effects -----------------------------------------------------------
+// --- 副作用 -----------------------------------------------------------
 
 watch(conversationId, async (newId) => {
   if (newId === null) {
@@ -259,16 +258,16 @@ watch(conversationId, async (newId) => {
   try {
     const fetched = await listMessages(newId);
     messages.value = fetched;
-    // tool_call traces are not in the messages payload; we lose them on
-    // reload. Slice 6 can stitch them back via /agent-runs if needed. For
-    // now leave the map empty so existing assistant messages show plain text.
+    // messages 载荷里没有 tool_call 轨迹，因此刷新后会丢失。
+    // 后续如果需要，可以通过 /agent-runs 再拼回来；当前先保持为空，
+    // 让既有助手消息只展示纯文本。
     toolCallsForRun.value = {};
   } catch (error) {
     ElMessage.error(getErrorMessage(error, "对话消息加载失败"));
   }
 });
 
-// --- Actions ----------------------------------------------------------------
+// --- 操作 ----------------------------------------------------------------
 
 function handleNewConversation() {
   conversationId.value = null;
@@ -301,15 +300,15 @@ async function handleRenameConversation(conv: ConversationListItem) {
     });
     nextTitle = result.value.trim();
   } catch {
-    return; // user cancelled
+    return; // 用户取消。
   }
 
   if (nextTitle === conv.title) return;
 
   try {
     const updated = await updateConversation(conv.id, { title: nextTitle });
-    // Patch the local list in-place so the sidebar updates without a full
-    // refetch — same trick as the optimistic update pattern in sendMessage.
+    // 原地更新本地列表，让侧边栏无需完整重新拉取也能立刻变化；
+    // 这和 sendMessage 里的 optimistic update 模式一致。
     const idx = conversations.value.findIndex((c) => c.id === updated.id);
     if (idx >= 0) {
       conversations.value.splice(idx, 1, updated);
@@ -340,8 +339,7 @@ async function handleDeleteConversation(conv: ConversationListItem) {
     conversations.value = conversations.value.filter((c) => c.id !== conv.id);
     ElMessage.success("对话已删除");
     if (conversationId.value === conv.id) {
-      // The active conversation is gone; reset to the new-conversation
-      // state so the user lands somewhere sane.
+      // 当前对话已被删除，重置到新对话态，避免用户停在不可用状态。
       handleNewConversation();
     }
   } catch (error) {
@@ -361,8 +359,7 @@ async function handleSend() {
 
 async function handleRetry() {
   if (!lastFailedUserText.value || isRunning.value) return;
-  // Drop the trailing optimistic user message from the failed attempt so
-  // retry doesn't echo the same prompt twice in the thread.
+  // 去掉上一次失败尝试留下的 optimistic 用户消息，避免重试时同一个 prompt 在对话里出现两次。
   for (let i = messages.value.length - 1; i >= 0; i -= 1) {
     if (messages.value[i].id < 0 && messages.value[i].role === "user") {
       messages.value.splice(i, 1);
@@ -372,8 +369,8 @@ async function handleRetry() {
   await sendMessage(lastFailedUserText.value);
 }
 
-// Negative ids identify optimistic (client-only) messages. They are replaced
-// by the server-issued message (positive id) once the run returns.
+// 负数 id 用来标识 optimistic（仅客户端存在）消息。
+// 服务端返回正数 id 的真实消息后会替换它们。
 let optimisticSeq = 0;
 
 function makeOptimisticUserMessage(content: string): MessageRead {
@@ -398,10 +395,8 @@ async function sendMessage(content: string) {
   runningTool.value = null;
   liveToolTrace.value = [];
 
-  // Optimistic echo: show the user's message in the thread immediately,
-  // before we wait on the backend. We replace it with the server-issued
-  // message once the started event arrives (or remove it if the request
-  // errors out).
+  // Optimistic 回显：不等后端返回，先把用户消息显示到对话线程里。
+  // started 事件到达后用服务端真实消息替换；请求失败时则保留它，方便用户重试。
   const optimistic = makeOptimisticUserMessage(content);
   messages.value.push(optimistic);
 
@@ -425,8 +420,7 @@ async function sendMessage(content: string) {
       {
         onStarted: (data) => {
           conversationId.value = data.conversation_id;
-          // Swap optimistic placeholder for the persisted user message
-          // in-place to preserve scroll position.
+          // 原地把 optimistic 占位替换成已持久化的用户消息，尽量保持滚动位置不跳。
           const idx = messages.value.findIndex((m) => m.id === optimistic.id);
           if (idx >= 0) {
             messages.value.splice(idx, 1, data.user_message);
@@ -436,8 +430,7 @@ async function sendMessage(content: string) {
         },
         onPhase: (data) => {
           runningPhase.value = data.phase;
-          // Leaving the "deciding" phase implies we're past tool selection
-          // for now — clear the live tool label.
+          // 离开 "deciding" 阶段说明本轮暂时已经过了工具选择，清掉实时工具标签。
           if (data.phase !== "deciding") {
             runningTool.value = null;
           }
@@ -445,9 +438,8 @@ async function sendMessage(content: string) {
         onToolCallStarted: (data) => {
           runningPhase.value = "deciding"; // status text now driven by tool
           runningTool.value = data.tool_name;
-          // Append a "running" entry to the live trace so the UI can show it
-          // immediately; ids are negative until we get the real ones back in
-          // the message event.
+          // 给实时轨迹追加一条 "running" 记录，让 UI 立刻显示工具调用。
+          // message 事件返回真实数据前，这些临时记录使用负数 id。
           liveToolTrace.value = [
             ...liveToolTrace.value,
             {
@@ -461,8 +453,7 @@ async function sendMessage(content: string) {
         },
         onToolCallCompleted: (data) => {
           runningTool.value = null;
-          // Mark the corresponding entry as success/failed so the trace
-          // shows a check / cross before the final message arrives.
+          // 把对应轨迹标记为 success/failed，让最终消息到达前也能先展示成功/失败状态。
           liveToolTrace.value = liveToolTrace.value.map((entry, index) => {
             if (index !== liveToolTrace.value.length - 1) return entry;
             if (entry.tool_name !== data.tool_name) return entry;
@@ -492,21 +483,19 @@ async function sendMessage(content: string) {
     );
 
     if (!receivedMessage && !lastError.value) {
-      // Stream ended cleanly but produced neither a message nor an error —
-      // shouldn't happen given the server always emits one or the other.
-      // Surface it explicitly so the user isn't left staring at a silent UI.
+      // 流式连接正常结束，但既没有 message 也没有 error。
+      // 按服务端契约这不应发生；这里显式报错，避免界面静默卡住。
       lastError.value = "Agent 没有返回结果";
       lastFailedUserText.value = content;
     }
 
     if (wasNew && conversationId.value !== null) {
-      // Refresh conversation list to surface the just-created one. Fire and
-      // forget; failures don't block the chat.
+      // 刷新对话列表，让刚创建的对话出现在侧边栏。
+      // 这里 fire-and-forget，失败不阻断当前聊天。
       void refreshConversations();
     }
   } catch (error) {
-    // Network/HTTP failure: keep the optimistic message visible so the user
-    // can retry, and surface the error inline.
+    // 网络或 HTTP 失败时保留 optimistic 消息，方便用户重试，并在界面内展示错误。
     const message = getErrorMessage(error, "Agent 调用失败");
     lastError.value = message;
     lastFailedUserText.value = content;
@@ -516,8 +505,8 @@ async function sendMessage(content: string) {
     runningPhase.value = null;
     runningTool.value = null;
     liveToolTrace.value = [];
-    // ``savedAgentRun`` is referenced only via ``toolCallsForRun`` which is
-    // already populated — but keep the local for future eslint friendliness.
+    // ``savedAgentRun`` 当前只通过已填充的 ``toolCallsForRun`` 间接体现；
+    // 保留这个局部变量，避免未来扩展时 eslint 处理更麻烦。
     void savedAgentRun;
   }
 }
@@ -526,8 +515,8 @@ function formatRunError(
   run: AgentRunSummary,
   errorClassOverride?: string | null,
 ): string {
-  // Prefer the SSE-supplied error_class because the agent_run row may not
-  // have been updated yet when the error event is emitted.
+  // 优先使用 SSE 事件携带的 error_class，因为 error 事件发出时
+  // agent_run 行可能还没来得及刷新到最新状态。
   const errorClass = errorClassOverride ?? run.error_class;
   if (errorClass === "llm_config_missing" || errorClass === "llm_unavailable") {
     return "模型暂时无法响应,稍后再试。";
@@ -544,7 +533,7 @@ function formatRunError(
   return "Agent 运行失败,请稍后重试。";
 }
 
-// --- Data loading -----------------------------------------------------------
+// --- 数据加载 -----------------------------------------------------------
 
 async function refreshConversations() {
   conversationsLoading.value = true;
