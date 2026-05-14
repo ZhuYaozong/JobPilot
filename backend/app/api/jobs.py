@@ -35,15 +35,12 @@ async def create_job(
 @router.post("/fetch-from-url", response_model=JobURLFetchPreview)
 async def fetch_job_from_url(
     payload: JobURLFetchRequest,
-    current_user: CurrentUserDep,  # noqa: ARG001 — required by deps for auth wall
+    current_user: CurrentUserDep,  # noqa: ARG001 — 依赖注入用于保持接口的用户边界。
 ) -> JobURLFetchPreview:
-    """Fetch JD content from a public URL and return a *preview* payload.
+    """从公开 URL 抓取 JD，并返回预览对象。
 
-    Nothing is persisted — the frontend uses this to pre-fill the create
-    Drawer's company / title / city / JD fields, and the user then submits
-    a regular POST /jobs to save. Keeping the two steps separate avoids
-    leaving partially-extracted garbage rows in the DB if the user backs
-    out after seeing wrong content.
+    这里不写数据库。前端只用结果预填创建抽屉里的公司、岗位、城市和 JD 字段；
+    用户确认后再走常规 POST /jobs 保存。拆成两步可以避免错误抽取留下半成品岗位行。
     """
     try:
         result = await fetch_jd_from_url(payload.url)

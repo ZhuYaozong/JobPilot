@@ -1,24 +1,15 @@
-"""System prompts used by the LangGraph workflow nodes.
+"""LangGraph workflow 各节点使用的 prompt 构造器。
 
-中文说明：本模块只负责构造 prompt 文本，不做模型调用和业务判断。
+本模块只负责构造 prompt 文本，不做模型调用和业务判断。
 这样 workflow 可以专注状态流转，prompt 也更容易在未来 eval 切片里独立迭代。
 
-Keeping prompts in their own module makes them easier to A/B test in a future
-evaluation slice and avoids cluttering the workflow code with multi-line
-strings.
+切片 4 之后，prompt 同时拼接最近对话 ``conversation_history`` 和长期摘要
+``existing_summary``，让 Agent 能跨轮理解“这个岗位”“上一版简历”等指代。
+``build_decide_repair_prompt`` 专门处理第一次 decide 输出坏 JSON / 坏 schema 的场景，
+它会把上次坏输出和解析错误一起给模型看，只允许一次自修复。``build_summarize_prompt``
+则把长对话压缩成未来 decide 可读的短摘要，避免每轮都塞完整 transcript。
 
-Slice 4 additions:
-- ``conversation_history`` (recent turns) and ``existing_summary`` (long-term
-  memory) are stitched into the decide and format_response prompts so the
-  agent has multi-turn context.
-- ``build_decide_repair_prompt`` runs after the first decide call produced
-  garbage. It re-shows the model the previous bad output plus the parser /
-  schema error.
-- ``build_summarize_prompt`` produces a compact memory summary that future
-  decide calls can read instead of the full transcript.
-
-Tool descriptions are pulled live from ``TOOL_REGISTRY`` so adding a tool in a
-later slice does not require editing this file.
+工具说明实时从 ``TOOL_REGISTRY`` 拉取，新增工具后不需要手工维护 prompt 里的工具清单。
 """
 
 import json
@@ -28,7 +19,7 @@ from app.agent.tools import TOOL_REGISTRY
 
 
 def _build_tools_section() -> str:
-    # 中文说明：工具说明实时从注册表生成，新增工具后不会忘记同步 prompt 的工具清单。
+    # 工具说明实时从注册表生成，新增工具后不会忘记同步 prompt 的工具清单。
     parts: list[str] = []
     for name, cls in TOOL_REGISTRY.items():
         args_schema = cls.args_schema.model_json_schema()
@@ -40,7 +31,7 @@ def _build_tools_section() -> str:
 
 
 def _format_history(history: Iterable[dict[str, str]]) -> str:
-    # 中文说明：把内部 role 映射成中文标签，让模型看到的对话上下文更贴近最终语言。
+    # 把内部 role 映射成中文标签，让模型看到的对话上下文更贴近最终语言。
     lines: list[str] = []
     for msg in history:
         role = msg.get("role", "user")
@@ -55,7 +46,7 @@ def _format_history(history: Iterable[dict[str, str]]) -> str:
 
 
 def _format_summary_section(existing_summary: str | None) -> str:
-    # 中文说明：摘要为空时完全不拼接该段，避免 prompt 里出现误导性的空标题。
+    # 摘要为空时完全不拼接该段，避免 prompt 里出现误导性的空标题。
     if not existing_summary:
         return ""
     return f"\n之前对话的摘要(过早的轮次已被压缩):\n{existing_summary}\n"
@@ -66,10 +57,9 @@ def _format_tool_call_history(
 ) -> str:
     """把本轮已经调用过的工具格式化给 decide 节点。
 
-    Each entry has keys ``tool``, ``args``, ``result``. Results may be large
-    structured dicts; we serialise them as JSON without truncation so the
-    LLM gets the full observation. If this turns out to push token usage too
-    high in production we can switch to a summarising serialiser.
+    每条记录包含 ``tool``、``args``、``result``。这里暂时不截断工具结果，确保模型
+    观察到完整事实；如果后续生产环境 token 压力变大，可以把这里替换成“保留关键字段 +
+    摘要长文本”的序列化器。
     """
     entries = list(tool_call_history)
     if not entries:
@@ -92,14 +82,14 @@ def build_decide_prompt(
     tool_call_history: Iterable[dict[str, Any]] | None = None,
     iterations_remaining: int | None = None,
 ) -> str:
-    # 中文说明：decide prompt 的输出必须是 JSON；workflow 后面会用 Pydantic 再兜底校验。
+    # decide prompt 的输出必须是 JSON；workflow 后面会用 Pydantic 再兜底校验。
     tools_section = _build_tools_section()
     summary_section = _format_summary_section(existing_summary)
     history_section = _format_history(history or [])
     tool_history_section = _format_tool_call_history(tool_call_history or [])
     budget_hint = ""
     if iterations_remaining is not None:
-        # 中文说明：把剩余预算显式告诉模型，可以减少最后一次还想继续 call_tool 的概率。
+        # 把剩余预算显式告诉模型，可以减少最后一次还想继续 call_tool 的概率。
         budget_hint = (
             f"\n本轮剩余工具调用次数: {iterations_remaining}。"
             f"如果剩余次数为 0 或 1,优先选 respond_directly,把目前的信息总结给用户。\n"
@@ -189,11 +179,10 @@ def build_format_response_prompt(
 ) -> str:
     """构造最终回复 prompt。
 
-    ``tool_call_history`` is the full list of tools invoked this turn (one or
-    more). The prompt emphasises that the LLM should synthesise across all of
-    them rather than narrating each call.
+    ``tool_call_history`` 是本轮调用过的完整工具列表。prompt 会强调“综合结果”，
+    避免模型把每个工具调用按流水账复述给用户。
     """
-    # 中文说明：format_response 只负责把工具观察结果转成用户可读中文，不再决定新工具。
+    # format_response 只负责把工具观察结果转成用户可读中文，不再决定新工具。
     history_section = _format_history(history or [])
     tool_history_section = _format_tool_call_history(tool_call_history)
     return f"""你是 JobPilot 的求职助手。本轮你为了回答用户的问题,调用了下面这些工具(可能不止一个)。
@@ -221,7 +210,7 @@ def build_format_response_prompt(
 
 
 def build_summarize_prompt(history: Iterable[dict[str, str]]) -> str:
-    # 中文说明：摘要只存事实和决策，避免把整段聊天原文继续塞回未来 prompt。
+    # 摘要只存事实和决策，避免把整段聊天原文继续塞回未来 prompt。
     history_section = _format_history(history)
     return f"""你是 JobPilot 的对话摘要生成器。下面是一段较长的求职助手对话历史。
 请把它压缩成一段**简洁的中文摘要**,捕获:

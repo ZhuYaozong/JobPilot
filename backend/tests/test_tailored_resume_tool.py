@@ -1,4 +1,4 @@
-"""Integration tests for TailoredResumeTool."""
+"""TailoredResumeTool 集成测试。"""
 
 import asyncio
 import json
@@ -195,4 +195,3 @@ def test_tailored_resume_tool_missing_match_returns_business_error(
         assert logs[0].error_class == "match_result_missing"
 
     _run(_scenario)
-

@@ -1,7 +1,7 @@
-"""Tests for /api/v1/knowledge — slice 7'c1 (data + upload, no embedding).
+"""/api/v1/knowledge 测试：7'c1 数据层 + 上传，不包含 embedding。
 
-Verifies the KB / document CRUD shape + ACL invariants. Indexing /
-embedding behaviour ships in slice 7'c2 and gets its own test file.
+验证知识库 / 文档 CRUD 形状与 ACL 不变量。索引 / embedding 行为在 7'c2 交付，
+并由独立测试文件覆盖。
 """
 
 import asyncio
@@ -41,7 +41,7 @@ def _build_docx_bytes(paragraphs: list[str]) -> bytes:
     return buf.getvalue()
 
 
-# ---------- KB CRUD -------------------------------------------------------
+# ---------- 知识库 CRUD -------------------------------------------------------
 
 
 def test_create_and_list_knowledge_base(
@@ -114,7 +114,7 @@ def test_delete_kb_cascades_documents_and_chunks(
         json={"name": f"{test_marker} cascade"},
     ).json()["id"]
 
-    # Upload a TXT document so we have a document row to cascade.
+    # 上传 TXT 文档，得到一行可用于级联删除验证的 document。
     upload_resp = client.post(
         f"/api/v1/knowledge/bases/{kb_id}/documents/upload",
         files={
@@ -128,13 +128,13 @@ def test_delete_kb_cascades_documents_and_chunks(
     assert upload_resp.status_code == 201
     doc_id = upload_resp.json()["id"]
 
-    # Manually insert a fake chunk so we can prove cascade also wipes chunks
-    # (slice 7'c1 doesn't run real indexing, so we backfill via DB write).
+    # 手工插入模拟 chunk，用来证明级联删除也会清理 chunks。
+    # 7'c1 不运行真实索引，因此这里直接写 DB 回填。
     async def _seed_chunk(db: AsyncSession) -> None:
         db.add(
             KnowledgeChunk(
                 document_id=doc_id,
-                user_id=upload_resp.json()["id"],  # any int is fine; we use doc_id-derived
+                user_id=upload_resp.json()["id"],  # 任意整数都可以；这里使用由 doc_id 派生的值。
                 chunk_index=0,
                 content="seed chunk",
                 embedding=None,
@@ -142,12 +142,12 @@ def test_delete_kb_cascades_documents_and_chunks(
                 char_end=10,
             ),
         )
-        # Pull the real user_id off the document and patch the row above —
-        # using doc_id as user_id worked by accident before, but be explicit.
+        # 从 document 上取真实 user_id 再 patch 上方行。以前把 doc_id 当 user_id
+        # 只是碰巧可用，这里显式写清楚。
         await db.flush()
         await db.commit()
 
-    # Find the user_id off the document row for the seeded chunk.
+    # 从 document 行读取 user_id，用于预置 chunk。
     async def _seed_chunk_correct(db: AsyncSession) -> int:
         doc = (
             await db.execute(
@@ -169,7 +169,7 @@ def test_delete_kb_cascades_documents_and_chunks(
 
     chunk_id = _run(_seed_chunk_correct)
 
-    # Delete the KB → expect doc and chunk both gone via ON DELETE CASCADE.
+    # 删除 KB 后，doc 和 chunk 都应通过 ON DELETE CASCADE 消失。
     del_resp = client.delete(f"/api/v1/knowledge/bases/{kb_id}")
     assert del_resp.status_code == 204
 
@@ -191,18 +191,17 @@ def test_delete_kb_cascades_documents_and_chunks(
     assert chunk_gone
 
 
-# ---------- Document upload ------------------------------------------------
+# ---------- 文档上传 ------------------------------------------------
 
 
 def test_upload_txt_creates_document_with_text_persisted(
     client: TestClient, test_marker: str,
 ) -> None:
-    """The data-layer guarantees: text is extracted, source_type/raw_text are
-    populated, and the row lands in a terminal status (ready / failed).
-    Whether indexing succeeds depends on whether the test environment has
-    an embedding endpoint configured — assertions are written so the row
-    contract holds in either case. Slice 7'c2's dedicated tests
-    (test_knowledge_indexing.py) verify the indexing pipeline itself."""
+    """验证数据层保证：文本会被抽取，source_type/raw_text 会被填充，行进入终态。
+
+    索引是否成功取决于测试环境是否配置了 embedding endpoint；这里的断言覆盖
+    ready / failed 两种终态。7'c2 的专门测试负责验证索引流水线本身。
+    """
     kb_id = client.post(
         "/api/v1/knowledge/bases",
         json={"name": f"{test_marker} upload"},
@@ -259,8 +258,7 @@ def test_upload_docx_extracts_paragraphs(
 def test_upload_dedups_same_file_in_same_kb(
     client: TestClient, test_marker: str,
 ) -> None:
-    """Uploading byte-identical content to the same KB should return the
-    existing document instead of creating a duplicate."""
+    """同一 KB 内上传字节完全相同的内容时，应返回已有文档而不是创建重复行。"""
     kb_id = client.post(
         "/api/v1/knowledge/bases",
         json={"name": f"{test_marker} dedup"},
@@ -301,9 +299,10 @@ def test_upload_rejects_oversized(
 def test_create_manual_document_persists_pasted_body(
     client: TestClient, test_marker: str,
 ) -> None:
-    """The /documents endpoint (vs /documents/upload) lets the user paste
-    a note instead of uploading a file. Same downstream shape; source_type
-    becomes ``manual``."""
+    """/documents endpoint 允许用户粘贴文本，而不是上传文件。
+
+    下游形状与上传一致，source_type 会变成 ``manual``。
+    """
     kb_id = client.post(
         "/api/v1/knowledge/bases",
         json={"name": f"{test_marker} manual"},
@@ -393,7 +392,7 @@ def test_delete_document_cascades_chunks(
 def test_list_documents_filters_by_kb(
     client: TestClient, test_marker: str,
 ) -> None:
-    """A document uploaded into KB A must not appear in KB B's listing."""
+    """上传到 KB A 的文档不应出现在 KB B 的列表里。"""
     kb_a = client.post(
         "/api/v1/knowledge/bases", json={"name": f"{test_marker} A"},
     ).json()["id"]

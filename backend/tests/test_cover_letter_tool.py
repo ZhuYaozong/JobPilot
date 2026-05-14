@@ -1,9 +1,7 @@
-"""Integration tests for CoverLetterTool.
+"""CoverLetterTool 集成测试。
 
-The underlying service is exercised end-to-end with a monkeypatched LLM.
-We assert that each business failure becomes an ``ok=False`` response with
-the right ``error_class``, and that infra failures bubble up as
-``ToolSystemError``.
+底层 service 会通过 monkeypatched LLM 端到端执行。这里断言每个业务失败都会变成带正确 ``error_class`` 的
+``ok=False`` 响应，而基础设施失败会冒泡为 ``ToolSystemError``。
 """
 
 import asyncio
@@ -58,7 +56,7 @@ async def _setup_environment(
     with_match: bool = True,
     resume_parsed: dict[str, Any] | None = _PARSED_RESUME,
 ) -> tuple[User, int, int, int, int | None]:
-    """Returns (user, agent_run_id, resume_id, job_id, match_id-or-None)."""
+    """返回 user、agent_run_id、resume_id、job_id，以及可选 match_id。"""
     user = (
         await db.execute(select(User).where(User.username == "test"))
     ).scalar_one()
@@ -206,8 +204,7 @@ def test_cover_letter_tool_unsupported_language_mode(
         )
         ctx = ToolContext(db=db, current_user=user, agent_run_id=agent_run_id)
 
-        # Pydantic args_schema only accepts "zh" | "bilingual", so the
-        # adapter raises a validation error before _execute runs.
+        # Pydantic args_schema 只接受 "zh" | "bilingual"，因此 adapter 会在 _execute 运行前抛参数校验错误。
         from app.agent.tool_adapter import ToolValidationError
 
         with pytest.raises(ToolValidationError):

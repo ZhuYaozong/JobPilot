@@ -1,12 +1,11 @@
 """把 match_analysis_service.analyze_match 包装成 Agent 工具。
 
-中文说明：这里不重新实现匹配分析，只把 HTTP/service 层的异常语义翻译成
+这里不重新实现匹配分析，只把 HTTP/service 层的异常语义翻译成
 Agent 能理解的三类结果：业务错返回 ok=false，系统错抛 ToolSystemError。
 
-The underlying service raises ``HTTPException`` for both business errors
-(404/400: resource missing, not parsed, schema mismatch) and infrastructure
-errors (500/502: LLM config missing, LLM network failure). We classify each
-case here so the agent layer can react accordingly.
+底层 service 会用 ``HTTPException`` 表达两类问题：404/400 代表资源缺失、未解析、
+schema 不匹配等业务前置条件；500/502 代表 LLM 配置或网络失败等基础设施问题。
+本工具按状态码和 detail 做分类，让 Agent 层能走正确分支。
 """
 
 from typing import Any
@@ -20,10 +19,9 @@ from app.schemas.match_analysis import MatchAnalysisRequest
 from app.services.match_analysis_service import analyze_match
 
 
-# 中文说明：业务 service 的 detail 是错误分类入口，修改 service 文案时必须同步测试。
-# Detail strings come from match_analysis_service.analyze_match. We pin them
-# here so a future copy-edit in the service does not silently break agent
-# error classification — the test suite will fail if these drift.
+# 业务 service 的 detail 是错误分类入口，修改 service 文案时必须同步测试。
+# 这些 detail 来自 match_analysis_service.analyze_match；这里显式固定映射关系，
+# 防止未来随手改 service 文案时悄悄打破 Agent 的错误分类，测试会帮我们兜住漂移。
 _BUSINESS_DETAIL_TO_ERROR_CLASS: dict[str, str] = {
     "Resume not found": "resume_not_found",
     "Job posting not found": "job_posting_not_found",
@@ -74,7 +72,7 @@ class MatchAnalysisTool(BaseTool):
         args: MatchAnalysisToolArgs,
         ctx: ToolContext,
     ) -> dict[str, Any]:
-        # 中文说明：工具层把 Pydantic args 转成 service request，真实校验仍由 service 完成。
+        # 工具层把 Pydantic args 转成 service request，真实校验仍由 service 完成。
         request = MatchAnalysisRequest(
             resume_id=args.resume_id,
             job_posting_id=args.job_posting_id,
@@ -89,7 +87,7 @@ class MatchAnalysisTool(BaseTool):
         except HTTPException as exc:
             return self._http_exception_to_result(exc)
 
-        # 中文说明：只返回 Agent 后续生成回复需要的结构化字段，不返回 ORM 对象。
+        # 只返回 Agent 后续生成回复需要的结构化字段，不返回 ORM 对象。
         return {
             "ok": True,
             "data": {
@@ -109,7 +107,7 @@ class MatchAnalysisTool(BaseTool):
         error_class = _BUSINESS_DETAIL_TO_ERROR_CLASS.get(detail)
 
         if error_class is not None:
-            # 中文说明：已知 4xx/输出校验类错误让模型以用户友好方式解释或引导下一步。
+            # 已知 4xx/输出校验类错误让模型以用户友好方式解释或引导下一步。
             return {
                 "ok": False,
                 "error_class": error_class,
@@ -117,8 +115,8 @@ class MatchAnalysisTool(BaseTool):
                 "user_facing_detail": detail,
             }
 
-        # 中文说明：LLM 配置或远端失败不是模型换参数能解决的，升级为系统错误。
-        # 500 LLM config / 502 LLM call — not LLM-fixable, treat as system.
+        # LLM 配置或远端失败不是模型换参数能解决的，升级为系统错误。
+        # 500 多为配置缺失，502 多为模型调用失败；两者都交给 workflow 标记 failed。
         if exc.status_code >= 500:
             raise ToolSystemError(
                 self.name,
@@ -126,8 +124,8 @@ class MatchAnalysisTool(BaseTool):
                 detail=detail,
             )
 
-        # 中文说明：未知 4xx 保守当业务错返回，避免单个新 detail 让整轮 Agent 崩溃。
-        # Unknown 4xx — surface as generic business error rather than crash.
+        # 未知 4xx 保守当业务错返回，避免单个新 detail 让整轮 Agent 崩溃。
+        # 这样新增 service 业务错误时，即使还没扩充映射，也不会让整轮对话直接失败。
         return {
             "ok": False,
             "error_class": "unknown_business_error",

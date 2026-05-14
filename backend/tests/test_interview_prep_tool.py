@@ -1,7 +1,7 @@
-"""Integration tests for InterviewPrepTool.
+"""InterviewPrepTool 集成测试。
 
-Mirrors test_cover_letter_tool.py — same end-to-end pattern but exercises
-interview_prep_service through the agent adapter.
+整体模式对齐 test_cover_letter_tool.py，但这里通过 agent adapter 覆盖
+interview_prep_service。
 """
 
 import asyncio

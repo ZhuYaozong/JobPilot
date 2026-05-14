@@ -27,7 +27,7 @@ export function formatSourceType(value: string | null | undefined): string {
     upload: "上传",
     manual: "手动录入",
     imported: "导入",
-    // Source types emitted by the file-upload extractor (slice 7'a).
+    // 文件上传抽取器（7'a）产出的 source_type。
     pdf: "PDF 上传",
     docx: "Word 上传",
     text: "TXT 上传",
@@ -108,10 +108,9 @@ export function formatOperatorType(value: string | null | undefined): string {
   });
 }
 
-// User-facing names for the agent's tool calls. The backend tool name (e.g.
-// "list_user_jobs") is technical; for the message trace we want something
-// readable. Display + icon both live here so a future redesign only touches
-// this file.
+// Agent 工具调用在前端展示给用户看的名称。后端工具名（例如 "list_user_jobs"）
+// 偏技术化，消息轨迹里需要更易读的中文文案。展示名和图标都放在这里，
+// 以后重设计工具轨迹时只需要改这个文件。
 export interface ToolDisplay {
   label: string;
   icon: string;

@@ -1,4 +1,4 @@
-"""Pydantic schemas will live here when the API grows."""
+"""Pydantic schema 包。"""
 from app.schemas.application_record import (
     ApplicationRecordCreate,
     ApplicationRecordListItem,

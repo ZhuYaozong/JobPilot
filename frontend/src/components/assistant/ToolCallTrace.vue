@@ -44,9 +44,8 @@ function formatLatency(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
-// Subset of error classes worth surfacing in plain language. Anything not
-// in the map is shown as the raw error_class — that should never happen in
-// practice but is a safe fallback.
+// 只把值得用自然语言解释的 error_class 放进映射表。
+// 不在表里的值会展示原始 error_class；正常不应发生，但这是一个安全兜底。
 const ERROR_LABELS: Record<string, string> = {
   resume_not_found: "简历不存在",
   job_posting_not_found: "岗位不存在",

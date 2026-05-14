@@ -79,7 +79,7 @@ function emitSend() {
 function onKeydown(event: KeyboardEvent) {
   if (event.key !== "Enter") return;
   if (event.shiftKey) return;
-  // IME composition: don't submit on Enter while composing.
+  // IME 组词中按 Enter 不提交，避免中文输入法误触发送。
   if (event.isComposing) return;
   event.preventDefault();
   emitSend();

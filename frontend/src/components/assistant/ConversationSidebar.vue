@@ -222,9 +222,8 @@ function truncateTitle(title: string): string {
   text-transform: uppercase;
 }
 
-/* Item is a flex row: clickable main on the left + hover-revealed actions
-   on the right. Using a real <button> for the main area means keyboard
-   focus + activation still work; actions sit as sibling buttons. */
+/* 条目是横向 flex：左侧是可点击主体，右侧是 hover 后显示的操作。
+   主体使用真实 <button>，因此键盘聚焦和激活仍然可用；操作按钮作为兄弟节点放置。 */
 .conv-item {
   position: relative;
   display: flex;

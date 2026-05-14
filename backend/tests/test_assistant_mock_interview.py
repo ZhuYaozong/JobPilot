@@ -1,10 +1,8 @@
-"""Assistant mock-interview mode tests.
+"""Assistant 模拟面试模式测试。
 
-The mock interview is intentionally built on the existing Assistant ReAct loop
-rather than a separate interview-session table. These tests pin the two core
-contracts: the mode reaches the decide prompt, and a prepared run can chain
-match analysis, interview prep, and knowledge search before asking one
-interactive question.
+模拟面试刻意复用现有 Assistant ReAct 循环，而不是新增独立 interview-session 表。
+这些测试固定两个核心契约：该模式会进入 decide prompt；准备充分的一轮可以先串联
+匹配分析、面试准备和知识库搜索，再提出一个互动问题。
 """
 
 import asyncio

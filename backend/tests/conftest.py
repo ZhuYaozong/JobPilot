@@ -23,10 +23,9 @@ def client() -> TestClient:
 
 
 def _run_with_fresh_engine(work: Callable[[AsyncSession], Any]) -> None:
-    # TestClient drives each request on its own event loop, and the global
-    # async engine binds asyncpg connections to whichever loop first used
-    # them. To avoid "Future attached to a different loop" inside test
-    # fixtures, spin up a disposable NullPool engine per call.
+    # TestClient 会在各自的事件循环里驱动每个请求，而全局 async engine 会把 asyncpg
+    # 连接绑定到第一次使用它的事件循环。为了避免测试 fixture 中出现
+    # “Future attached to a different loop”，这里每次调用都创建一次一次性 NullPool engine。
     async def _do() -> None:
         engine = create_async_engine(settings.database_url, poolclass=NullPool)
         try:
@@ -40,10 +39,10 @@ def _run_with_fresh_engine(work: Callable[[AsyncSession], Any]) -> None:
 
 @pytest.fixture
 def set_resume_parsed_data() -> Callable[[int, dict[str, Any], str], None]:
-    """Write parsed_json/parse_status directly to a resume row.
+    """直接把 parsed_json / parse_status 写入简历行。
 
-    Create/Update schemas intentionally do not accept these server-managed fields,
-    so tests that need pre-parsed resume data bypass the API and patch the DB.
+    Create/Update schema 刻意不接收这些服务端管理字段，因此需要预置已解析简历数据的测试
+    会绕过 API，直接 patch 数据库。
     """
 
     def _set(
@@ -65,8 +64,7 @@ def set_resume_parsed_data() -> Callable[[int, dict[str, Any], str], None]:
 
 @pytest.fixture
 def set_job_parsed_data() -> Callable[[int, dict[str, Any]], None]:
-    """Write parsed_json directly to a job posting row, for the same reason as
-    set_resume_parsed_data."""
+    """基于同样原因，直接把 parsed_json 写入岗位行。"""
 
     def _set(job_id: int, parsed_json: dict[str, Any]) -> None:
         async def _work(db: AsyncSession) -> None:

@@ -11,15 +11,12 @@ from app.db.base import Base
 
 
 class KnowledgeChunk(Base):
-    """A single embedded slice of a knowledge document.
+    """知识库文档切片及其向量。
 
-    Designed for fast user-scoped vector search:
-    - ``user_id`` is denormalised from the parent document so the search
-      query can filter on a single column before the ANN scan.
-    - ``embedding`` is a fixed-dimension pgvector column; the dim comes
-      from settings.embedding_dimensions at module import time, so changing
-      the embedding model requires a migration (intentional — we don't
-      want silent dim mismatches at runtime).
+    这个表面向用户内的快速向量检索：
+    - ``user_id`` 从父文档冗余下来，ANN 检索前可以先按单列过滤用户边界。
+    - ``embedding`` 是固定维度 pgvector 列，维度在模块导入时读取配置；更换 embedding
+      模型需要 migration，这是有意设计，避免运行时静默写入维度不一致的向量。
     """
 
     __tablename__ = "knowledge_chunks"
@@ -38,8 +35,7 @@ class KnowledgeChunk(Base):
     embedding: Mapped[list[float] | None] = mapped_column(
         Vector(settings.embedding_dimensions),
     )
-    # Position in the source document — used to show "原文片段" with a bit
-    # of surrounding context when rendering hits in the assistant chat.
+    # 原文偏移，用于在 Assistant 命中来源里展示“原文片段”和周边上下文。
     char_start: Mapped[int] = mapped_column(Integer)
     char_end: Mapped[int] = mapped_column(Integer)
     extra_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB)

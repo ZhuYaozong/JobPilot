@@ -27,8 +27,8 @@ class Message(Base):
     role: Mapped[str] = mapped_column(String(20))
     content: Mapped[str] = mapped_column(Text)
     content_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
-    # FK target is declared via the migration's post-create ALTER step to avoid the
-    # circular dependency with agent_runs.trigger_message_id.
+    # 这个外键目标在 migration 的表创建后 ALTER 添加，用来避开 agent_runs.trigger_message_id
+    # 与 messages.agent_run_id 之间的循环依赖。
     agent_run_id: Mapped[int | None] = mapped_column(Integer, index=True)
     sequence_no: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(

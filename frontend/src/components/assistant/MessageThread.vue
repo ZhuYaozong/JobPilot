@@ -70,10 +70,9 @@ interface Props {
   toolCallsForRun: Record<number, ToolCallTraceItem[]>;
   isRunning: boolean;
   lastError: string | null;
-  // Streaming progress driven by SSE events. ``runningPhase`` is the
-  // current node label; ``runningTool`` is the tool name when call_tool is
-  // mid-flight; ``liveToolTrace`` is the per-iteration trace shown above
-  // the typing indicator while the turn is still running.
+  // 由 SSE 事件驱动的流式进度。``runningPhase`` 是当前节点标签；
+  // ``runningTool`` 是 call_tool 正在执行时的工具名；
+  // ``liveToolTrace`` 是本轮仍在运行时展示在输入状态上方的逐轮工具轨迹。
   runningPhase?: AssistantPhase | null;
   runningTool?: string | null;
   liveToolTrace?: ToolCallTraceItem[];

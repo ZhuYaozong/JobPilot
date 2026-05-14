@@ -1,10 +1,10 @@
-"""Smoke test for the agent-workflow data skeleton.
+"""Agent 工作流数据骨架的冒烟测试。
 
-Slice 1 only ships tables, models, and schemas — no API, no service layer.
-This test proves that a full conversation → message → agent_run → tool_call_log →
-memory_summary chain can be inserted via the ORM, that FK constraints hold, and
-that the UNIQUE constraints (messages.sequence_no per conversation,
-memory_summaries.conversation_id) are enforced.
+第 1 刀只交付表、模型和 schema，不包含 API 或 service 层。
+这个测试验证完整的 conversation → message → agent_run → tool_call_log →
+memory_summary 链路可以通过 ORM 写入，外键约束生效，并且 UNIQUE 约束
+（每个 conversation 内的 messages.sequence_no、memory_summaries.conversation_id）
+会被数据库执行。
 """
 
 import asyncio
@@ -27,9 +27,8 @@ from app.models.user import User
 
 
 async def _get_test_user_id(db: AsyncSession) -> int:
-    # The test user is created by the X-User-Name=test middleware on first
-    # request; trigger that path through any cheap endpoint before this test
-    # runs, or just create it directly here.
+    # test 用户通常由 X-User-Name=test 中间件在首次请求时创建；
+    # 这里直接兜底创建，避免测试依赖某个便宜 endpoint 先跑过。
     result = await db.execute(select(User).where(User.username == "test"))
     user = result.scalar_one_or_none()
     if user is not None:
@@ -54,7 +53,7 @@ def _run_async(coro_factory) -> None:
 
 
 def test_full_agent_workflow_chain_round_trip(client: TestClient) -> None:
-    # Ensure the "test" user exists by going through the API once.
+    # 先走一次 API，确保 "test" 用户已存在。
     health = client.get("/health/db")
     assert health.status_code == 200
 
@@ -133,7 +132,7 @@ def test_full_agent_workflow_chain_round_trip(client: TestClient) -> None:
 
     _run_async(_scenario)
 
-    # Re-read everything in a fresh session and assert the chain holds.
+    # 用全新 session 重新读取所有对象，确认整条链路仍然成立。
     async def _verify(db: AsyncSession) -> None:
         conversation = await db.get(Conversation, created_ids["conversation_id"])
         assert conversation is not None
@@ -165,7 +164,7 @@ def test_full_agent_workflow_chain_round_trip(client: TestClient) -> None:
 
     _run_async(_verify)
 
-    # UNIQUE(conversation_id, sequence_no) on messages should reject duplicates.
+    # messages 上的 UNIQUE(conversation_id, sequence_no) 应拒绝重复序号。
     async def _expect_message_unique_violation(db: AsyncSession) -> None:
         user_id = await _get_test_user_id(db)
         duplicate = Message(
@@ -181,7 +180,7 @@ def test_full_agent_workflow_chain_round_trip(client: TestClient) -> None:
 
     _run_async(_expect_message_unique_violation)
 
-    # UNIQUE(conversation_id) on memory_summaries should reject duplicates.
+    # memory_summaries 上的 UNIQUE(conversation_id) 应拒绝重复摘要。
     async def _expect_summary_unique_violation(db: AsyncSession) -> None:
         user_id = await _get_test_user_id(db)
         duplicate = MemorySummary(

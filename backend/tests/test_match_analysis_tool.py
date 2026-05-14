@@ -1,8 +1,7 @@
-"""Integration tests for the MatchAnalysisTool adapter.
+"""MatchAnalysisTool adapter 集成测试。
 
-Exercises the real analyze_match service end-to-end (with the LLM monkeypatched)
-and asserts that each failure mode the service can produce gets classified
-correctly and recorded in tool_call_logs.
+端到端覆盖真实 analyze_match service（LLM 通过 monkeypatch 替换），并断言
+service 可能产生的每种失败模式都会被正确分类并记录到 tool_call_logs。
 """
 
 import asyncio
@@ -65,8 +64,7 @@ async def _setup_environment(
     resume_parsed: dict[str, Any] | None = _FAKE_PARSED_RESUME,
     job_parsed: dict[str, Any] | None = _FAKE_PARSED_JOB,
 ) -> tuple[User, int, int, int]:
-    """Create user/conversation/agent_run plus a Resume and JobPosting that
-    the tool can reference. Returns user, agent_run_id, resume_id, job_id."""
+    """创建工具可引用的 user / conversation / agent_run / Resume / JobPosting。"""
     user = (
         await db.execute(select(User).where(User.username == "test"))
     ).scalar_one()
@@ -160,7 +158,7 @@ def test_match_analysis_tool_happy_path(
         assert data["resume_id"] == resume_id
         assert data["job_posting_id"] == job_id
 
-        # MatchResult row was actually persisted by the service.
+        # service 应确实持久化 MatchResult 行。
         persisted = await db.get(MatchResult, data["match_id"])
         assert persisted is not None
         assert persisted.overall_score == 81

@@ -1,4 +1,4 @@
-"""Tests for the OpenAI-compatible embedding client."""
+"""OpenAI 兼容 embedding client 测试。"""
 
 import asyncio
 import json

@@ -1,12 +1,11 @@
-"""ReAct multi-tool loop tests.
+"""ReAct 多工具循环测试。
 
-We drive the LangGraph workflow directly (no HTTP). A stateful fake LLM lets
-us script the decide sequence so we can verify three behaviours:
+这里直接驱动 LangGraph workflow，不经过 HTTP 层。带状态的模拟 LLM 可以按脚本控制 decide 序列，
+从而验证三类行为：
 
-1. The agent can chain multiple read+action tools in a single turn.
-2. ``tool_call_history`` accumulates entries in order.
-3. ``MAX_TOOL_ITERATIONS`` (=3) forces format_response after the cap, even if
-   decide keeps wanting to call tools.
+1. Agent 能在单轮对话里串联多个读取/动作工具。
+2. ``tool_call_history`` 会按顺序累积条目。
+3. 即使 decide 一直想继续调用工具，``MAX_TOOL_ITERATIONS`` (=3) 到达上限后也会强制进入 format_response。
 """
 
 import asyncio
@@ -86,28 +85,28 @@ def _initial_state(user_id, agent_run_id, conversation_id, user_text):
 def test_react_loop_chains_two_tools_then_responds(
     client: TestClient, monkeypatch, test_marker: str,
 ) -> None:
-    """First decide picks list_user_jobs, second decide picks
-    respond_directly using the discovered job id. Verify both tool calls
-    are recorded in tool_call_history."""
+    """第一次 decide 选择 list_user_jobs，第二次 decide 基于发现的岗位信息选择 respond_directly。
+
+    同时验证工具调用会被记录到 tool_call_history。
+    """
     assert client.get("/health/db").status_code == 200
 
     decide_calls = {"n": 0}
 
-    # We populate a job ahead of time so list_user_jobs returns something.
+    # 提前放入一个岗位，确保 list_user_jobs 能返回数据。
     job_id_holder: dict[str, int] = {}
 
     async def fake_llm(self, prompt: str) -> str:
         if "请严格按以下两种 JSON 之一回复" in prompt:
             decide_calls["n"] += 1
             if decide_calls["n"] == 1:
-                # First decide: ask to list jobs
+                # 第一次 decide：要求列出岗位。
                 return (
                     '{"action": "call_tool", "tool": "list_user_jobs",'
                     f' "args": {{"query": "{test_marker}"}}}}'
                 )
-            # Subsequent decide(s): the LLM has seen list_user_jobs result,
-            # responds with a friendly message that mentions the count.
-            assert "list_user_jobs" in prompt  # the history section
+            # 后续 decide：LLM 已看到 list_user_jobs 结果，因此用友好的消息回复。
+            assert "list_user_jobs" in prompt  # 历史区段。
             return (
                 '{"action": "respond_directly",'
                 ' "text": "我看到了你保存的岗位。"}'
@@ -120,7 +119,7 @@ def test_react_loop_chains_two_tools_then_responds(
 
     async def _scenario(db: AsyncSession) -> None:
         user, agent_run_id, conversation_id = await _setup_run(db, test_marker)
-        # Seed a single job under this user so list_user_jobs has something.
+        # 在当前用户下预置一个岗位，让 list_user_jobs 有内容可返回。
         job = JobPosting(
             user_id=user.id,
             company_name=f"{test_marker} TencentCo",
@@ -144,8 +143,7 @@ def test_react_loop_chains_two_tools_then_responds(
         assert final_state.get("decide_error_class") is None
         assert final_state.get("final_text") == "我看到了你保存的岗位。"
 
-        # tool_call_history should have exactly one entry (the list_user_jobs
-        # call). The follow-up decide chose respond_directly.
+        # tool_call_history 应只有一条记录（list_user_jobs 调用），因为后续 decide 选择了 respond_directly。
         history = final_state.get("tool_call_history") or []
         assert len(history) == 1
         assert history[0]["tool"] == "list_user_jobs"
@@ -158,9 +156,10 @@ def test_react_loop_chains_two_tools_then_responds(
 def test_react_loop_hits_max_iterations_and_forces_format_response(
     client: TestClient, monkeypatch, test_marker: str,
 ) -> None:
-    """If decide keeps picking call_tool, ``MAX_TOOL_ITERATIONS`` forces the
-    workflow into format_response after the cap. Verify the LLM sees the
-    final-response prompt and the tool history is full."""
+    """如果 decide 持续选择 call_tool，``MAX_TOOL_ITERATIONS`` 会在达到上限后强制 workflow 进入 format_response。
+
+    同时验证 LLM 能看到最终回复 prompt，且工具历史已达到上限。
+    """
     assert client.get("/health/db").status_code == 200
 
     decide_calls = {"n": 0}
@@ -169,7 +168,7 @@ def test_react_loop_hits_max_iterations_and_forces_format_response(
     async def fake_llm(self, prompt: str) -> str:
         if "请严格按以下两种 JSON 之一回复" in prompt:
             decide_calls["n"] += 1
-            # Always pick list_user_jobs — agent never volunteers to stop.
+            # 始终选择 list_user_jobs，模拟 Agent 不主动停止的情况。
             return (
                 '{"action": "call_tool", "tool": "list_user_jobs",'
                 f' "args": {{"query": "{test_marker}-iter-{decide_calls["n"]}"}}}}'
@@ -191,8 +190,7 @@ def test_react_loop_hits_max_iterations_and_forces_format_response(
             ),
         )
 
-        # Workflow ran exactly MAX_TOOL_ITERATIONS tool calls then forced
-        # format_response.
+        # Workflow 正好执行 MAX_TOOL_ITERATIONS 次工具调用后，强制进入 format_response。
         history = final_state.get("tool_call_history") or []
         assert len(history) == MAX_TOOL_ITERATIONS
         assert final_state.get("iteration_count") == MAX_TOOL_ITERATIONS
@@ -205,7 +203,7 @@ def test_react_loop_hits_max_iterations_and_forces_format_response(
 def test_react_loop_zero_tools_when_decide_responds_directly_first(
     client: TestClient, monkeypatch, test_marker: str,
 ) -> None:
-    """Sanity check: pure chat path stays single-decide, zero tool calls."""
+    """基础确认：纯聊天路径只执行一次 decide，且不调用工具。"""
     assert client.get("/health/db").status_code == 200
 
     decide_calls = {"n": 0}

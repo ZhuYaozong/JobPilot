@@ -1,6 +1,6 @@
 <template>
   <div class="matches">
-    <!-- ========== Page header ========== -->
+    <!-- ========== 页面头部 ========== -->
     <header class="page-head">
       <div>
         <p class="page-head__eyebrow">岗位与简历匹配度</p>
@@ -26,9 +26,9 @@
       </div>
     </header>
 
-    <!-- ========== Two-column workspace ========== -->
+    <!-- ========== 双栏工作区 ========== -->
     <div class="workspace">
-      <!-- ---------- List ---------- -->
+      <!-- ---------- 列表 ---------- -->
       <aside class="list-pane">
         <header class="list-pane__head">
           <h2>最近匹配</h2>
@@ -78,7 +78,7 @@
         </div>
       </aside>
 
-      <!-- ---------- Detail ---------- -->
+      <!-- ---------- 详情 ---------- -->
       <main class="detail-pane">
         <div v-if="detailLoading" class="detail-loading">
           <div class="detail-loading__spinner" />
@@ -92,7 +92,7 @@
         </div>
 
         <article v-else class="detail">
-          <!-- Hero: progress ring + key info + actions -->
+          <!-- 主视觉：进度环 + 关键信息 + 操作 -->
           <section class="hero">
             <div class="hero__ring-wrap">
               <svg class="hero__ring" :viewBox="`0 0 ${ringSize} ${ringSize}`">
@@ -174,7 +174,7 @@
             </div>
           </section>
 
-          <!-- Four-color result cards -->
+          <!-- 四色结果卡片 -->
           <section class="result-grid">
             <article
               v-for="section in matchSections"
@@ -194,7 +194,7 @@
             </article>
           </section>
 
-          <!-- Recent materials -->
+          <!-- 最近生成材料 -->
           <section class="block">
             <header class="block__head">
               <h3>这次匹配生成的材料</h3>
@@ -223,7 +223,7 @@
       </main>
     </div>
 
-    <!-- ========== Analyze drawer ========== -->
+    <!-- ========== 分析抽屉 ========== -->
     <el-drawer
       v-model="analyzeDrawerOpen"
       title="新匹配分析"
@@ -326,7 +326,7 @@ interface MatchResultDetail {
   suggestions: unknown;
 }
 
-// Ring geometry
+// 圆环几何参数。
 const ringSize = 128;
 const ringRadius = 56;
 const ringCircumference = 2 * Math.PI * ringRadius;
@@ -370,7 +370,7 @@ const canAnalyze = computed(
 
 const ringDashOffset = computed(() => {
   const score = selectedMatch.value?.overall_score ?? 0;
-  // Score is 0–100; clamp.
+  // 分数范围是 0-100，这里做边界裁剪。
   const pct = Math.max(0, Math.min(100, score)) / 100;
   return ringCircumference * (1 - pct);
 });
@@ -488,7 +488,7 @@ function normalizeMatchDetail(match: MatchResult): MatchResultDetail {
 }
 
 function openAnalyzeDrawer() {
-  // Prefill from current match if any.
+  // 如果当前已有匹配结果，就用它预填抽屉。
   if (selectedMatch.value) {
     analyzeForm.value = {
       resume_id: selectedMatch.value.resume_id,
@@ -699,8 +699,8 @@ function readNumericQuery(key: string): number | undefined {
 onMounted(async () => {
   await Promise.all([fetchReferences(), fetchMatches(), fetchArtifacts()]);
 
-  // Consume ?job=N&resume=N prefill query (set by Jobs/Resumes detail page).
-  // Open the analyze drawer with prefilled selection, then strip the query.
+  // 消费 ?job=N&resume=N 预填查询参数（由岗位/简历详情页设置）。
+  // 用预填选择打开分析抽屉后，再清掉 URL 上的查询参数。
   const jobId = readNumericQuery("job");
   const resumeId = readNumericQuery("resume");
   if (jobId || resumeId) {
@@ -723,7 +723,7 @@ onMounted(async () => {
   margin: 0 auto;
 }
 
-/* ============ Page header ============ */
+/* ============ 页面头部 ============ */
 .page-head {
   display: flex;
   align-items: flex-end;
@@ -783,7 +783,7 @@ onMounted(async () => {
   color: #667085;
 }
 
-/* ============ Buttons ============ */
+/* ============ 按钮 ============ */
 .primary-btn {
   display: inline-flex;
   align-items: center;
@@ -865,7 +865,7 @@ onMounted(async () => {
   color: #b42318;
 }
 
-/* ============ Workspace ============ */
+/* ============ 工作区 ============ */
 .workspace {
   display: grid;
   grid-template-columns: minmax(280px, 0.85fr) minmax(0, 2fr);
@@ -873,7 +873,7 @@ onMounted(async () => {
   align-items: start;
 }
 
-/* ============ List pane ============ */
+/* ============ 列表面板 ============ */
 .list-pane {
   display: flex;
   flex-direction: column;
@@ -989,7 +989,7 @@ onMounted(async () => {
   background: linear-gradient(135deg, #b42318, #ef4444);
 }
 
-/* ============ Skel / empty / loading ============ */
+/* ============ 骨架屏 / 空态 / 加载态 ============ */
 .list-skel {
   display: flex;
   flex-direction: column;
@@ -1091,7 +1091,7 @@ onMounted(async () => {
   line-height: 1.65;
 }
 
-/* ============ Detail pane ============ */
+/* ============ 详情面板 ============ */
 .detail-pane {
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 14px;
@@ -1107,7 +1107,7 @@ onMounted(async () => {
   padding: 24px 28px 28px;
 }
 
-/* ============ Hero: ring + info + actions ============ */
+/* ============ 主视觉：圆环 + 信息 + 操作 ============ */
 .hero {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -1252,7 +1252,7 @@ onMounted(async () => {
   justify-content: center;
 }
 
-/* ============ Result grid: 4 colored cards ============ */
+/* ============ 结果网格：四色卡片 ============ */
 .result-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1343,7 +1343,7 @@ onMounted(async () => {
   text-align: center;
 }
 
-/* ============ Block (materials) ============ */
+/* ============ 内容块（材料） ============ */
 .block {
   display: flex;
   flex-direction: column;
@@ -1423,7 +1423,7 @@ onMounted(async () => {
   text-align: center;
 }
 
-/* ============ Spinner & drawer ============ */
+/* ============ 加载指示器与抽屉 ============ */
 .spinner {
   width: 12px;
   height: 12px;
@@ -1457,7 +1457,7 @@ onMounted(async () => {
   gap: 10px;
 }
 
-/* ============ Responsive ============ */
+/* ============ 响应式 ============ */
 @media (max-width: 1180px) {
   .workspace {
     grid-template-columns: 1fr;

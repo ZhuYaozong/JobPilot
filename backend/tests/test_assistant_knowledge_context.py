@@ -1,8 +1,7 @@
-"""Assistant-level knowledge-base context tests.
+"""Assistant 层知识库上下文测试。
 
-These cover the wiring above the search_knowledge tool: when the UI selects a
-KB, the workflow must constrain search_knowledge to that KB even if the LLM
-omits the argument.
+这里覆盖 search_knowledge 工具之上的接线：当 UI 选中某个知识库时，
+即使 LLM 漏传参数，workflow 也必须把 search_knowledge 限定在该知识库内。
 """
 
 import asyncio

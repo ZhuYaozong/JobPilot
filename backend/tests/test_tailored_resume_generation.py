@@ -44,7 +44,7 @@ def test_generate_tailored_resume_success_and_version_no_increments(
         seen_prompts.append(prompt)
         assert "不得编造不存在的经历、项目、指标、奖项、时间、技能" in prompt
         assert '"change_summary": ["中文变更摘要条目", "..."]' in prompt
-        # The service should use the latest match for this resume/job pair.
+        # service 应使用这组 resume/job 最新的一条 match 结果。
         assert "93" in prompt
         return _fake_tailored_resume_json(f"{test_marker} 定制版")
 
@@ -116,7 +116,7 @@ def test_generate_tailored_resume_application_record_is_optional_but_validated(
     job = create_parsed_job(client, test_marker, set_job_parsed_data)
     create_match_result(client, resume["id"], job["id"])
 
-    # No application_record_id: should still generate.
+    # 不传 application_record_id 时也应正常生成。
     response = client.post(
         "/api/v1/resume-versions/generate-tailored",
         json={"resume_id": resume["id"], "job_posting_id": job["id"]},

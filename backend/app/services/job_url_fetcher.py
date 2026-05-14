@@ -1,16 +1,15 @@
-"""Fetch a job posting from a URL and turn it into preview text.
+"""从岗位 URL 抓取 JD，并转换成前端可预览的文本。
 
-Pragmatic scope: simple HTTP fetch + trafilatura main-text extraction.
-Companies' own career pages (Greenhouse, Lever, Greenhouse-style template
-careers, 拉勾's public listings, etc.) work; sites that gate content behind
-auth or JS rendering (Boss直聘, LinkedIn, 智联's logged-in views) are
-detected and surfaced as a friendly error directing the user back to manual
-paste. We deliberately do NOT bring in playwright / headless chromium — the
-deployment cost / scraping fragility isn't worth it for the first cut.
+当前范围刻意保持务实：只做普通 HTTP 抓取 + trafilatura 主体文本抽取。
+公司官网招聘页、Greenhouse/Lever 一类静态页面通常能工作；Boss 直聘、LinkedIn、
+智联登录态页面这类需要登录或 JS 渲染的网站，会被识别成友好错误，引导用户回到
+“手动填写”粘贴 JD。
 
-The endpoint returns a *preview* DTO; nothing is persisted until the user
-confirms (and posts to the regular POST /jobs endpoint). That keeps wrong
-extractions from leaving stale rows in the DB.
+这里没有引入 playwright / headless chromium。动态浏览器抓取会显著增加部署成本和
+反爬脆弱性，对当前“先拿到可编辑预览”的产品目标不划算。
+
+接口只返回 preview DTO，用户确认后才会走常规 POST /jobs 保存，避免错误抽取在
+数据库里留下脏岗位。
 """
 
 from __future__ import annotations
@@ -22,34 +21,27 @@ from urllib.parse import urlparse
 import httpx
 
 
-# Don't let a slow site stall the request thread for too long; the front-end
-# axios timeout (60s) is the outer limit, this gives us margin to detect
-# trouble before the client gives up.
+# 不让慢站点长期占住请求线程；前端 axios 外层是 60s，这里提前失败，给 UI 留出展示错误的余量。
 FETCH_CONNECT_TIMEOUT_SECONDS = 6.0
 FETCH_READ_TIMEOUT_SECONDS = 12.0
 
-# Hard cap on response size; we read with stream=True and abort if a server
-# sends more. Most JD pages are 50–300 KB rendered HTML — 5 MB is comfortably
-# above that without letting accidental binary downloads exhaust memory.
+# 响应体硬上限。大多数 JD 页面渲染后的 HTML 在 50–300 KB，5 MB 已经很宽松；
+# 如果误点到二进制下载或超大页面，这个保护能避免占满内存。
 MAX_HTML_BYTES = 5 * 1024 * 1024
 
-# Body shorter than this almost always means the server only returned a JS
-# shell with a "Please enable JavaScript" stub. trafilatura will return
-# nothing useful and we'd rather give a helpful error than silently fail.
+# 抽取正文短于这个阈值时，通常说明服务端只返回了 JS 壳或反爬占位文案。
+# 与其让 trafilatura 静默失败，不如直接给用户一个可操作的错误。
 MIN_TEXT_CHARS = 80
 
-# Browsers identify themselves so many anti-scrape filters at least let
-# Chrome through; we use a real desktop-Chrome UA. This is not a defense
-# against aggressive anti-bot (it won't pass Cloudflare challenges), just a
-# baseline so static pages don't reject us as "curl/0.x".
+# 用桌面 Chrome 的 UA 作为基线，避免静态页面把我们当成 curl 直接拒掉。
+# 这不是强反爬方案，不能绕过 Cloudflare challenge，只是降低普通网页的误拒率。
 DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 )
 
-# Known platforms where naive fetch reliably fails (auth / JS-rendered).
-# We short-circuit with a tailored message instead of letting the user wait
-# 12 seconds for an empty result.
+# 已知普通 HTTP 抓取稳定失败的平台：多半需要登录或 JS 渲染。
+# 提前返回定制错误，比让用户等到超时或空结果更友好。
 _KNOWN_HOSTILE_HOSTS = {
     "linkedin.com",
     "www.linkedin.com",
@@ -59,9 +51,7 @@ _KNOWN_HOSTILE_HOSTS = {
     "www.boss.com",
 }
 
-# Hints that a server returned a JS shell or anti-bot challenge instead of
-# the real JD. Cheaper to recognise these than to wait for trafilatura to
-# return nothing useful.
+# 服务端返回 JS 壳或反爬挑战时常见的提示。先识别这些短语，比等待正文抽取失败更便宜。
 _JS_SHELL_HINTS = (
     "enable javascript",
     "please enable javascript",
@@ -74,10 +64,9 @@ _JS_SHELL_HINTS = (
 
 
 class JobURLFetchError(Exception):
-    """Friendly, user-facing error.
+    """面向用户展示的友好错误。
 
-    ``user_message`` is what the API echoes back; keep it short and
-    actionable so the UI can render it verbatim.
+    ``user_message`` 会被 API 原样回给前端；文案要短、明确、可直接展示。
     """
 
     def __init__(self, user_message: str) -> None:
@@ -87,12 +76,10 @@ class JobURLFetchError(Exception):
 
 @dataclass(frozen=True)
 class FetchedJD:
-    """Preview payload returned by the /jobs/fetch-from-url endpoint.
+    """``/jobs/fetch-from-url`` 返回的预览负载。
 
-    None on any field means "we couldn't extract it confidently"; the UI
-    leaves the corresponding form input empty and lets the user fill in
-    manually. The full ``jd_text`` is mandatory — if we can't get text, we
-    raise instead of returning an empty preview.
+    可选字段为 None 表示“无法可靠抽取”，前端会把对应表单留空让用户手填。
+    ``jd_text`` 是唯一必需字段；如果正文抽不出来，就抛错而不是返回空预览。
     """
 
     jd_text: str
@@ -103,11 +90,9 @@ class FetchedJD:
 
 
 def _normalise_url(url: str) -> str:
-    """Reject obviously dangerous schemes early.
+    """提前拒绝明显危险或无意义的 URL scheme。
 
-    httpx would otherwise happily ``file://`` an arbitrary path or fetch
-    ``data:`` URIs that leak nothing useful — better to fail fast with a
-    clear message.
+    不允许 ``file://``、``data:`` 等 scheme，避免本地路径读取或无意义内容进入抓取链路。
     """
     cleaned = url.strip()
     if not cleaned:
@@ -122,7 +107,7 @@ def _normalise_url(url: str) -> str:
 
 
 def _check_known_hostile(url: str) -> None:
-    """Short-circuit on platforms that we know don't work without auth."""
+    """对已知需要登录/动态渲染的平台提前短路。"""
     host = (urlparse(url).hostname or "").lower()
     if host in _KNOWN_HOSTILE_HOSTS:
         raise JobURLFetchError(
@@ -141,14 +126,12 @@ async def fetch_jd_from_url(
     *,
     http_client: httpx.AsyncClient | None = None,
 ) -> FetchedJD:
-    """Top-level entry point. Validates → fetches → extracts → returns.
+    """URL 抓取入口：校验 → 抓 HTML → 抽正文 → 返回预览。
 
-    Raises :class:`JobURLFetchError` with a user-facing message on any
-    expected failure path. The caller (API endpoint) maps the exception to
-    HTTP 400 + detail = user_message.
+    预期内失败都抛 :class:`JobURLFetchError`，由 API 层转成 HTTP 400 和可展示的
+    ``detail``。这样前端无需理解底层抓取细节。
 
-    ``http_client`` is injectable for tests; production passes ``None`` and
-    we open a fresh client per request (httpx clients are cheap).
+    ``http_client`` 只给测试注入使用；生产传 None，每次请求新建一个轻量 client。
     """
     normalised = _normalise_url(url)
     _check_known_hostile(normalised)
@@ -172,7 +155,7 @@ async def fetch_jd_from_url(
         jd_text=text,
         title=_pick_job_title(metadata),
         company_hint=_pick_company(metadata, normalised),
-        city_hint=None,  # City rarely surfaces from raw HTML; let user fill.
+        city_hint=None,  # 城市很少能从原始 HTML 可靠抽取，交给用户在表单里补。
         source_url=normalised,
     )
 
@@ -180,12 +163,10 @@ async def fetch_jd_from_url(
 async def _fetch_html(
     url: str, *, http_client: httpx.AsyncClient | None,
 ) -> str:
-    """Stream the response so we can enforce ``MAX_HTML_BYTES`` without
-    actually loading a multi-MB binary into memory.
+    """抓取 HTML，并在读取后校验大小上限。
 
-    Aborting mid-stream isn't strictly necessary for security (the cap is
-    defensive — most JD pages are tiny) but matches the same protective
-    pattern resume_file_extractor uses for uploads.
+    当前实现依赖 httpx 一次性拿到 response.content 后检查体积。这个上限是防御性保护：
+    正常 JD 页面都很小，但误抓二进制或巨大页面时可以及时退出。
     """
     timeout = httpx.Timeout(
         FETCH_READ_TIMEOUT_SECONDS, connect=FETCH_CONNECT_TIMEOUT_SECONDS,
@@ -222,8 +203,7 @@ async def _fetch_html(
 
         content_type = (response.headers.get("content-type") or "").lower()
         if "html" not in content_type and "xml" not in content_type:
-            # PDF / binary downloads etc. — we don't try to parse them as
-            # HTML; tell the user to upload directly instead.
+            # PDF 或二进制下载不走 HTML 解析；让用户用上传/粘贴路径处理更稳定。
             raise JobURLFetchError(
                 "这个链接不是 HTML 页面,自动抓取只支持网页。"
                 "如果是 PDF,可以下载后从简历管理页上传。",
@@ -233,8 +213,7 @@ async def _fetch_html(
         if len(content) > MAX_HTML_BYTES:
             raise JobURLFetchError("页面过大,自动抓取暂不支持。")
 
-        # httpx already decodes per Content-Type; fall back to utf-8 if the
-        # server omits a charset (common with bare nginx defaults).
+        # httpx 会按 Content-Type 自动解码；如果服务端漏掉 charset，会回退到 utf-8。
         return response.text
 
     if http_client is None:
@@ -246,17 +225,16 @@ async def _fetch_html(
 def _extract_with_trafilatura(
     html: str, url: str,
 ) -> tuple[str, dict[str, str | None]]:
-    """Run trafilatura with conservative settings.
+    """用保守参数运行 trafilatura。
 
-    ``include_comments=False`` drops disqus/intercom blocks; ``favor_recall``
-    leans toward keeping more text (JDs often span multiple sections). We
-    pull metadata separately so the title isn't tangled into the JD body.
+    ``include_comments=False`` 会去掉评论/客服嵌入块；``favor_recall=True`` 更偏向保留
+    多一点正文，因为 JD 常常分散在多个 section。metadata 单独抽取，避免标题混进正文。
     """
     import trafilatura  # noqa: PLC0415 — lazy import (~80 ms cold)
     from trafilatura.settings import use_config
 
     config = use_config()
-    # Disable download trail signals — we already have the HTML in hand.
+    # 已经拿到 HTML，不需要 trafilatura 再做下载链路记录。
     config.set("DEFAULT", "EXTRACTION_TIMEOUT", "10")
 
     try:
@@ -275,9 +253,7 @@ def _extract_with_trafilatura(
     try:
         md = trafilatura.extract_metadata(html)
         if md is not None:
-            # Convert TrafilaturaMetadata dataclass to a plain dict so tests
-            # don't have to mock the class shape; access via .__dict__ is
-            # supported.
+            # 转成普通 dict，测试不需要模拟 TrafilaturaMetadata 的完整类形状。
             metadata = {
                 "title": getattr(md, "title", None),
                 "author": getattr(md, "author", None),
@@ -291,23 +267,22 @@ def _extract_with_trafilatura(
 
 
 def _pick_job_title(metadata: dict[str, str | None]) -> str | None:
-    """The page <title> is usually "<Job Title> at <Company>" or similar.
+    """从页面标题里尽量提取岗位名。
 
-    Strip the company suffix when it's obviously there; leave the rest. Drop
-    the title entirely if it looks like a sitewide banner ("Careers", "Jobs"
-    etc.).
+    很多页面的 ``<title>`` 是“岗位名 - 公司名”或类似结构；这里只剥掉明显公司后缀。
+    如果标题像“Careers”“Jobs”这种站点级横幅，就直接丢弃。
     """
     raw = (metadata.get("title") or "").strip()
     if not raw:
         return None
 
-    # Strip common "<Title> | Company" / "<Title> - Company" suffixes.
+    # 剥掉常见的“岗位名 | 公司名”“岗位名 - 公司名”后缀。
     for sep in (" | ", " — ", " – ", " - ", " · "):
         if sep in raw:
             raw = raw.split(sep, 1)[0].strip()
             break
 
-    # Discard noise pages.
+    # 丢弃站点级噪声标题。
     lower = raw.lower()
     if lower in {"careers", "jobs", "招聘", "career", "join us"}:
         return None
@@ -319,7 +294,7 @@ def _pick_job_title(metadata: dict[str, str | None]) -> str | None:
 def _pick_company(
     metadata: dict[str, str | None], url: str,
 ) -> str | None:
-    """Prefer the page's declared sitename; fall back to hostname stem."""
+    """优先使用页面声明的站点名，拿不到时再退回 hostname。"""
     sitename = (metadata.get("sitename") or "").strip()
     if sitename:
         return sitename[:255]
@@ -327,7 +302,7 @@ def _pick_company(
     host = (metadata.get("hostname") or urlparse(url).hostname or "").lower()
     if not host:
         return None
-    # ``careers.example.com`` → ``example``; strip leading ``www.``.
+    # ``careers.example.com`` → ``example``；同时去掉开头的 ``www.``。
     host = re.sub(r"^www\.", "", host)
     host = re.sub(r"^careers?\.|^jobs\.", "", host)
     parts = host.split(".")

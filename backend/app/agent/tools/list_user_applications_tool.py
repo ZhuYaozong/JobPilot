@@ -34,7 +34,7 @@ class ListUserApplicationsTool(BaseTool):
         args: ListUserApplicationsArgs,
         ctx: ToolContext,
     ) -> dict[str, Any]:
-        # 中文说明：投递列表只暴露 id、关联对象和阶段信息，避免把备注等长文本塞进工具观察。
+        # 投递列表只暴露 id、关联对象和阶段信息，避免把备注等长文本塞进工具观察。
         statement = select(
             ApplicationRecord.id,
             ApplicationRecord.resume_id,
@@ -46,7 +46,7 @@ class ListUserApplicationsTool(BaseTool):
         ).where(ApplicationRecord.user_id == ctx.current_user.id)
 
         if args.current_stage:
-            # 中文说明：阶段过滤是精确匹配，避免模型用模糊阶段词误命中错误投递。
+            # 阶段过滤是精确匹配，避免模型用模糊阶段词误命中错误投递。
             statement = statement.where(
                 ApplicationRecord.current_stage == args.current_stage,
             )
@@ -57,7 +57,7 @@ class ListUserApplicationsTool(BaseTool):
 
         rows = (await ctx.db.execute(statement)).all()
 
-        # 中文说明：时间字段转 ISO 字符串，保证 ToolCallLog 和 prompt 里的结果可 JSON 序列化。
+        # 时间字段转 ISO 字符串，保证 ToolCallLog 和 prompt 里的结果可 JSON 序列化。
         applications = [
             {
                 "id": row.id,

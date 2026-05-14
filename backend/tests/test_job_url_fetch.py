@@ -1,19 +1,16 @@
-"""Tests for POST /api/v1/jobs/fetch-from-url.
+"""POST /api/v1/jobs/fetch-from-url 测试。
 
-The endpoint is preview-only — nothing should be persisted. We mock httpx via
-``respx`` so tests stay deterministic regardless of network/DNS availability.
-trafilatura runs for real against the mocked HTML so we exercise the actual
-extraction pipeline; only the network leg is faked.
+这个 endpoint 只返回预览，不应持久化任何内容。测试通过 ``respx`` mock httpx，
+避免受网络或 DNS 影响。trafilatura 会真实处理被 mock 的 HTML，因此能覆盖实际抽取流水线；
+只有网络请求这一段是假的。
 """
 
 import httpx
 import respx
 from fastapi.testclient import TestClient
 
-# Minimal but realistic JD page — content-heavy enough that trafilatura
-# returns text without getting fooled by nav/footer noise. Repeating the
-# JD body keeps us well above MIN_TEXT_CHARS even after trafilatura's
-# default dedupe.
+# 尽量小但足够真实的 JD 页面。正文信息量足够让 trafilatura 抽到文本，
+# 不会被导航和页脚噪音误导；重复 JD 正文可以确保默认去重后仍高于 MIN_TEXT_CHARS。
 _SAMPLE_HTML = """
 <!doctype html>
 <html lang="zh">
@@ -73,7 +70,7 @@ def test_fetch_from_url_extracts_title_company_and_jd(
 
     assert body["source_url"] == url
     assert body["title"] == "Senior Backend Engineer"
-    # ``careers.example.com`` → strips ``careers.`` → ``Example``.
+    # ``careers.example.com`` 会去掉 ``careers.``，得到 ``Example``。
     assert body["company_hint"] in {"Example", "Examplecom"}
     assert "distributed systems" in body["jd_text"].lower()
     assert "responsibilities" in body["jd_text"].lower()
@@ -81,8 +78,7 @@ def test_fetch_from_url_extracts_title_company_and_jd(
 
 @respx.mock
 def test_fetch_from_url_rejects_js_shell_page(client: TestClient) -> None:
-    """When the server returns a JS-shell stub the user should get a hint to
-    paste manually rather than a confusing empty result."""
+    """服务端返回 JS 外壳页面时，应提示用户手动粘贴，而不是给出迷惑性的空结果。"""
     url = "https://www.example-shell.com/job/123"
     respx.get(url).mock(
         return_value=httpx.Response(
@@ -106,8 +102,7 @@ def test_fetch_from_url_rejects_js_shell_page(client: TestClient) -> None:
 def test_fetch_from_url_short_circuits_known_hostile_hosts(
     client: TestClient,
 ) -> None:
-    """Boss / LinkedIn / 智联 etc. are detected before we even fire a request;
-    we cut straight to "请直接粘贴 JD"."""
+    """Boss / LinkedIn / 智联等站点会在发请求前识别，并直接提示用户粘贴 JD。"""
     response = client.post(
         "/api/v1/jobs/fetch-from-url",
         json={"url": "https://www.zhipin.com/job_detail/abc123.html"},
@@ -148,8 +143,7 @@ def test_fetch_from_url_surfaces_remote_error(client: TestClient) -> None:
 
 @respx.mock
 def test_fetch_from_url_surfaces_timeout(client: TestClient) -> None:
-    """httpx timeout is mapped to a user-facing message instead of bubbling up
-    as a raw 500."""
+    """httpx timeout 应映射成用户可读提示，而不是冒泡成原始 500。"""
     url = "https://slow.example.com/job"
     respx.get(url).mock(side_effect=httpx.ConnectTimeout("connect timeout"))
 
@@ -165,8 +159,7 @@ def test_fetch_from_url_surfaces_timeout(client: TestClient) -> None:
 def test_fetch_from_url_rejects_non_html_content_type(
     client: TestClient,
 ) -> None:
-    """If the URL points at a PDF / binary we tell the user to upload instead
-    of trying to parse it as HTML."""
+    """URL 指向 PDF 或二进制内容时，应提示用户上传文件，而不是当作 HTML 解析。"""
     url = "https://careers.example.com/jd.pdf"
     respx.get(url).mock(
         return_value=httpx.Response(
@@ -188,8 +181,7 @@ def test_fetch_from_url_rejects_non_html_content_type(
 def test_fetch_from_url_rejects_page_with_too_little_text(
     client: TestClient,
 ) -> None:
-    """A page that parses cleanly but has barely any extractable text most
-    likely lost the JD behind an auth wall."""
+    """页面能解析但几乎抽不到文本时，大概率是 JD 被登录墙挡住了。"""
     url = "https://careers.example.com/empty"
     respx.get(url).mock(
         return_value=httpx.Response(
@@ -211,8 +203,7 @@ def test_fetch_from_url_rejects_page_with_too_little_text(
 def test_fetch_from_url_does_not_persist_anything(
     client: TestClient,
 ) -> None:
-    """Sanity check: a successful preview should NOT create a job_postings
-    row. The user has to confirm via POST /jobs before anything sticks."""
+    """基础确认：成功预览不应创建 job_postings 行，用户必须 POST /jobs 才会保存。"""
     url = "https://careers.example.com/preview-only"
     respx.get(url).mock(
         return_value=httpx.Response(

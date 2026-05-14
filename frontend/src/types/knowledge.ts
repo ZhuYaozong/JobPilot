@@ -27,7 +27,7 @@ export interface KnowledgeDocumentListItem {
   source_type: string;
   source_url: string | null;
   chunk_count: number;
-  /** "pending" | "parsing" | "ready" | "failed" — server state machine. */
+  /** "pending" | "parsing" | "ready" | "failed"：服务端状态机。 */
   status: string;
   error_detail: string | null;
   created_at: ISODateString;

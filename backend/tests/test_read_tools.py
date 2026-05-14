@@ -1,11 +1,10 @@
-"""Smoke tests for the three read tools (list_user_jobs / list_user_resumes
-/ list_user_applications).
+"""三个读取工具的冒烟测试（list_user_jobs / list_user_resumes / list_user_applications）。
 
-These tools do no LLM call and have no side effects, so we just verify:
-  - happy path returns the user's own rows
-  - cross-user rows are excluded
-  - optional filter (query / current_stage) narrows results correctly
-  - ToolCallLog is recorded with status=success
+这些工具不会调用 LLM，也没有副作用，因此这里只验证：
+  - 成功路径会返回当前用户自己的行；
+  - 其他用户的行会被排除；
+  - 可选过滤条件（query / current_stage）能正确收窄结果；
+  - ToolCallLog 会以 status=success 记录。
 """
 
 import asyncio
@@ -61,7 +60,7 @@ async def _setup_agent_run(db: AsyncSession, marker: str) -> tuple[User, int]:
 
 
 async def _other_user(db: AsyncSession) -> User:
-    """Resolve the demo user so we can sanity-check user scoping."""
+    """解析 demo 用户，用于确认用户隔离逻辑。"""
     return (
         await db.execute(select(User).where(User.username == "demo"))
     ).scalar_one()
@@ -105,8 +104,7 @@ def test_list_user_jobs_returns_user_scoped_rows(
         assert result["ok"] is True
 
         companies = {job["company_name"] for job in result["data"]["jobs"]}
-        # The two test-marked entries belong to user; the demo-owned one
-        # must not appear.
+        # 两条带 test_marker 的记录属于当前用户；demo 用户拥有的记录不应出现。
         assert f"{test_marker} 腾讯" in companies
         assert f"{test_marker} 字节" in companies
         assert f"{test_marker} 阿里(other user)" not in companies
@@ -250,7 +248,7 @@ def test_list_user_jobs_empty_when_no_rows(
     async def _scenario(db: AsyncSession) -> None:
         marker = "isolated-empty-jobs"
         user, agent_run_id = await _setup_agent_run(db, marker)
-        # A different filter that no row can match.
+        # 使用一个不会匹配任何行的过滤条件。
         ctx = ToolContext(db=db, current_user=user, agent_run_id=agent_run_id)
         result = await ListUserJobsTool().invoke(
             {"query": "absolutely-nothing-matches-this"}, ctx,

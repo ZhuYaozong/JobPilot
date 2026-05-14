@@ -9,12 +9,11 @@ from app.db.base import Base
 
 
 class KnowledgeDocument(Base):
-    """A single uploaded document inside a knowledge base.
+    """知识库中的单份文档。
 
-    The document stores both the original raw text (for re-chunking / detail
-    view) and a denormalised user_id so the chunks table can filter on a
-    single column without joining. Status drives the indexing state machine
-    (slice 7'c2 fills it in):
+    文档同时保存原始文本和冗余 ``user_id``。原始文本用于重新切片和详情展示；
+    ``user_id`` 让 chunks 表可以直接按用户过滤，不必每次 join 回文档表。``status``
+    驱动索引状态机：
 
         pending -> parsing -> ready
                           \\-> failed
@@ -32,15 +31,14 @@ class KnowledgeDocument(Base):
         index=True,
     )
     title: Mapped[str] = mapped_column(String(512))
-    # "pdf" | "docx" | "markdown" | "text" | "manual" (typed in by user).
+    # 来源类型：pdf / docx / markdown / text / manual，其中 manual 表示用户粘贴输入。
     source_type: Mapped[str] = mapped_column(String(50))
     source_url: Mapped[str | None] = mapped_column(String(1024))
     raw_text: Mapped[str] = mapped_column(Text)
     content_hash: Mapped[str] = mapped_column(String(64), index=True)
     extra_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     chunk_count: Mapped[int] = mapped_column(Integer, server_default="0")
-    # See class docstring; default starts at pending so the indexing worker
-    # (7'c2) can pick it up.
+    # 初始为 pending，索引流程会推进到 parsing / ready / failed。
     status: Mapped[str] = mapped_column(String(50), server_default="pending")
     error_detail: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(

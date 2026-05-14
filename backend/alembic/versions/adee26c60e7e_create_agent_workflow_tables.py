@@ -1,8 +1,8 @@
-"""create agent workflow tables
+"""创建 Agent 工作流表
 
-Revision ID: adee26c60e7e
-Revises: a4d9b7c3e2f1
-Create Date: 2026-05-11 17:10:00.000000
+修订 ID: adee26c60e7e
+上一修订: a4d9b7c3e2f1
+创建时间: 2026-05-11 17:10:00.000000
 
 """
 
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-# revision identifiers, used by Alembic.
+# Alembic 使用的修订标识。
 revision: str = "adee26c60e7e"
 down_revision: Union[str, Sequence[str], None] = "a4d9b7c3e2f1"
 branch_labels: Union[str, Sequence[str], None] = None
@@ -20,7 +20,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Upgrade schema."""
+    """升级 schema。"""
     op.create_table(
         "conversations",
         sa.Column("id", sa.Integer(), nullable=False),
@@ -55,7 +55,7 @@ def upgrade() -> None:
         unique=False,
     )
 
-    # messages.agent_run_id FK is deferred until agent_runs exists (circular ref).
+    # messages.agent_run_id 外键要等 agent_runs 存在后再补，因为两张表互相引用。
     op.create_table(
         "messages",
         sa.Column("id", sa.Integer(), nullable=False),
@@ -155,7 +155,7 @@ def upgrade() -> None:
         unique=False,
     )
 
-    # Now that agent_runs exists, close the circular reference.
+    # agent_runs 已创建，可以补齐循环引用的另一侧。
     op.create_foreign_key(
         "fk_messages_agent_run_id_agent_runs",
         "messages",
@@ -253,7 +253,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Downgrade schema."""
+    """降级 schema。"""
     op.drop_index(
         op.f("ix_memory_summaries_user_id"),
         table_name="memory_summaries",
@@ -270,7 +270,7 @@ def downgrade() -> None:
     )
     op.drop_table("tool_call_logs")
 
-    # Drop the deferred FK before dropping agent_runs to avoid a dependency error.
+    # 删除 agent_runs 前先删延迟创建的外键，避免依赖错误。
     op.drop_constraint(
         "fk_messages_agent_run_id_agent_runs",
         "messages",

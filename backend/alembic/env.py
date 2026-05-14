@@ -9,34 +9,28 @@ from app.core.config import settings
 from app.db.base import Base
 from app import models  # noqa: F401
 
-# this is the Alembic Config object, which provides
-# access to the values within the .ini file in use.
+# Alembic Config 对象，用于读取当前 .ini 文件里的配置值。
 config = context.config
 
-# Interpret the config file for Python logging.
-# This line sets up loggers basically.
+# 按配置文件初始化 Python 日志。
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 config.set_main_option("sqlalchemy.url", settings.database_url)
 target_metadata = Base.metadata
 
-# other values from the config, defined by the needs of env.py,
-# can be acquired:
+# env.py 如果需要读取其他配置值，可以按下面的方式获取：
 # my_important_option = config.get_main_option("my_important_option")
-# ... etc.
+# 以此类推。
 
 
 def run_migrations_offline() -> None:
-    """Run migrations in 'offline' mode.
+    """以离线模式运行迁移。
 
-    This configures the context with just a URL
-    and not an Engine, though an Engine is acceptable
-    here as well.  By skipping the Engine creation
-    we don't even need a DBAPI to be available.
+    这里仅使用 URL 配置 Alembic context，不创建 Engine。
+    离线模式下甚至不需要可用的 DBAPI。
 
-    Calls to context.execute() here emit the given string to the
-    script output.
+    这里的 context.execute() 会把 SQL 字符串输出到迁移脚本输出流。
 
     """
     url = config.get_main_option("sqlalchemy.url")
@@ -52,10 +46,9 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    """Run migrations in 'online' mode.
+    """以在线模式运行迁移。
 
-    In this scenario we need to create an Engine and associate a connection
-    with the context.
+    在线模式需要创建 Engine，并把连接绑定到 Alembic context。
 
     """
     asyncio.run(run_async_migrations())

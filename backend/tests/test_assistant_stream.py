@@ -1,10 +1,9 @@
-"""Tests for POST /api/v1/assistant/run-stream.
+"""POST /api/v1/assistant/run-stream 的测试。
 
-The streaming endpoint runs the same workflow as /run but emits SSE events
-along the way so the chat UI can show phased status. These tests verify the
-event protocol: shape, ordering, and the final ``message`` / ``error`` /
-``done`` events. The shared workflow + persistence logic is already covered
-by tests/test_assistant_api.py.
+流式 endpoint 与 /run 使用同一套 workflow，但会在执行过程中发出 SSE 事件，
+让聊天 UI 能显示阶段状态。这些测试验证事件协议：形状、顺序，以及最终的
+``message`` / ``error`` / ``done`` 事件。共享的工作流与持久化逻辑已经由
+tests/test_assistant_api.py 覆盖。
 """
 
 import asyncio
@@ -44,11 +43,10 @@ def _make_fake_llm(
     final_text: str = "已为你完成。",
     follow_up_response: str | None = None,
 ):
-    """Copy of test_assistant_api._make_fake_llm.
+    """test_assistant_api._make_fake_llm 的本地模拟副本。
 
-    We duplicate rather than import to keep this file self-contained — the
-    helper builds a closure over module-scoped state in the other file and
-    re-using it through pytest fixtures gets noisy.
+    这里选择复制而不是导入，是为了让本文件保持自包含；另一个 helper 会闭包捕获
+    对方模块级状态，跨 pytest fixture 复用会让测试关系变得嘈杂。
     """
     default_follow_up = (
         '{"action": "respond_directly", "text": '
@@ -74,10 +72,10 @@ def _make_fake_llm(
 
 
 def _parse_sse_stream(raw: str) -> list[tuple[str, dict]]:
-    """Parse the raw text body of an SSE response into ``[(event, data)]``.
+    """把 SSE 响应的原始文本解析成 ``[(event, data)]``。
 
-    The server always emits one ``event:`` + one ``data:`` line per frame,
-    separated by blank lines — exactly what the client-side parser handles.
+    服务端每帧固定发出一行 ``event:`` 和一行 ``data:``，帧之间用空行分隔；
+    这与客户端解析器处理的协议一致。
     """
     events: list[tuple[str, dict]] = []
     for chunk in raw.split("\n\n"):
@@ -128,26 +126,26 @@ def test_assistant_run_stream_happy_path_emits_phase_and_tool_events(
     events = _parse_sse_stream(response.text)
     event_names = [name for name, _ in events]
 
-    # First event is always ``started`` with the persisted user message.
+    # 第一个事件始终是 ``started``，并携带已持久化的用户消息。
     assert event_names[0] == "started"
     started_data = events[0][1]
     assert started_data["conversation_id"] > 0
     assert started_data["user_message"]["role"] == "user"
     assert str(resume_id) in started_data["user_message"]["content"]
 
-    # The ReAct loop emits at least one ``phase`` event before the tool call.
+    # ReAct 循环在工具调用前至少会发出一个 ``phase`` 事件。
     assert "phase" in event_names
     assert "tool_call_started" in event_names
     assert "tool_call_completed" in event_names
 
-    # The tool_call_completed event should mention the right tool & ok=True.
+    # tool_call_completed 事件应包含正确工具名，并且 ok=True。
     tool_completed = next(
         data for name, data in events if name == "tool_call_completed"
     )
     assert tool_completed["tool_name"] == "analyze_match"
     assert tool_completed["ok"] is True
 
-    # Stream terminates with message + done.
+    # 流式响应应以 message + done 收尾。
     assert event_names[-2] == "message"
     assert event_names[-1] == "done"
     message_data = events[-2][1]
@@ -163,9 +161,10 @@ def test_assistant_run_stream_respond_directly_skips_tool_events(
     monkeypatch,
     test_marker: str,
 ) -> None:
-    """When decide says respond_directly, no tool_call_* events should fire
-    and the formatting phase should be skipped (it's only emitted on the
-    LLM-driven format path)."""
+    """decide 返回 respond_directly 时，不应发出 tool_call_* 事件。
+
+    formatting 阶段也应被跳过，因为它只在 LLM 驱动的 format 路径上发出。
+    """
     monkeypatch.setattr(
         LLMClient,
         "generate_text",
@@ -186,10 +185,10 @@ def test_assistant_run_stream_respond_directly_skips_tool_events(
     event_names = [name for name, _ in events]
 
     assert event_names[0] == "started"
-    # No tool calls anywhere.
+    # 全程不应有任何工具调用。
     assert "tool_call_started" not in event_names
     assert "tool_call_completed" not in event_names
-    # Decide ran (phase: deciding), but no formatting phase (early return).
+    # decide 已执行（phase: deciding），但由于提前返回，没有 formatting 阶段。
     deciding_phases = [data for name, data in events if name == "phase"]
     assert all(d["phase"] == "deciding" for d in deciding_phases)
 
@@ -219,7 +218,7 @@ def test_assistant_run_stream_emits_error_event_when_llm_misconfigured(
     event_names = [name for name, _ in events]
 
     assert event_names[0] == "started"
-    # No tool calls, no message — straight to error then done.
+    # 没有工具调用，也没有 message，直接 error 后 done。
     assert event_names[-2] == "error"
     assert event_names[-1] == "done"
 

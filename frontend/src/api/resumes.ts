@@ -54,8 +54,8 @@ export async function uploadResume(
   file: File,
   options: { title?: string; autoParse?: boolean } = {},
 ) {
-  // multipart/form-data is built by the browser so we don't set the header
-  // manually — axios + native FormData picks the right multipart boundary.
+  // multipart/form-data 由浏览器构造，因此这里不手动设置 header；
+  // axios + 原生 FormData 会自动带上正确的 multipart boundary。
   const form = new FormData();
   form.append("file", file);
   if (options.title) {

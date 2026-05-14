@@ -25,11 +25,10 @@ async def run_assistant(
 
 
 def _encode_sse(event: dict[str, Any]) -> str:
-    """Format an event dict as a single SSE frame.
+    """把事件字典编码成单个 SSE frame。
 
-    ``event["event"]`` becomes the ``event:`` line, ``event["data"]`` is JSON-
-    encoded onto a single ``data:`` line. The blank trailing line terminates
-    the frame per the EventStream spec.
+    ``event["event"]`` 会写入 ``event:`` 行，``event["data"]`` 会 JSON 编码后写入
+    单行 ``data:``。末尾空行是 EventStream 协议要求的 frame 结束标记。
     """
     event_type = event.get("event") or "message"
     payload = json.dumps(event.get("data") or {}, ensure_ascii=False)
@@ -42,21 +41,19 @@ async def run_assistant_stream(
     db: DbSession,
     current_user: CurrentUserDep,
 ) -> StreamingResponse:
-    """Streaming variant of /run. Emits SSE events while the agent works so
-    the chat UI can show phased status ("正在思考……" → "正在查询岗位……" →
-    "正在整理回答……") instead of waiting 30+ seconds in silence.
+    """``/run`` 的流式版本，在 Agent 工作时持续发出 SSE 事件。
 
-    Event schema is documented on ``run_assistant_turn_stream``.
+    前端可以据此展示“正在思考 → 正在查询岗位 → 正在整理回答”等阶段状态，而不是让
+    用户在长工具链期间等待一整个空白请求。事件结构由 ``run_assistant_turn_stream``
+    统一定义。
     """
 
     async def event_stream() -> AsyncIterator[str]:
         async for event in run_assistant_turn_stream(db, current_user, payload):
             yield _encode_sse(event)
 
-    # ``X-Accel-Buffering: no`` disables nginx/CDN response buffering so each
-    # frame reaches the browser as soon as it is yielded. The default Cache-
-    # Control header would otherwise let an intermediary buffer the whole
-    # response and defeat the point of streaming.
+    # ``X-Accel-Buffering: no`` 关闭 nginx/CDN 缓冲，确保每个 frame yield 后尽快到浏览器。
+    # Cache-Control 也显式禁用缓存，避免中间层把整段响应攒完再发，破坏流式体验。
     return StreamingResponse(
         event_stream(),
         media_type="text/event-stream",
