@@ -59,24 +59,26 @@ def build_interview_prep_prompt(
         indent=2,
     )
 
-    return f"""You are an interview preparation assistant.
-Generate a concise Chinese interview prep draft based on the structured resume,
-structured job description, and match analysis.
-Include these sections when useful:
+    return f"""你是 JobPilot 的面试准备助手。
+请基于结构化简历、结构化岗位描述和最新匹配分析，生成一份简洁的中文面试准备提纲。
+可根据上下文包含以下部分:
 - 岗位核心考察点
 - 候选人优势对应点
 - 风险/短板提醒
-- 5 to 8 likely interview questions or preparation points
+- 5 到 8 个可能面试问题或准备要点
 - 准备建议
-Do not write generic motivational content. Return plain text only.
+输出风格:
+- 只返回纯文本，不要返回 JSON 或解释说明。
+- 不要写空泛鸡汤，要围绕岗位要求、简历事实和匹配分析展开。
+- 不要编造简历中不存在的经历、项目、指标、奖项、时间或技能。
 
-Resume structured JSON:
+简历结构化 JSON:
 {resume_json}
 
-Job posting structured JSON:
+岗位结构化 JSON:
 {job_json}
 
-Latest match result:
+最新匹配结果:
 {match_json}
 """
 

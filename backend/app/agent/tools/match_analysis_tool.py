@@ -35,23 +35,19 @@ _BUSINESS_DETAIL_TO_ERROR_CLASS: dict[str, str] = {
 
 _BUSINESS_LLM_MESSAGES: dict[str, str] = {
     "resume_not_found": (
-        "The requested resume does not exist. Ask the user to pick a valid resume_id."
+        "请求的简历不存在。请让用户选择一个有效的 resume_id。"
     ),
     "job_posting_not_found": (
-        "The requested job posting does not exist. Ask the user to pick a valid"
-        " job_posting_id."
+        "请求的岗位不存在。请让用户选择一个有效的 job_posting_id。"
     ),
     "resume_not_parsed": (
-        "The resume has not been parsed yet. Suggest the user run resume parsing"
-        " before requesting a match analysis."
+        "这份简历还没有完成结构化解析。请建议用户先运行简历解析，再请求匹配分析。"
     ),
     "job_posting_not_parsed": (
-        "The job posting has not been parsed yet. Suggest the user run JD parsing"
-        " before requesting a match analysis."
+        "这个岗位还没有完成 JD 解析。请建议用户先运行 JD 解析，再请求匹配分析。"
     ),
     "llm_output_invalid": (
-        "The matching model returned an output that could not be parsed. Try again"
-        " or suggest the user retry shortly."
+        "匹配分析模型返回了无法解析的输出。请建议用户稍后重试。"
     ),
 }
 
@@ -64,10 +60,9 @@ class MatchAnalysisToolArgs(BaseModel):
 class MatchAnalysisTool(BaseTool):
     name = "analyze_match"
     description = (
-        "Generate a match analysis between a parsed resume and a parsed job"
-        " posting. Returns overall_score (0-100), strengths, weaknesses,"
-        " missing_keywords, and suggestions. Both resume and job posting must"
-        " already be parsed (their parsed_json fields populated)."
+        "为已解析的简历和已解析的岗位生成匹配分析。返回 overall_score(0-100)、"
+        "strengths、weaknesses、missing_keywords、suggestions。"
+        "resume 和 job_posting 必须已经完成解析，即 parsed_json 已有内容。"
     )
     args_schema = MatchAnalysisToolArgs
 

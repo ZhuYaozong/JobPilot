@@ -60,7 +60,7 @@ def _make_fake_llm(
     )
 
     async def fake(self, prompt: str) -> str:
-        if "Compare the structured resume" in prompt:
+        if "请比较结构化简历" in prompt:
             return _MATCH_LLM_JSON
         if "本轮你为了回答用户的问题" in prompt:
             return final_text

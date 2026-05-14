@@ -28,29 +28,27 @@ _BUSINESS_DETAIL_TO_ERROR_CLASS: dict[str, str] = {
     "Generated interview prep is not specific enough": "llm_output_too_generic",
 }
 
-# 中文说明：message_for_llm 用英文保持和工具描述一致，最终中文回复由 format_response 生成。
+# 中文说明：message_for_llm 会进入 format_response prompt，应使用中文业务说明。
 _BUSINESS_LLM_MESSAGES: dict[str, str] = {
-    "resume_not_found": "The requested resume does not exist; ask the user for a valid resume_id.",
-    "job_posting_not_found": "The requested job posting does not exist; ask the user for a valid job_posting_id.",
+    "resume_not_found": "请求的简历不存在；请让用户提供有效的 resume_id。",
+    "job_posting_not_found": "请求的岗位不存在；请让用户提供有效的 job_posting_id。",
     "application_record_not_found": (
-        "The requested application record does not exist; tell the user the id may be wrong."
+        "请求的投递记录不存在；请提示用户 application_record_id 可能不正确。"
     ),
     "application_resume_job_mismatch": (
-        "The application record points to a different resume/job pair than the one requested. "
-        "Ask the user to confirm which application/resume/job they want."
+        "该投递记录关联的是另一组 resume/job。请让用户确认要使用哪个 application、resume 和 job。"
     ),
-    "resume_not_parsed": "The resume has not been parsed; suggest running resume parsing first.",
-    "job_posting_not_parsed": "The job posting has not been parsed; suggest running JD parsing first.",
+    "resume_not_parsed": "简历还没有解析；请建议用户先运行简历解析。",
+    "job_posting_not_parsed": "岗位还没有解析；请建议用户先运行 JD 解析。",
     "match_result_missing": (
-        "A match analysis is required before drafting interview prep. Ask the user to run "
-        "analyze_match first."
+        "生成面试准备前需要先有匹配分析。请让用户先运行 analyze_match。"
     ),
-    "llm_output_empty": "Interview prep generation returned empty content; suggest the user retry.",
+    "llm_output_empty": "面试准备生成结果为空；请建议用户重试。",
     "llm_output_missing_chinese": (
-        "The interview prep draft was missing the requested Chinese content; suggest the user retry."
+        "面试准备草稿缺少要求的中文内容；请建议用户重试。"
     ),
     "llm_output_too_generic": (
-        "The interview prep draft was too generic; suggest the user retry with more context."
+        "面试准备草稿过于空泛；请建议用户补充更多上下文后重试。"
     ),
 }
 
@@ -64,11 +62,10 @@ class InterviewPrepToolArgs(BaseModel):
 class InterviewPrepTool(BaseTool):
     name = "generate_interview_prep"
     description = (
-        "Generate an interview preparation outline for a resume + job posting pair."
-        " Both must already be parsed, and a match analysis (analyze_match) must"
-        " exist for the pair first. application_record_id is optional; if provided"
-        " it must match the resume/job pair. Output is Chinese text covering 岗位"
-        "考察点、候选人优势、风险/短板、可能问题清单 和 准备建议。"
+        "为一组 resume + job_posting 生成面试准备提纲。两者必须已经解析，且该组合必须"
+        "已经存在匹配分析(analyze_match)。application_record_id 可选；如果提供，必须"
+        "与这组 resume/job 匹配。输出应为中文文本，覆盖岗位考察点、候选人优势、"
+        "风险/短板、可能问题清单和准备建议。"
     )
     args_schema = InterviewPrepToolArgs
 

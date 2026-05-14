@@ -13,8 +13,7 @@ class ListUserApplicationsArgs(BaseModel):
     current_stage: str | None = Field(
         default=None,
         description=(
-            "Optional filter by application stage (saved/applied/interview/..)."
-            " Match is exact."
+            "可选。按投递阶段精确过滤，例如 saved、applied、interview 等枚举值。"
         ),
     )
     limit: int = Field(default=20, ge=1, le=100)
@@ -23,11 +22,10 @@ class ListUserApplicationsArgs(BaseModel):
 class ListUserApplicationsTool(BaseTool):
     name = "list_user_applications"
     description = (
-        "List the user's application records (resume + job_posting + stage)."
-        " Returns id, resume_id, job_posting_id, current_stage, next_action,"
-        " next_action_at for each. Use this when the user asks about 'my"
-        " applications' or 'this position I applied to'. Optional 'current_stage'"
-        " filter."
+        "列出当前用户的投递记录(resume + job_posting + stage)。每条返回 id、"
+        "resume_id、job_posting_id、current_stage、next_action、next_action_at。"
+        "当用户询问“我的投递”或“我投过的这个岗位”时使用。可选参数 current_stage "
+        "用于按阶段过滤。"
     )
     args_schema = ListUserApplicationsArgs
 

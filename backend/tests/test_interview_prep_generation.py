@@ -147,7 +147,7 @@ def test_generate_interview_prep_success(
     set_job_parsed_data: Callable[[int, dict[str, Any]], None],
 ) -> None:
     async def fake_generate_text(self, prompt: str) -> str:
-        assert "Latest match result" in prompt
+        assert "最新匹配结果" in prompt
         assert "岗位核心考察点" in prompt
         return """
 岗位核心考察点：

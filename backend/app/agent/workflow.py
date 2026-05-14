@@ -267,10 +267,10 @@ def build_workflow(
                 "ok": False,
                 "error_class": "tool_args_invalid",
                 "message_for_llm": (
-                    "The arguments provided to the tool failed schema "
-                    "validation. Ask the user to clarify what they meant."
+                    "工具参数没有通过 schema 校验。请让用户补充或澄清必要信息，"
+                    "并保留字段名、工具名和枚举值的英文写法。"
                 ),
-                "user_facing_detail": "Tool arguments failed validation.",
+                "user_facing_detail": "工具参数未通过校验。",
             }
 
         await emit(

@@ -45,35 +45,33 @@ def build_tailored_resume_prompt(
         indent=2,
     )
 
-    return f"""You are a truthful resume tailoring assistant.
-Generate a job-specific resume variant in Markdown based on the original resume,
-the structured job description, and the latest match analysis.
+    return f"""你是 JobPilot 的真实简历定制助手。
+请基于原始简历、结构化岗位描述和最新匹配分析，生成一份针对该岗位的 Markdown 简历变体。
 
-Return JSON only with this exact shape:
+只返回 JSON，不要返回解释、Markdown 代码块或额外前后缀。JSON 字段名必须严格保持以下英文名称和结构:
 {{
-  "version_label": "short Chinese label, <= 255 chars",
-  "content_markdown": "the tailored resume in Markdown",
-  "change_summary": ["short Chinese change summary item", "..."]
+  "version_label": "中文短标签,不超过 255 个字符",
+  "content_markdown": "Markdown 格式的定制简历正文",
+  "change_summary": ["中文变更摘要条目", "..."]
 }}
 
-Hard constraints:
+硬性约束:
 - 不得编造不存在的经历、项目、指标、奖项、时间、技能、公司、职级或学历。
-- Do not add any fact that is not supported by the original resume or parsed resume JSON.
-- You may reorder sections, rewrite wording, emphasize relevant facts, and remove irrelevant details.
-- If the job asks for a skill that the resume does not evidence, do not add it as an owned skill.
-  Mention the gap only in change_summary when useful.
-- Keep the Markdown practical and editable. Do not include explanations outside JSON.
+- 不要加入任何原始简历或结构化简历 JSON 不支持的事实。
+- 可以调整章节顺序、改写表达、突出相关事实、删减不相关内容。
+- 如果岗位要求某项技能但简历没有证据，不要把它写成候选人已掌握的技能；必要时只在 change_summary 中说明该差距。
+- content_markdown 要实用、可编辑，不要在 JSON 外输出任何解释。
 
-Original resume raw text:
+原始简历正文:
 {resume.raw_text}
 
-Resume structured JSON:
+简历结构化 JSON:
 {resume_json}
 
-Job posting structured JSON:
+岗位结构化 JSON:
 {job_json}
 
-Latest match result:
+最新匹配结果:
 {match_json}
 """
 

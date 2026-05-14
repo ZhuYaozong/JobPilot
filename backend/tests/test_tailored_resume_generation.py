@@ -43,7 +43,7 @@ def test_generate_tailored_resume_success_and_version_no_increments(
     async def fake_generate_text(self, prompt: str) -> str:
         seen_prompts.append(prompt)
         assert "不得编造不存在的经历、项目、指标、奖项、时间、技能" in prompt
-        assert '"change_summary": ["short Chinese change summary item", "..."]' in prompt
+        assert '"change_summary": ["中文变更摘要条目", "..."]' in prompt
         # The service should use the latest match for this resume/job pair.
         assert "93" in prompt
         return _fake_tailored_resume_json(f"{test_marker} 定制版")
@@ -186,4 +186,3 @@ def test_generate_tailored_resume_invalid_json_returns_502_without_version(
     assert response.status_code == 502
     assert response.json()["detail"] == "LLM response is not valid JSON"
     assert len(after) == len(before)
-

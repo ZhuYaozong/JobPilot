@@ -196,7 +196,7 @@ def test_match_analysis_tool_resume_not_found(
 
         assert result["ok"] is False
         assert result["error_class"] == "resume_not_found"
-        assert "valid resume_id" in result["message_for_llm"]
+        assert "有效的 resume_id" in result["message_for_llm"]
 
         logs = await _fetch_logs(db, agent_run_id)
         assert len(logs) == 1

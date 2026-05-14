@@ -49,37 +49,33 @@ class SearchKnowledgeArgs(BaseModel):
         min_length=1,
         max_length=500,
         description=(
-            "Natural-language question or keyword phrase to search the user's"
-            " knowledge base. Should be the most retrieval-friendly form of"
-            " what the user asked, not a literal echo of the user's message."
+            "用于检索当前用户知识库的自然语言问题或关键词短语。"
+            "应该改写成更适合检索的表达，而不是机械复述用户原句。"
         ),
     )
     knowledge_base_id: int | None = Field(
         default=None,
         description=(
-            "Optional. Narrow the search to a single knowledge base. Leave"
-            " null to search across all of the user's knowledge bases."
+            "可选。将检索范围限制到单个 knowledge_base_id。"
+            "为 null 时检索当前用户的全部知识库。"
         ),
     )
     top_k: int = Field(
         default=5,
         ge=1,
         le=20,
-        description="Maximum number of chunks to return (1-20, default 5).",
+        description="最多返回的 chunk 数量，范围 1-20，默认 5。",
     )
 
 
 class SearchKnowledgeTool(BaseTool):
     name = "search_knowledge"
     description = (
-        "Search the user's knowledge base (company background, project notes,"
-        " interview prep, etc.) by semantic similarity. Returns up to top_k"
-        " chunks of original text with their document title and a relevance"
-        " score. Use this when the user asks about specific content they"
-        " saved (e.g. '我在 ByteDance 做了什么项目', '面试常被问的题目',"
-        " '这家公司的背景') and the answer isn't already in conversation"
-        " history. NOT for resume/job/application metadata — those have"
-        " dedicated list_user_* tools."
+        "按语义相似度检索当前用户的知识库内容，例如公司背景、项目笔记、面试资料等。"
+        "返回最多 top_k 个原文 chunk，并包含文档标题和 relevance 分数。"
+        "当用户询问自己保存过的具体资料(例如“我在 ByteDance 做了什么项目”、"
+        "“面试常被问的题目”、“这家公司的背景”)且答案不在对话历史中时使用。"
+        "不要用它查询 resume/job/application 元数据；这些信息应使用 list_user_* 工具。"
     )
     args_schema = SearchKnowledgeArgs
 

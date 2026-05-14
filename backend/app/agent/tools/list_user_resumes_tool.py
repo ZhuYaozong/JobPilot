@@ -12,7 +12,7 @@ from app.models.resume import Resume
 class ListUserResumesArgs(BaseModel):
     query: str | None = Field(
         default=None,
-        description="Optional case-insensitive substring to match against resume title.",
+        description="可选。用于匹配简历标题的大小写不敏感子串。",
     )
     limit: int = Field(default=20, ge=1, le=100)
 
@@ -20,10 +20,9 @@ class ListUserResumesArgs(BaseModel):
 class ListUserResumesTool(BaseTool):
     name = "list_user_resumes"
     description = (
-        "List the user's resumes. Returns id, title, parse_status, and source_type"
-        " for each. Use this when the user refers to a resume vaguely (e.g. '我"
-        "最新的简历') and you need the resume_id for downstream tools. The"
-        " optional 'query' filters by title substring."
+        "列出当前用户的简历。每条返回 id、title、parse_status、source_type。"
+        "当用户模糊指代简历(例如“我最新的简历”)且后续工具需要 resume_id 时使用。"
+        "可选参数 query 会按标题子串过滤。"
     )
     args_schema = ListUserResumesArgs
 
