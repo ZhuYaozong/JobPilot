@@ -12,6 +12,8 @@ from app.schemas.resume_version import (
     ResumeVersionRead,
     ResumeVersionUpdate,
 )
+from app.schemas.tailored_resume_generation import TailoredResumeGenerateRequest
+from app.services.tailored_resume_service import generate_tailored_resume_version
 from app.services.user_scope_service import (
     get_job_posting_for_user_or_404,
     get_resume_for_user_or_404,
@@ -65,6 +67,19 @@ async def create_resume_version(
     await db.commit()
     await db.refresh(version)
     return version
+
+
+@router.post(
+    "/api/v1/resume-versions/generate-tailored",
+    response_model=ResumeVersionRead,
+    status_code=201,
+)
+async def generate_tailored_resume(
+    payload: TailoredResumeGenerateRequest,
+    db: DbSession,
+    current_user: CurrentUserDep,
+) -> ResumeVersion:
+    return await generate_tailored_resume_version(db, payload, current_user)
 
 
 @router.get("/api/v1/resume-versions", response_model=list[ResumeVersionListItem])

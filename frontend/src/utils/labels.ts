@@ -32,6 +32,7 @@ export function formatSourceType(value: string | null | undefined): string {
     docx: "Word 上传",
     text: "TXT 上传",
     markdown: "Markdown 上传",
+    ai_tailored: "AI 定制",
   });
 }
 
@@ -124,6 +125,7 @@ const TOOL_DISPLAY: Record<string, ToolDisplay> = {
   analyze_match: { label: "匹配分析", icon: "📊" },
   generate_cover_letter: { label: "生成求职信", icon: "✍️" },
   generate_interview_prep: { label: "准备面试", icon: "🎤" },
+  generate_tailored_resume: { label: "定制简历", icon: "🧩" },
 };
 
 export function formatToolName(name: string): ToolDisplay {

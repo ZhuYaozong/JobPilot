@@ -6,7 +6,11 @@ import type {
   ResumeListItem,
   ResumeUpdate,
 } from "@/types/resume";
-import type { ResumeVersionListItem } from "@/types/resume_version";
+import type {
+  ResumeVersion,
+  ResumeVersionListItem,
+  TailoredResumeGenerateRequest,
+} from "@/types/resume_version";
 
 export async function listResumes(params: ListParams = {}) {
   const response = await apiClient.get<ResumeListItem[]>("/api/v1/resumes", {
@@ -75,6 +79,17 @@ export async function listResumeVersions(
   const response = await apiClient.get<ResumeVersionListItem[]>(
     `/api/v1/resumes/${resumeId}/versions`,
     { params },
+  );
+  return response.data;
+}
+
+export async function generateTailoredResumeVersion(
+  payload: TailoredResumeGenerateRequest,
+) {
+  const response = await apiClient.post<ResumeVersion>(
+    "/api/v1/resume-versions/generate-tailored",
+    payload,
+    { timeout: LLM_OPERATION_TIMEOUT_MS },
   );
   return response.data;
 }

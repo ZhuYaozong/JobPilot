@@ -30,4 +30,10 @@ export interface ResumeVersionCreate {
   is_active?: boolean;
 }
 
+export interface TailoredResumeGenerateRequest {
+  resume_id: number;
+  job_posting_id: number;
+  application_record_id?: number | null;
+}
+
 export type ResumeVersionUpdate = Partial<ResumeVersionCreate>;

@@ -145,6 +145,16 @@
               <button
                 class="ghost-btn"
                 type="button"
+                :disabled="tailoredResumePending || !selectedMatch"
+                @click="handleGenerateTailoredResume"
+              >
+                <span v-if="tailoredResumePending" class="spinner spinner--dark" />
+                <span v-else>🧩</span>
+                <span>生成定制简历</span>
+              </button>
+              <button
+                class="ghost-btn"
+                type="button"
                 :disabled="interviewPrepPending || !selectedMatch"
                 @click="handleGenerateInterviewPrep"
               >
@@ -287,7 +297,7 @@ import {
 } from "@/api/artifacts";
 import { listJobs } from "@/api/jobs";
 import { analyzeMatch, deleteMatch, getMatch, listMatches } from "@/api/matches";
-import { listResumes } from "@/api/resumes";
+import { generateTailoredResumeVersion, listResumes } from "@/api/resumes";
 import type { GeneratedArtifactListItem } from "@/types/generated_artifact";
 import type { JobPostingListItem } from "@/types/job_posting";
 import type { MatchResult, MatchResultListItem } from "@/types/match_result";
@@ -335,6 +345,7 @@ const referencesLoading = ref(false);
 const artifactsLoading = ref(false);
 const analyzePending = ref(false);
 const coverLetterPending = ref(false);
+const tailoredResumePending = ref(false);
 const interviewPrepPending = ref(false);
 const deletePending = ref(false);
 
@@ -602,6 +613,25 @@ async function handleGenerateCoverLetter() {
     ElMessage.error(getErrorMessage(error, "生成求职信失败"));
   } finally {
     coverLetterPending.value = false;
+  }
+}
+
+async function handleGenerateTailoredResume() {
+  if (!selectedMatch.value) {
+    ElMessage.warning("请先选择一条匹配分析");
+    return;
+  }
+  tailoredResumePending.value = true;
+  try {
+    const created = await generateTailoredResumeVersion({
+      resume_id: selectedMatch.value.resume_id,
+      job_posting_id: selectedMatch.value.job_posting_id,
+    });
+    ElMessage.success(`定制简历 v${created.version_no} 已生成`);
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, "生成定制简历失败"));
+  } finally {
+    tailoredResumePending.value = false;
   }
 }
 
