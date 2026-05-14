@@ -1,4 +1,7 @@
-"""search_knowledge — RAG retrieval tool for the agent.
+"""search_knowledge — Agent 的 RAG 检索工具。
+
+中文说明：这个工具负责把用户问题转成 query embedding，并在当前用户的
+knowledge_chunks 里做 pgvector 相似度检索。它只读知识库，不写业务数据。
 
 Embeds the user's natural-language query through the same independent
 embedding endpoint that indexed the knowledge documents, then runs a
@@ -33,6 +36,7 @@ from app.models.knowledge_chunk import KnowledgeChunk
 from app.models.knowledge_document import KnowledgeDocument
 
 
+# 中文说明：限制单个命中的文本长度，避免一次检索把 format_response prompt 撑得过大。
 # How many chars of each hit to surface to the agent. Full chunk content
 # can be ~800 chars; with 5 hits that's 4000 chars in the format_response
 # prompt — fine but not free, and the agent rarely needs everything.
@@ -87,6 +91,7 @@ class SearchKnowledgeTool(BaseTool):
         user_id = ctx.current_user.id
 
         if args.knowledge_base_id is not None:
+            # 中文说明：先校验 KB 归属，不能让用户通过显式 id 检索到别人的知识库。
             owned = await ctx.db.execute(
                 select(KnowledgeBase.id).where(
                     KnowledgeBase.id == args.knowledge_base_id,
@@ -108,6 +113,7 @@ class SearchKnowledgeTool(BaseTool):
             client = self._embedding_client()
             query_vectors = await client.embed([args.query])
         except EmbeddingConfigError as exc:
+            # 中文说明：配置缺失是用户/部署可修复的业务前置错误，不把 AgentRun 标 failed。
             return {
                 "ok": False,
                 "error_class": "embedding_config_missing",
@@ -118,6 +124,7 @@ class SearchKnowledgeTool(BaseTool):
                 "user_facing_detail": str(exc),
             }
         except EmbeddingClientError as exc:
+            # 中文说明：远端不可用或响应坏掉属于系统错误，模型重试同一参数没有帮助。
             # Wrap as system error: the LLM can't fix this by re-prompting,
             # the workflow should mark the run as failed.
             raise ToolSystemError(
@@ -125,6 +132,7 @@ class SearchKnowledgeTool(BaseTool):
             ) from exc
 
         if not query_vectors:
+            # 中文说明：正常 embedding client 不应返回空向量；保留这个分支防御兼容服务异常。
             return {
                 "ok": False,
                 "error_class": "empty_query_embedding",
@@ -133,6 +141,7 @@ class SearchKnowledgeTool(BaseTool):
             }
         query_vec = query_vectors[0]
 
+        # 中文说明：cosine distance 越小越相关；按 user_id 过滤是最核心的 ACL 约束。
         # ``embedding <=> :vec`` (cosine distance). HNSW index on
         # knowledge_chunks.embedding makes this fast even at 10k+ chunks.
         # We filter out null embeddings (failed/pending docs) so the agent
@@ -161,6 +170,7 @@ class SearchKnowledgeTool(BaseTool):
             )
         )
         if args.knowledge_base_id is not None:
+            # 中文说明：如果 UI/模型指定了知识库，进一步收窄到该 KB；workflow 也会强制覆盖 UI 选择。
             stmt = stmt.where(
                 KnowledgeDocument.knowledge_base_id == args.knowledge_base_id,
             )
@@ -168,6 +178,7 @@ class SearchKnowledgeTool(BaseTool):
 
         rows = (await ctx.db.execute(stmt)).all()
 
+        # 中文说明：把 distance 同时映射成 relevance，方便模型用更直观的 0-1 分数判断可信度。
         hits = [
             {
                 "chunk_id": row.id,
@@ -198,7 +209,7 @@ class SearchKnowledgeTool(BaseTool):
         }
 
     def _embedding_client(self) -> EmbeddingClient:
-        """Hook so tests can monkeypatch a single shared instance.
+        """测试替换 embedding client 的钩子。
 
         Default behaviour: a fresh client per call (httpx clients are
         cheap and self-contained).
@@ -209,6 +220,7 @@ class SearchKnowledgeTool(BaseTool):
 def _trim(text: str, max_chars: int) -> str:
     if len(text) <= max_chars:
         return text
+    # 中文说明：优先在空白处截断，减少给模型看的片段出现半个英文词或半段标记。
     # Cut on a whitespace boundary when possible so the LLM sees a clean
     # truncation rather than a mid-word ellipsis.
     cut = text[:max_chars]

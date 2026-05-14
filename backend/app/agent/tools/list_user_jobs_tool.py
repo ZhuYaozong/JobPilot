@@ -1,4 +1,4 @@
-"""Read-only tool exposing the user's job postings to the agent.
+"""只读工具：把当前用户的岗位列表暴露给 Agent。
 
 ReAct-style usage: when a user mentions a company name but no job_posting_id,
 the LLM can call this with ``query="...company..."`` to look up the id before
@@ -42,6 +42,7 @@ class ListUserJobsTool(BaseTool):
         args: ListUserJobsArgs,
         ctx: ToolContext,
     ) -> dict[str, Any]:
+        # 中文说明：只 select Agent 需要的列，避免 ORM 对象进入 Pydantic/LLM 路径引发异步 lazy load。
         statement = select(
             JobPosting.id,
             JobPosting.company_name,
@@ -53,6 +54,7 @@ class ListUserJobsTool(BaseTool):
 
         if args.query:
             like = f"%{args.query}%"
+            # 中文说明：query 只做轻量模糊过滤，不承担复杂搜索；真正语义检索走知识库工具。
             statement = statement.where(
                 or_(
                     JobPosting.company_name.ilike(like),
@@ -66,6 +68,7 @@ class ListUserJobsTool(BaseTool):
 
         rows = (await ctx.db.execute(statement)).all()
 
+        # 中文说明：返回紧凑 DTO，既给模型足够 disambiguation，也避免把完整 JD 塞进 prompt。
         jobs = [
             {
                 "id": row.id,
