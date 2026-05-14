@@ -1,0 +1,199 @@
+# JobPilot Agent 基线 eval case 集(切片 8'a)
+#
+# 每条 case 描述一个完整对话场景。fake_responses 按声明顺序匹配 prompt 关键词,
+# 后续添加新 case 时:
+# - decide 初次调用含 "(本轮还没有调用过工具)" —— 放更具体的规则在前
+# - decide 跟进调用只含 "请严格按以下两种 JSON 之一回复"
+# - format_response 含 "本轮你为了回答用户的问题"(只在 action != respond_directly 时触发)
+# - action 工具内部各自 prompt:
+#     * analyze_match → "Compare the structured resume"
+#     * cover_letter → "Generate a concise, role-specific cover letter"
+# 占位符 ``{kb_id}`` / ``{job_id}`` / ``{resume_id}`` 在种子阶段填充。
+
+- name: simple_chat_no_tool
+  description: 用户闲聊问助手能做什么,应直接回复而不触发任何工具
+  user_text: 你好,你能帮我做什么?
+  fake_responses:
+    - match: ["请严格按以下两种 JSON 之一回复"]
+      response: |
+        {"action":"respond_directly","text":"我可以帮你管理简历、岗位,做匹配分析,还能写求职信和准备面试。你想从哪开始?"}
+  assertions:
+    - type: agent_run_status
+      status: succeeded
+      description: agent_run 应该成功收尾
+    - type: tool_not_called
+      tool: list_user_jobs
+      description: 简单闲聊不应该触发查询工具
+    - type: tool_not_called
+      tool: list_user_resumes
+    - type: final_contains
+      values: [简历, 岗位, 匹配]
+      mode: any
+      description: 介绍性回复应至少提到一个核心概念
+
+- name: list_jobs_by_company_name
+  description: 用户用公司名指代岗位,agent 应先用 list_user_jobs 查 id
+  user_text: 我这里有腾讯的岗位吗?
+  setup:
+    - kind: job
+      company_name: 腾讯
+      job_title: 后端工程师
+      city: 深圳
+  fake_responses:
+    # 初次 decide:必须 call_tool 把"腾讯"解析为 job_posting_id
+    - match: ["请严格按以下两种 JSON 之一回复", "(本轮还没有调用过工具)"]
+      response: |
+        {"action":"call_tool","tool":"list_user_jobs","args":{"query":"腾讯"}}
+    # 跟进 decide:看到 list_user_jobs 结果后直接回复
+    - match: ["请严格按以下两种 JSON 之一回复"]
+      response: |
+        {"action":"respond_directly","text":"你这里有一个腾讯的后端工程师岗位。"}
+  assertions:
+    - type: agent_run_status
+      status: succeeded
+    - type: tool_called
+      tool: list_user_jobs
+      status: success
+      description: 必须真的去查
+    - type: tool_args_contain
+      tool: list_user_jobs
+      expected:
+        query: 腾讯
+      description: 查询参数应该带上"腾讯"关键词
+    - type: final_contains
+      values: [腾讯]
+
+- name: analyze_match_full_chain
+  description: |
+    已有简历和岗位 id 时,agent 应直接调 analyze_match,
+    并把结果总结到最终回复里(分数 + 关键概念)
+  user_text: 帮我看看这份简历跟这个岗位的匹配度怎么样?
+  setup:
+    - kind: resume
+      title: 后端简历 v1
+      raw_text: 三年 FastAPI、PostgreSQL、LangGraph 经验。
+      parsed_json:
+        summary: 后端工程师,擅长 FastAPI 和数据管道
+        skills: [FastAPI, PostgreSQL, LangGraph]
+      ref: resume
+    - kind: job
+      company_name: 字节跳动
+      job_title: AI 应用工程师
+      city: 北京
+      jd_text: 用 LangGraph + FastAPI 构建 AI 工作流。
+      parsed_json:
+        summary: 用 LangGraph 构建 AI 工作流的后端岗位
+        required_skills: [LangGraph, FastAPI]
+      ref: job
+  fake_responses:
+    - match: ["请严格按以下两种 JSON 之一回复", "(本轮还没有调用过工具)"]
+      response: |
+        {"action":"call_tool","tool":"analyze_match","args":{"resume_id":"{resume_id}","job_posting_id":"{job_id}"}}
+    # match_analysis service 内部的 LLM 调用 —— prompt 是英文
+    - match: ["Compare the structured resume"]
+      response: |
+        {"overall_score": 87, "strengths": ["FastAPI 经验直接对口", "有 LangGraph 实战"], "weaknesses": ["缺乏大规模分布式经验"], "missing_keywords": ["Kubernetes"], "suggestions": ["补充一个分布式系统项目"]}
+    - match: ["请严格按以下两种 JSON 之一回复"]
+      response: |
+        {"action":"respond_directly","text":"匹配度 87 分,FastAPI 和 LangGraph 都对口,主要短板是分布式经验。"}
+  assertions:
+    - type: agent_run_status
+      status: succeeded
+    - type: tool_called
+      tool: analyze_match
+      status: success
+    - type: tool_args_contain
+      tool: analyze_match
+      expected:
+        # 占位符在 assertion 解析阶段已替换为种子 id
+        resume_id: "{resume_id}"
+        job_posting_id: "{job_id}"
+      description: 应该用种好的 resume_id / job_posting_id 调用
+    - type: final_contains
+      values: [87, 匹配]
+      mode: all
+      description: 最终回复至少要提到分数和"匹配"二字
+
+- name: search_knowledge_basic_retrieval
+  description: 用户问知识库里保存过的具体细节,agent 应调 search_knowledge
+  user_text: 我在字节跳动负责过哪些项目?
+  setup:
+    - kind: knowledge_base
+      name: 项目素材
+      ref: kb
+    - kind: knowledge_document
+      kb_id: "{kb_id}"
+      title: 字节跳动项目笔记
+      body: |
+        在字节跳动期间负责数据管道改造,把 ETL 从 Hive 迁移到 Spark Streaming,
+        日处理量从 100 GB 提升到 1 TB,P99 延迟下降 40%。
+  context:
+    knowledge_base_id: "{kb_id}"
+  fake_responses:
+    - match: ["请严格按以下两种 JSON 之一回复", "(本轮还没有调用过工具)"]
+      response: |
+        {"action":"call_tool","tool":"search_knowledge","args":{"query":"字节跳动 项目"}}
+    - match: ["请严格按以下两种 JSON 之一回复"]
+      response: |
+        {"action":"respond_directly","text":"你在字节跳动主要做了数据管道改造,把 ETL 从 Hive 迁到 Spark Streaming,日处理量到 1 TB。"}
+  assertions:
+    - type: agent_run_status
+      status: succeeded
+    - type: tool_called
+      tool: search_knowledge
+      status: success
+    - type: final_contains
+      values: [字节跳动, 数据管道]
+      mode: all
+
+- name: mock_interview_only_one_question
+  description: |
+    模拟面试模式下,system 把"每轮只问一个问题"塞进 context_hint,
+    agent 的回复必须只含一个问号
+  user_text: 开始模拟面试吧。
+  setup:
+    - kind: resume
+      title: 后端简历
+      raw_text: 三年后端经验,FastAPI + PostgreSQL。
+      parsed_json:
+        skills: [FastAPI]
+      ref: resume
+    - kind: job
+      company_name: 腾讯
+      job_title: 后端工程师
+      jd_text: 高并发后端开发。
+      parsed_json:
+        required_skills: [Go]
+      ref: job
+  context:
+    assistant_mode: mock_interview
+    resume_id: "{resume_id}"
+    job_posting_id: "{job_id}"
+  fake_responses:
+    - match: ["请严格按以下两种 JSON 之一回复"]
+      response: |
+        {"action":"respond_directly","text":"我们从你的项目经验开始。能详细讲一个你最自豪的 FastAPI 项目吗?"}
+  assertions:
+    - type: agent_run_status
+      status: succeeded
+    - type: final_question_count
+      max: 1
+      description: 模拟面试模式严格限制每轮只问一个问题
+
+- name: decide_repair_failed_marks_run_failed
+  description: |
+    decide 两次都返回不可解析 JSON 时,agent_run 应该被标记为 failed
+    且 error_class=decide_repair_failed,而不是 500 异常
+  user_text: 帮我做点什么。
+  fake_responses:
+    # 初次和 repair 都返回坏 JSON;workflow 会先 repair 一次再放弃
+    - match: ["请严格按以下两种 JSON 之一回复"]
+      response: |
+        not even close to valid JSON
+  assertions:
+    - type: agent_run_status
+      status: failed
+      error_class: decide_repair_failed
+      description: 应优雅标记为失败而不是把异常抛到 API 层
+    - type: tool_not_called
+      tool: list_user_jobs

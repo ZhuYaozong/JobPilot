@@ -152,6 +152,33 @@ uv --cache-dir .uv-cache --directory backend run pytest tests/test_assistant_str
 - LLM、embedding 和 URL 抓取相关测试使用 monkeypatch / mock，不依赖真实外部服务。
 - 测试数据库仍指向当前配置的 PostgreSQL，运行前需确保本地 compose 服务可用并已执行迁移。
 
+## Agent Eval
+
+`app/eval/` 是一个独立的 agent 行为回归框架（切片 8'a），跟 pytest 是分开的两套：
+
+- pytest 验证"代码是否正确"。
+- eval 验证"agent 在场景里是否做对了事"——选对了工具、调用顺序合理、最终回复包含关键事实。
+
+跑全部 baseline case（默认走 fake LLM + fake embedding，不消耗 token）：
+
+```powershell
+uv --cache-dir .uv-cache --directory backend run python -m app.eval.cli
+```
+
+常用选项：
+
+- `--filter NAME`：正则匹配 case 名，只跑命中的（如 `--filter search`）。
+- `--live`：用真 `LLMClient` + `EmbeddingClient`，需要 `LLM_*` / `EMBEDDING_*` 环境变量已配置。
+- `--report-dir PATH`：自定义报告输出根目录（默认 `./eval-reports/`，每次跑会生成时间戳子目录）。
+
+每次跑会输出：
+
+- 控制台逐行 `[OK] / [FAIL]` 标记 + 失败原因摘要。
+- `eval-reports/<timestamp>/summary.md`：汇总表 + 失败明细。
+- `eval-reports/<timestamp>/case-<name>.json`：每 case 的完整 trace（工具调用、参数、结果、最终回复）。
+
+新增 case 时只需在 `app/eval/datasets/` 下加 yaml，runner 会自动加载；参考 `v1.yaml` 的 fake_responses 关键词分发约定。框架本身的回归测试在 `tests/test_eval_runner.py`，跟 pytest 一起跑。
+
 ## User Scope
 
 当前没有正式登录系统。后端通过 dev-only 请求头识别用户：

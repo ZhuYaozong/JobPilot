@@ -261,6 +261,14 @@ Backend tests:
 uv --cache-dir .uv-cache --directory backend run pytest
 ```
 
+Agent eval（行为回归框架，跟 pytest 互补，默认 fake LLM 不耗 token）：
+
+```powershell
+uv --cache-dir .uv-cache --directory backend run python -m app.eval.cli
+```
+
+详细见 [backend/README.md#agent-eval](backend/README.md#agent-eval)。
+
 Frontend build:
 
 ```powershell

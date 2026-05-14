@@ -33,4 +33,8 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Agent eval 报告输出(切片 8'a)
+eval-reports/
+backend/eval-reports/
 logs/
