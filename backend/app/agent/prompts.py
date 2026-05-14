@@ -118,7 +118,8 @@ def build_decide_prompt(
   以前的复盘等),且答案不在对话历史 / 摘要里 → 调用 search_knowledge 检索。
   注意 search_knowledge 是检索用户的**知识库内容**,**不是**岗位/简历元数据。
 - 如果本轮上下文提示里选中了知识库,调用 search_knowledge 时使用该知识库 id。
-- 拿到 id 后再调用需要 id 的动作工具(analyze_match / generate_cover_letter / generate_interview_prep)。
+- 拿到 id 后再调用需要 id 的动作工具(analyze_match / generate_cover_letter /
+  generate_interview_prep / generate_tailored_resume)。
 - 如果当前上下文提示里是"模拟面试"模式:
   - 没有简历和岗位 id 时,直接回复用户先在右侧选择简历和岗位,不要调用工具。
   - 用户要求开始模拟面试且已有简历+岗位 id 时,本轮优先按顺序准备信息:先调用 analyze_match,

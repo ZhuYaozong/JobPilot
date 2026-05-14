@@ -12,8 +12,9 @@ Tools fall into three rough categories:
 - **Retrieval tools** (``search_knowledge``): semantic search over the user's
   uploaded knowledge base content. One embedding call per invocation.
 - **Action tools** (``analyze_match``, ``generate_cover_letter``,
-  ``generate_interview_prep``): call the underlying business service, take
-  seconds, write rows. Each typically called once per turn.
+  ``generate_interview_prep``, ``generate_tailored_resume``): call the
+  underlying business service, take seconds, write rows. Each typically
+  called once per turn.
 """
 
 from app.agent.tool_adapter import BaseTool
@@ -24,6 +25,7 @@ from app.agent.tools.list_user_jobs_tool import ListUserJobsTool
 from app.agent.tools.list_user_resumes_tool import ListUserResumesTool
 from app.agent.tools.match_analysis_tool import MatchAnalysisTool
 from app.agent.tools.search_knowledge_tool import SearchKnowledgeTool
+from app.agent.tools.tailored_resume_tool import TailoredResumeTool
 
 TOOL_REGISTRY: dict[str, type[BaseTool]] = {
     ListUserJobsTool.name: ListUserJobsTool,
@@ -33,6 +35,7 @@ TOOL_REGISTRY: dict[str, type[BaseTool]] = {
     MatchAnalysisTool.name: MatchAnalysisTool,
     CoverLetterTool.name: CoverLetterTool,
     InterviewPrepTool.name: InterviewPrepTool,
+    TailoredResumeTool.name: TailoredResumeTool,
 }
 
 __all__ = [
@@ -44,4 +47,5 @@ __all__ = [
     "ListUserResumesTool",
     "MatchAnalysisTool",
     "SearchKnowledgeTool",
+    "TailoredResumeTool",
 ]
