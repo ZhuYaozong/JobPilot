@@ -10,6 +10,10 @@
   断言里可以写 ``"{kb_id}"`` 等占位符,runner 解析后传进来已经替换好
 
 新增断言器只需 ``register("foo")`` 装饰一下即可,框架自动 dispatch。
+
+``llm_judge`` 是特殊的异步断言器——需要调真实 LLM API。runner 通过
+``run_assertion_async`` 入口来驱动;fake 模式下 ``llm_judge`` 被跳过,
+标记为 skipped 而非 fail。
 """
 
 from __future__ import annotations
@@ -269,6 +273,106 @@ def _final_question_count(
         passed=False,
         detail=f"问号出现 {count} 次,期望 ≤ {max_q};回复: {final[:200]!r}",
     )
+
+
+# ---------- LLM-as-judge(异步断言) ----------------------------------------
+
+# 标记哪些断言类型是异步的,runner 需要特殊处理
+ASYNC_ASSERTION_TYPES: set[str] = set()
+
+
+def register_async(name: str):
+    """装饰器:注册一个异步 checker(签名返回 awaitable)。"""
+
+    def _wrap(fn):
+        if name in _REGISTRY:
+            raise ValueError(f"assertion 类型重名: {name}")
+        _REGISTRY[name] = fn
+        ASYNC_ASSERTION_TYPES.add(name)
+        return fn
+
+    return _wrap
+
+
+@register_async("llm_judge")
+async def _llm_judge(
+    trace: CaseTrace, params: dict[str, Any], _refs: dict[str, Any],
+) -> AssertionResult:
+    """用 LLM 对 agent 回复做软质量评分。
+
+    必填参数:
+    - ``rubric``: 评分标准描述(传给 judge LLM)
+
+    可选参数:
+    - ``threshold``: 归一化总分阈值,低于此值判 fail(默认 0.6)
+    - ``context_desc``: 额外上下文说明(传给 judge LLM)
+    """
+    from app.eval.judge import run_judge
+
+    rubric = params.get("rubric")
+    if not rubric:
+        return AssertionResult(
+            spec=_make_spec("llm_judge", params),
+            passed=False,
+            detail="llm_judge 缺少必填参数 rubric",
+        )
+
+    threshold: float = float(params.get("threshold", 0.6))
+    context_desc: str | None = params.get("context_desc")
+    user_text: str = params.get("_user_text") or ""
+
+    verdict = await run_judge(
+        rubric=rubric,
+        user_text=user_text,
+        final_text=trace.final_text or "",
+        tool_calls=trace.tool_calls,
+        context_desc=context_desc,
+    )
+
+    passed = verdict.score >= threshold
+    detail = "" if passed else (
+        f"judge 评分 {verdict.score:.2f} 低于阈值 {threshold}; {verdict.reasoning[:200]}"
+    )
+    return AssertionResult(
+        spec=_make_spec("llm_judge", params),
+        passed=passed,
+        detail=detail,
+        score=verdict.score,
+        judge_detail={
+            "score": verdict.score,
+            "threshold": threshold,
+            "aspects": verdict.aspects,
+            "reasoning": verdict.reasoning,
+        },
+    )
+
+
+async def run_assertion_async(
+    spec: AssertionSpec,
+    trace: CaseTrace,
+    ref_context: dict[str, Any],
+) -> AssertionResult:
+    """异步版断言执行入口,支持 ``llm_judge`` 等异步断言器。
+
+    普通(同步)断言直接调用;异步断言 await。runner 统一走本函数。
+    """
+    checker = _REGISTRY.get(spec.type)
+    if checker is None:
+        return AssertionResult(
+            spec=spec,
+            passed=False,
+            detail=f"未知断言类型: {spec.type}。已注册: {sorted(_REGISTRY)}",
+        )
+    try:
+        if spec.type in ASYNC_ASSERTION_TYPES:
+            return await checker(trace, spec.params or {}, ref_context)
+        return checker(trace, spec.params or {}, ref_context)
+    except Exception as exc:  # noqa: BLE001
+        return AssertionResult(
+            spec=spec,
+            passed=False,
+            detail=f"断言器内部异常: {type(exc).__name__}: {exc}",
+        )
 
 
 # ---------- 内部辅助 -------------------------------------------------------

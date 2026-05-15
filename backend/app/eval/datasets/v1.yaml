@@ -5,9 +5,9 @@
 # - decide 初次调用含 "(本轮还没有调用过工具)" —— 放更具体的规则在前
 # - decide 跟进调用只含 "请严格按以下两种 JSON 之一回复"
 # - format_response 含 "本轮你为了回答用户的问题"(只在 action != respond_directly 时触发)
-# - action 工具内部各自 prompt:
-#     * analyze_match → "Compare the structured resume"
-#     * cover_letter → "Generate a concise, role-specific cover letter"
+# - action 工具内部各自 prompt(已中文化):
+#     * analyze_match → "请比较结构化简历和结构化岗位描述"
+#     * cover_letter → "你是 JobPilot 的求职信撰写专家"
 # 占位符 ``{kb_id}`` / ``{job_id}`` / ``{resume_id}`` 在种子阶段填充。
 
 - name: simple_chat_no_tool
@@ -30,6 +30,14 @@
       values: [简历, 岗位, 匹配]
       mode: any
       description: 介绍性回复应至少提到一个核心概念
+    - type: llm_judge
+      rubric: |
+        评估求职助手的自我介绍回复质量。打分维度:
+        1. 友好度(0-5):语气是否亲切自然,有邀请感
+        2. 功能覆盖(0-5):是否清晰列出了核心能力(简历/岗位/匹配/面试等)
+        3. 中文表达(0-5):是否通顺,无翻译腔或生硬措辞
+      threshold: 0.6
+      description: 介绍性回复的整体质量(友好度+功能覆盖+中文表达)
 
 - name: list_jobs_by_company_name
   description: 用户用公司名指代岗位,agent 应先用 list_user_jobs 查 id
@@ -89,8 +97,8 @@
     - match: ["请严格按以下两种 JSON 之一回复", "(本轮还没有调用过工具)"]
       response: |
         {"action":"call_tool","tool":"analyze_match","args":{"resume_id":"{resume_id}","job_posting_id":"{job_id}"}}
-    # match_analysis service 内部的 LLM 调用 —— prompt 是英文
-    - match: ["Compare the structured resume"]
+    # match_analysis service 内部的 LLM 调用(已中文化)
+    - match: ["请比较结构化简历和结构化岗位描述"]
       response: |
         {"overall_score": 87, "strengths": ["FastAPI 经验直接对口", "有 LangGraph 实战"], "weaknesses": ["缺乏大规模分布式经验"], "missing_keywords": ["Kubernetes"], "suggestions": ["补充一个分布式系统项目"]}
     - match: ["请严格按以下两种 JSON 之一回复"]
@@ -113,6 +121,14 @@
       values: [87, 匹配]
       mode: all
       description: 最终回复至少要提到分数和"匹配"二字
+    - type: llm_judge
+      rubric: |
+        评估匹配分析结果总结的质量。打分维度:
+        1. 专业性(0-5):是否具体指出了优势和短板,而非泛泛而谈
+        2. 可操作性(0-5):是否给出了明确的改进建议
+        3. 完整性(0-5):是否涵盖了分数、优势、劣势、建议等关键要素
+      threshold: 0.6
+      description: 匹配分析总结的专业度和可操作性
 
 - name: search_knowledge_basic_retrieval
   description: 用户问知识库里保存过的具体细节,agent 应调 search_knowledge
@@ -145,6 +161,14 @@
     - type: final_contains
       values: [字节跳动, 数据管道]
       mode: all
+    - type: llm_judge
+      rubric: |
+        评估知识库检索结果的回复质量。打分维度:
+        1. 准确性(0-5):回复内容是否忠实于检索到的原始资料
+        2. 完整性(0-5):是否提取了关键数据点(技术栈、规模、成果指标等)
+        3. 表达清晰(0-5):是否条理分明,便于用户直接用于求职材料
+      threshold: 0.6
+      description: 知识检索回复的准确性和完整性
 
 - name: mock_interview_only_one_question
   description: |

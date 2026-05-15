@@ -62,10 +62,15 @@ def main(argv: list[str] | None = None) -> int:
         print("没有可跑的 case(检查 --filter 是否过严)。", file=sys.stderr)
         return 2
 
-    print(f"准备跑 {len(cases)} 个 case " + ("(LIVE LLM)" if args.live else "(fake LLM)"))
+    mode_label = "(LIVE LLM)" if args.live else "(fake LLM)"
+    if args.judge and not args.live:
+        mode_label += " + judge"
+    print(f"准备跑 {len(cases)} 个 case {mode_label}")
     print("=" * 70)
 
-    results = run_cases(cases, live=args.live, timeout_seconds=args.timeout)
+    results = run_cases(
+        cases, live=args.live, judge=args.judge, timeout_seconds=args.timeout,
+    )
 
     # 控制台逐条打印 + 最终汇总
     for line in render_console_lines(results):
@@ -104,6 +109,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--live",
         action="store_true",
         help="用真 LLMClient,需要 LLM_* env 配置;默认 fake LLM",
+    )
+    p.add_argument(
+        "--judge",
+        action="store_true",
+        help="启用 LLM-as-judge 评分(llm_judge 断言);--live 隐含 --judge",
     )
     p.add_argument(
         "--timeout",
