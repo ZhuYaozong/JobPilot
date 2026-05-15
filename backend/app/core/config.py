@@ -24,6 +24,14 @@ class Settings(BaseSettings):
     # 数据库向量列是固定维度，改这里必须配套 migration，每个部署环境内要保持稳定。
     embedding_dimensions: int = 1536
 
+    # 认证配置
+    # auth_dev_mode=True 时同时接受 X-User-Name header（向后兼容开发模式）；
+    # 生产部署应设为 False，仅允许 JWT token 认证。
+    auth_secret_key: str = "jobpilot-dev-secret-change-in-production"
+    auth_algorithm: str = "HS256"
+    auth_access_token_expire_minutes: int = 1440  # 24 小时
+    auth_dev_mode: bool = True
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
