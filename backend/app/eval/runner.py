@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
-from app.eval.assertions import run_assertion
+from app.eval.assertions import ASYNC_ASSERTION_TYPES, run_assertion, run_assertion_async
 from app.eval.cases import (
     AssertionResult,
     AssertionSpec,
@@ -56,30 +56,42 @@ def run_cases(
     cases: Iterable[EvalCase],
     *,
     live: bool = False,
+    judge: bool = False,
     timeout_seconds: float = DEFAULT_CASE_TIMEOUT_SECONDS,
 ) -> list[CaseResult]:
     """同步入口,内部 ``asyncio.run`` 每个 case。
 
     ``live=True`` 表示用真 ``LLMClient`` 而不是 fake;此时 case 的
     ``fake_responses`` 被忽略,需要 ``LLM_*`` 环境变量已配置。
+
+    ``judge=True`` 表示启用 LLM-as-judge 评分(``llm_judge`` 断言);
+    ``--live`` 隐含 ``judge=True``。若两者都为 False,``llm_judge``
+    断言会被跳过(标记 skipped)。
     """
+    enable_judge = judge or live
     results: list[CaseResult] = []
     for case in cases:
         result = asyncio.run(
-            _run_single_case(case, live=live, timeout_seconds=timeout_seconds),
+            _run_single_case(
+                case, live=live, enable_judge=enable_judge,
+                timeout_seconds=timeout_seconds,
+            ),
         )
         results.append(result)
     return results
 
 
 async def _run_single_case(
-    case: EvalCase, *, live: bool, timeout_seconds: float,
+    case: EvalCase, *, live: bool, enable_judge: bool, timeout_seconds: float,
 ) -> CaseResult:
     """跑一个 case,生成 :class:`CaseResult`。
 
     异常一律捕获并作为框架错误塞进 ``CaseResult.error``;真正的 case fail
     走 assertions 路径。这样 runner 永远跑完所有 case,不被一个挂掉拦腰
     打断。
+
+    ``enable_judge`` 控制 ``llm_judge`` 类型断言是否真正执行——
+    False 时跳过并标记 skipped,避免 fake 模式意外调 LLM API。
     """
     started = time.perf_counter()
     engine = create_async_engine(settings.database_url, poolclass=NullPool)
@@ -114,18 +126,9 @@ async def _run_single_case(
         # assertion 评分独立于工作流执行,不需要 DB 会话。
         # 评分前先把 params 里的 ``{ref}`` 占位符替换成实际 id —— 这样
         # case 作者可以用 ``resume_id: "{resume_id}"`` 来引用种子产物。
-        assertion_results: list[AssertionResult] = [
-            run_assertion(
-                AssertionSpec(
-                    type=spec.type,
-                    params=_resolve_placeholders(spec.params, ref_context),
-                    description=spec.description,
-                ),
-                trace,
-                ref_context,
-            )
-            for spec in case.assertions
-        ]
+        assertion_results = await _evaluate_assertions(
+            case, trace, ref_context, enable_judge=enable_judge,
+        )
         passed = all(r.passed for r in assertion_results) if assertion_results else True
         return CaseResult(
             case=case,
@@ -186,6 +189,48 @@ async def _execute_case(
 
     trace = await _collect_trace(db, response.conversation_id, response.agent_run.id)
     return trace, ref_context
+
+
+async def _evaluate_assertions(
+    case: EvalCase,
+    trace: CaseTrace,
+    ref_context: dict[str, Any],
+    *,
+    enable_judge: bool,
+) -> list[AssertionResult]:
+    """评估一个 case 的全部断言,返回结果列表。
+
+    普通断言同步执行;``llm_judge`` 断言在 ``enable_judge=True`` 时 await
+    真实 LLM,否则标记 skipped(passed=True,不影响整体 pass/fail)。
+    """
+    results: list[AssertionResult] = []
+    for spec in case.assertions:
+        resolved_params = _resolve_placeholders(spec.params, ref_context)
+
+        # llm_judge 需要知道用户原文来构建 judge prompt
+        if spec.type == "llm_judge":
+            resolved_params["_user_text"] = case.user_text
+
+        resolved_spec = AssertionSpec(
+            type=spec.type,
+            params=resolved_params,
+            description=spec.description,
+        )
+
+        if spec.type in ASYNC_ASSERTION_TYPES:
+            if not enable_judge:
+                # fake 模式不跑 judge,标记 skipped
+                results.append(AssertionResult(
+                    spec=resolved_spec,
+                    passed=True,
+                    detail="skipped(需要 --judge 或 --live 启用)",
+                ))
+                continue
+            result = await run_assertion_async(resolved_spec, trace, ref_context)
+        else:
+            result = run_assertion(resolved_spec, trace, ref_context)
+        results.append(result)
+    return results
 
 
 def _resolve_fake_responses(

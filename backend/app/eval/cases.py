@@ -84,11 +84,16 @@ class AssertionResult:
     """单条断言的评分结果。
 
     ``detail`` 在 fail 时填可读原因(给 markdown 报告看),pass 时通常为空。
+    ``score`` 和 ``judge_detail`` 仅 ``llm_judge`` 类型断言使用:
+    - ``score`` 是 0.0~1.0 的归一化总分
+    - ``judge_detail`` 包含各维度评分 + judge 的整体评语
     """
 
     spec: AssertionSpec
     passed: bool
     detail: str = ""
+    score: float | None = None
+    judge_detail: dict[str, Any] | None = None
 
 
 @dataclass

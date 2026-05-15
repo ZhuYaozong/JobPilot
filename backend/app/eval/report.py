@@ -49,6 +49,19 @@ def render_console_lines(results: list[CaseResult]) -> list[str]:
             for a in r.assertions:
                 if not a.passed:
                     lines.append(f"    - {a.spec.type}: {a.detail}")
+        # judge 评分摘要(无论 pass/fail 都显示分数)
+        for a in r.assertions:
+            if a.score is not None:
+                score_pct = f"{a.score:.0%}"
+                label = "PASS" if a.passed else "FAIL"
+                lines.append(f"    - judge: {score_pct} [{label}]")
+                if a.judge_detail and a.judge_detail.get("aspects"):
+                    for asp in a.judge_detail["aspects"]:
+                        lines.append(
+                            f"      {asp.get('name','?')}: "
+                            f"{asp.get('score',0)}/{asp.get('max',5)} "
+                            f"- {asp.get('reason','')}"
+                        )
     return lines
 
 
@@ -71,6 +84,8 @@ def _write_case_json(result: CaseResult, report_dir: Path) -> None:
                 "params": a.spec.params,
                 "passed": a.passed,
                 "detail": a.detail,
+                **({"score": a.score} if a.score is not None else {}),
+                **({"judge_detail": a.judge_detail} if a.judge_detail else {}),
             }
             for a in result.assertions
         ],
@@ -114,6 +129,31 @@ def _render_summary(results: list[CaseResult]) -> str:
             f" {first_fail.replace('|', '\\|')} |\n",
         )
 
+    # judge 评分汇总(所有含 judge 的 case,无论 pass/fail)
+    judge_cases = [
+        r for r in results
+        if any(a.score is not None for a in r.assertions)
+    ]
+    if judge_cases:
+        out.append("\n## LLM Judge 评分\n")
+        out.append("| case | 总分 | 结果 | 各维度 |\n")
+        out.append("|---|---|---|---|\n")
+        for r in judge_cases:
+            for a in r.assertions:
+                if a.score is not None:
+                    verdict = "✅" if a.passed else "❌"
+                    aspects_str = ""
+                    if a.judge_detail and a.judge_detail.get("aspects"):
+                        parts = [
+                            f"{asp.get('name','?')} {asp.get('score',0)}/{asp.get('max',5)}"
+                            for asp in a.judge_detail["aspects"]
+                        ]
+                        aspects_str = ", ".join(parts)
+                    out.append(
+                        f"| `{r.case.name}` | {a.score:.0%} | {verdict} |"
+                        f" {aspects_str.replace('|', '\\|')} |\n",
+                    )
+
     failures = [r for r in results if not r.passed]
     if failures:
         out.append("\n## 失败明细\n")
@@ -126,6 +166,16 @@ def _render_summary(results: list[CaseResult]) -> str:
             for a in r.assertions:
                 if not a.passed:
                     out.append(f"- ❌ `{a.spec.type}`: {a.detail}\n")
+                    # judge 失败时附上各维度明细
+                    if a.judge_detail and a.judge_detail.get("aspects"):
+                        for asp in a.judge_detail["aspects"]:
+                            out.append(
+                                f"  - {asp.get('name','?')}: "
+                                f"{asp.get('score',0)}/{asp.get('max',5)} "
+                                f"— {asp.get('reason','')}\n",
+                            )
+                        if a.judge_detail.get("reasoning"):
+                            out.append(f"  - _评语_: {a.judge_detail['reasoning'][:200]}\n")
             if r.trace:
                 tool_names = [tc.get("tool_name") for tc in r.trace.tool_calls]
                 out.append(
