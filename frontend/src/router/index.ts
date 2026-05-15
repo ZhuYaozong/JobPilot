@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from "vue-router";
 
 import AppLayout from "@/layouts/AppLayout.vue";
+import LoginView from "@/views/auth/LoginView.vue";
 import ApplicationsView from "@/views/applications/ApplicationsView.vue";
 import ArtifactsView from "@/views/artifacts/ArtifactsView.vue";
 import AssistantView from "@/views/assistant/AssistantView.vue";
@@ -13,6 +14,12 @@ import ResumesView from "@/views/resumes/ResumesView.vue";
 const router = createRouter({
   history: createWebHistory(),
   routes: [
+    {
+      path: "/login",
+      name: "login",
+      component: LoginView,
+      meta: { public: true },
+    },
     {
       path: "/",
       component: AppLayout,
@@ -101,6 +108,22 @@ const router = createRouter({
       ],
     },
   ],
+});
+
+// 路由守卫：未登录(无 token)且非 dev 模式时跳转登录页。
+// dev 模式(后端 auth_dev_mode=true)下 X-User-Name header 可用，不强制登录。
+// 前端通过环境变量 VITE_AUTH_DEV_MODE 控制是否跳过守卫(默认 true = 不拦截)。
+import { isAuthenticated } from "@/lib/currentUser";
+
+const isDevMode = import.meta.env.VITE_AUTH_DEV_MODE !== "false";
+
+router.beforeEach((to) => {
+  if (to.meta.public || isDevMode) return true;
+
+  if (!isAuthenticated()) {
+    return { name: "login" };
+  }
+  return true;
 });
 
 export default router;
