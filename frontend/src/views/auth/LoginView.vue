@@ -71,24 +71,22 @@
         </button>
       </div>
 
-      <div class="auth-dev-hint">
-        <p>开发模式下也可以直接进入应用（无需注册）</p>
-        <button class="auth-dev-btn" type="button" @click="enterDevMode">
-          以 Demo 用户进入 →
-        </button>
+      <div class="auth-back">
+        <RouterLink class="auth-back-link" to="/">← 返回应用</RouterLink>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from "vue";
-import { useRouter } from "vue-router";
+import { ref, reactive, onMounted } from "vue";
+import { useRouter, useRoute } from "vue-router";
 import { login, register } from "@/api/auth";
-import { saveAuthSession } from "@/lib/currentUser";
+import { addJwtSession } from "@/lib/currentUser";
 import axios from "axios";
 
 const router = useRouter();
+const route = useRoute();
 const isRegister = ref(false);
 const loading = ref(false);
 const errorMsg = ref("");
@@ -98,6 +96,12 @@ const form = reactive({
   password: "",
   email: "",
   display_name: "",
+});
+
+onMounted(() => {
+  if (route.query.mode === "register") {
+    isRegister.value = true;
+  }
 });
 
 function toggleMode() {
@@ -119,7 +123,7 @@ async function handleSubmit() {
         })
       : await login({ username: form.username, password: form.password });
 
-    saveAuthSession(resp.access_token, resp.user);
+    addJwtSession(resp.access_token, resp.user);
     router.push("/");
   } catch (err) {
     if (axios.isAxiosError(err) && err.response?.data?.detail) {
@@ -130,10 +134,6 @@ async function handleSubmit() {
   } finally {
     loading.value = false;
   }
-}
-
-function enterDevMode() {
-  router.push("/");
 }
 </script>
 
@@ -250,32 +250,18 @@ function enterDevMode() {
   margin-left: 4px;
 }
 
-.auth-dev-hint {
-  margin-top: 24px;
-  padding-top: 20px;
-  border-top: 1px solid var(--color-border, #eee);
+.auth-back {
+  margin-top: 20px;
   text-align: center;
 }
 
-.auth-dev-hint p {
-  font-size: 12px;
-  color: var(--color-text-muted, #999);
-  margin: 0 0 8px;
-}
-
-.auth-dev-btn {
-  background: none;
-  border: 1px solid var(--color-border, #ddd);
-  border-radius: 6px;
-  padding: 6px 16px;
+.auth-back-link {
   font-size: 13px;
-  color: var(--color-text-secondary, #666);
-  cursor: pointer;
-  transition: all 0.15s;
+  color: var(--color-text-muted, #999);
+  text-decoration: none;
 }
 
-.auth-dev-btn:hover {
-  background: var(--color-bg-primary, #f8f9fa);
-  border-color: var(--color-text-secondary, #999);
+.auth-back-link:hover {
+  color: var(--color-text-secondary, #666);
 }
 </style>

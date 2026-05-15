@@ -4,7 +4,7 @@
     <section class="hero">
       <div class="hero__greeting">
         <p class="hero__eyebrow">今日工作台</p>
-        <h1 class="hero__title">你好，{{ currentUser.label }}</h1>
+        <h1 class="hero__title">你好，{{ currentUser.displayName }}</h1>
         <p class="hero__subtitle">{{ greetingSubtitle }}</p>
         <p class="hero__meta">{{ overviewSummary }}</p>
       </div>
@@ -177,7 +177,7 @@ import { listArtifacts } from "@/api/artifacts";
 import { listJobs } from "@/api/jobs";
 import { listMatches } from "@/api/matches";
 import { listResumes } from "@/api/resumes";
-import { getCurrentDevUserOption } from "@/lib/currentUser";
+import { getCurrentSession } from "@/lib/currentUser";
 import type { ApplicationRecordListItem } from "@/types/application_record";
 import type { GeneratedArtifactListItem } from "@/types/generated_artifact";
 import type { JobPostingListItem } from "@/types/job_posting";
@@ -214,7 +214,7 @@ interface StatItem {
   accent?: boolean;
 }
 
-const currentUser = getCurrentDevUserOption();
+const currentUser = getCurrentSession();
 const jobs = ref<JobPostingListItem[]>([]);
 const resumes = ref<ResumeListItem[]>([]);
 const matches = ref<MatchResultListItem[]>([]);

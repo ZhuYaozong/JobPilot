@@ -10,26 +10,47 @@
 
     <details class="sidebar-user" aria-label="当前用户">
       <summary class="sidebar-user__summary">
-        <span class="sidebar-avatar">{{ currentUser.label.slice(0, 1) }}</span>
+        <span class="sidebar-avatar">{{ currentSession.displayName.slice(0, 1) }}</span>
         <span class="sidebar-user__copy">
-          <strong>{{ currentUser.label }}</strong>
-          <small>{{ currentUser.description }}</small>
+          <strong>{{ currentSession.displayName }}</strong>
+          <small>{{ currentSession.username }}</small>
         </span>
         <span class="sidebar-user__chevron">▾</span>
       </summary>
       <div class="sidebar-user__menu">
-        <label class="sidebar-user__field">
-          <span>切换工作区</span>
-          <select v-model="selectedUser" @change="handleUserChange">
-            <option
-              v-for="option in DEV_USER_OPTIONS"
-              :key="option.username"
-              :value="option.username"
-            >
-              {{ option.label }}
-            </option>
-          </select>
-        </label>
+        <!-- 其他可切换用户 -->
+        <template v-if="otherSessions.length > 0">
+          <p class="menu-section-title">切换用户</p>
+          <button
+            v-for="session in otherSessions"
+            :key="session.username"
+            class="menu-item"
+            @click="handleSwitch(session.username)"
+          >
+            <span class="menu-avatar">{{ session.displayName.slice(0, 1) }}</span>
+            <span class="menu-item__copy">
+              <strong>{{ session.displayName }}</strong>
+              <small>{{ session.username }}</small>
+            </span>
+            <span v-if="session.type === 'jwt'" class="menu-badge">JWT</span>
+          </button>
+        </template>
+
+        <div class="menu-divider" />
+
+        <!-- 操作按钮 -->
+        <RouterLink class="menu-action" to="/login">
+          <span class="menu-action-icon">🔑</span>
+          登录其他用户
+        </RouterLink>
+        <RouterLink class="menu-action" to="/login?mode=register">
+          <span class="menu-action-icon">📝</span>
+          注册新用户
+        </RouterLink>
+        <button class="menu-action menu-action--danger" @click="handleLogout">
+          <span class="menu-action-icon">🚪</span>
+          退出登录
+        </button>
       </div>
     </details>
 
@@ -59,13 +80,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed } from "vue";
 
 import {
-  DEV_USER_OPTIONS,
-  type DevUserName,
-  getCurrentDevUserOption,
-  setCurrentDevUserName,
+  getCurrentSession,
+  getOtherSessions,
+  switchSession,
+  logout,
 } from "@/lib/currentUser";
 
 interface SidebarNavItem {
@@ -81,12 +102,15 @@ interface SidebarNavGroup {
   items: SidebarNavItem[];
 }
 
-const currentUser = computed(() => getCurrentDevUserOption());
-const selectedUser = ref<DevUserName>(getCurrentDevUserOption().username);
+const currentSession = computed(() => getCurrentSession());
+const otherSessions = computed(() => getOtherSessions());
 
-function handleUserChange() {
-  setCurrentDevUserName(selectedUser.value);
-  window.location.reload();
+function handleSwitch(username: string) {
+  switchSession(username);
+}
+
+function handleLogout() {
+  logout();
 }
 
 const navGroups: SidebarNavGroup[] = [
@@ -112,9 +136,6 @@ const navGroups: SidebarNavGroup[] = [
 </script>
 
 <style scoped>
-/* 工作区切换器（替代旧 AppHeader 用户菜单）。
-   details / summary 结构足够轻量；这块本来就在侧边栏自然文档流中，
-   因此不需要 portal 下拉层。 */
 .sidebar-user__summary {
   display: flex;
   align-items: center;
@@ -170,31 +191,130 @@ const navGroups: SidebarNavGroup[] = [
 
 .sidebar-user__menu {
   margin-top: 8px;
-  padding: 12px;
+  padding: 8px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #ffffff;
 }
 
-.sidebar-user__field {
+/* 菜单内分区标题 */
+.menu-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #98a2b3;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 4px 8px 6px;
+  margin: 0;
+}
+
+/* 可切换用户条目 */
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  transition: background 0.12s;
+}
+
+.menu-item:hover {
+  background: #f1f5f9;
+}
+
+.menu-avatar {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent, #4f46e5);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.menu-item__copy {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 1px;
 }
 
-.sidebar-user__field span {
-  font-size: 12px;
+.menu-item__copy strong {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1e293b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-item__copy small {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.menu-badge {
+  flex: 0 0 auto;
+  font-size: 10px;
   font-weight: 600;
-  color: #475467;
+  color: #6366f1;
+  background: #eef2ff;
+  padding: 2px 6px;
+  border-radius: 4px;
 }
 
-.sidebar-user__field select {
+/* 分隔线 */
+.menu-divider {
+  height: 1px;
+  background: var(--line, #e2e8f0);
+  margin: 6px 0;
+}
+
+/* 操作按钮（登录/注册/退出） */
+.menu-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
+  padding: 8px;
+  border: none;
   border-radius: 6px;
-  background: #ffffff;
-  font: inherit;
+  background: none;
   cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  color: #475467;
+  text-decoration: none;
+  transition: background 0.12s;
+}
+
+.menu-action:hover {
+  background: #f1f5f9;
+}
+
+.menu-action--danger {
+  color: #dc2626;
+}
+
+.menu-action--danger:hover {
+  background: #fef2f2;
+}
+
+.menu-action-icon {
+  flex: 0 0 auto;
+  font-size: 14px;
+  width: 20px;
+  text-align: center;
 }
 </style>

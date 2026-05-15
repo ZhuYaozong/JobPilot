@@ -1,5 +1,5 @@
 import { apiClient } from "./client";
-import { getCurrentDevUserName } from "@/lib/currentUser";
+import { getAccessToken, getCurrentDevUserName } from "@/lib/currentUser";
 import type { ListParams } from "@/types/common";
 import type {
   AssistantRunRequest,
@@ -43,7 +43,9 @@ export async function runAssistantStream(
     headers: {
       "Content-Type": "application/json",
       "Accept": "text/event-stream",
-      "X-User-Name": getCurrentDevUserName(),
+      ...(getAccessToken()
+        ? { Authorization: `Bearer ${getAccessToken()}` }
+        : { "X-User-Name": getCurrentDevUserName() }),
     },
     body: JSON.stringify(payload),
     signal,
