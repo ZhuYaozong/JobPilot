@@ -8,6 +8,7 @@ from app.models.conversation import Conversation
 from app.models.memory_summary import MemorySummary
 from app.models.message import Message
 from app.models.tool_call_log import ToolCallLog
+from app.schemas.agent_run import AgentRunWithToolCallsRead, ToolCallLogRead
 from app.schemas.conversation import (
     ConversationListItem,
     ConversationRead,
@@ -57,6 +58,70 @@ async def list_messages(
     )
     result = await db.execute(statement)
     return list(result.scalars().all())
+
+
+@router.get(
+    "/{conversation_id}/agent-runs",
+    response_model=list[AgentRunWithToolCallsRead],
+)
+async def list_conversation_agent_runs(
+    conversation_id: int,
+    db: DbSession,
+    current_user: CurrentUserDep,
+) -> list[AgentRunWithToolCallsRead]:
+    """列出某会话的所有 AgentRun 以及每次运行内的工具调用(任务 4 Agent 可观测)。
+
+    用户作用域:只返回 current_user 自己的 AgentRun。
+    返回顺序:AgentRun 按 started_at 升序;每个 AgentRun 内部 tool_calls 也按 started_at 升序。
+    会话不存在或跨用户访问 → 404。
+    """
+    await _require_owned_conversation(db, conversation_id, current_user.id)
+
+    # 先一条 select 拿到该会话的所有 AgentRun(按时间序),
+    # 再一条 select 拿到这些 AgentRun 关联的所有 ToolCallLog;
+    # 用 dict 按 agent_run_id 分组,避免 N+1 子查询。
+    agent_runs_result = await db.execute(
+        select(AgentRun)
+        .where(
+            AgentRun.conversation_id == conversation_id,
+            AgentRun.user_id == current_user.id,
+        )
+        .order_by(AgentRun.started_at.asc(), AgentRun.id.asc()),
+    )
+    agent_runs = list(agent_runs_result.scalars().all())
+    if not agent_runs:
+        return []
+
+    agent_run_ids = [run.id for run in agent_runs]
+    tool_calls_result = await db.execute(
+        select(ToolCallLog)
+        .where(ToolCallLog.agent_run_id.in_(agent_run_ids))
+        .order_by(ToolCallLog.started_at.asc(), ToolCallLog.id.asc()),
+    )
+    tool_calls_by_run: dict[int, list[ToolCallLogRead]] = {}
+    for call in tool_calls_result.scalars().all():
+        tool_calls_by_run.setdefault(call.agent_run_id, []).append(
+            ToolCallLogRead.model_validate(call),
+        )
+
+    return [
+        AgentRunWithToolCallsRead.model_validate(
+            {
+                "id": run.id,
+                "conversation_id": run.conversation_id,
+                "trigger_message_id": run.trigger_message_id,
+                "status": run.status,
+                "intent": run.intent,
+                "error_class": run.error_class,
+                "error_detail": run.error_detail,
+                "token_usage": run.token_usage,
+                "started_at": run.started_at,
+                "finished_at": run.finished_at,
+                "tool_calls": tool_calls_by_run.get(run.id, []),
+            },
+        )
+        for run in agent_runs
+    ]
 
 
 @router.patch("/{conversation_id}", response_model=ConversationRead)

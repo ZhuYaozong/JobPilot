@@ -15,6 +15,8 @@
         :key="message.id"
         :message="message"
         :tool-calls-for-run="toolCallsForRun"
+        :agent-run-failure="agentRunFailureForMessage(message)"
+        @tool-call-expand="$emit('toolCallExpand', $event)"
       />
 
       <article v-if="isRunning" class="bubble-row assistant pending">
@@ -59,6 +61,7 @@ import { computed, nextTick, ref, watch } from "vue";
 import MessageBubble from "./MessageBubble.vue";
 import ToolCallTrace from "./ToolCallTrace.vue";
 import type {
+  AgentRunDetail,
   AssistantPhase,
   MessageRead,
   ToolCallTrace as ToolCallTraceItem,
@@ -76,15 +79,30 @@ interface Props {
   runningPhase?: AssistantPhase | null;
   runningTool?: string | null;
   liveToolTrace?: ToolCallTraceItem[];
+  // 任务 4 Agent 可观测:按 agent_run_id 索引 AgentRunDetail,用于在
+  // 失败的助手消息下方显示一条红色 banner(error_class / error_detail)。
+  agentRunsByRunId?: Record<number, AgentRunDetail>;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   runningPhase: null,
   runningTool: null,
   liveToolTrace: () => [],
+  agentRunsByRunId: () => ({}),
 });
 
-defineEmits<{ (event: "retry"): void }>();
+defineEmits<{
+  (event: "retry"): void;
+  (event: "toolCallExpand", callId: number): void;
+}>();
+
+function agentRunFailureForMessage(message: MessageRead): AgentRunDetail | null {
+  if (message.agent_run_id == null) return null;
+  const run = props.agentRunsByRunId[message.agent_run_id];
+  // 只在 AgentRun 标 failed 时把它当 banner 数据;成功 run 不打扰用户。
+  if (!run || run.status !== "failed") return null;
+  return run;
+}
 
 const thinkingLabel = computed(() => {
   if (props.runningTool) {

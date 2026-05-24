@@ -2,6 +2,7 @@ import { apiClient } from "./client";
 import { getAccessToken, getCurrentDevUserName } from "@/lib/currentUser";
 import type { ListParams } from "@/types/common";
 import type {
+  AgentRunDetail,
   AssistantRunRequest,
   AssistantRunResponse,
   AssistantStreamCallbacks,
@@ -170,6 +171,15 @@ export async function listConversations(params: ListParams = {}) {
 export async function listMessages(conversationId: number) {
   const response = await apiClient.get<MessageRead[]>(
     `/api/v1/conversations/${conversationId}/messages`,
+  );
+  return response.data;
+}
+
+// 任务 4 Agent 可观测:拉某个会话所有 AgentRun + 其内部 ToolCallLog。
+// 切换会话时调一次,把工具调用历史填到 toolCallsForRun,且 dialog 可弹完整详情。
+export async function listConversationAgentRuns(conversationId: number) {
+  const response = await apiClient.get<AgentRunDetail[]>(
+    `/api/v1/conversations/${conversationId}/agent-runs`,
   );
   return response.data;
 }
