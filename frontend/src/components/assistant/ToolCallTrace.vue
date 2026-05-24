@@ -1,13 +1,18 @@
 <template>
   <div v-if="toolCalls.length" class="trace-section">
-    <p
+    <button
       v-for="call in toolCalls"
       :key="call.id"
+      type="button"
       class="trace-line"
       :class="{
         failed: call.status === 'failed',
         running: call.status === 'running',
+        clickable: isClickable(call),
       }"
+      :disabled="!isClickable(call)"
+      :title="isClickable(call) ? '点击查看完整调用参数与结果' : ''"
+      @click="onClick(call)"
     >
       <span v-if="call.status === 'running'" class="trace-spinner" />
       <span v-else class="trace-icon">{{ toolDisplay(call.tool_name).icon }}</span>
@@ -21,7 +26,8 @@
       <span v-if="call.status === 'failed'" class="trace-error">
         · 失败<span v-if="call.error_class"> ({{ humanizeError(call.error_class) }})</span>
       </span>
-    </p>
+      <span v-if="isClickable(call)" class="trace-chevron">›</span>
+    </button>
   </div>
 </template>
 
@@ -34,6 +40,22 @@ interface Props {
 }
 
 defineProps<Props>();
+
+const emit = defineEmits<{
+  (event: "expand", callId: number): void;
+}>();
+
+function onClick(call: ToolCallTrace) {
+  if (!isClickable(call)) return;
+  emit("expand", call.id);
+}
+
+// 实时 SSE 推送的工具调用使用负数 id(``-iteration``);只有持久化后从
+// /agent-runs 端点回填的工具调用有正数 id,我们仅允许点开这些,因为
+// 只有它们能在 toolCallDetails 里找到完整内容。
+function isClickable(call: ToolCallTrace): boolean {
+  return call.id > 0 && call.status !== "running";
+}
 
 function toolDisplay(name: string) {
   return formatToolName(name);
@@ -85,9 +107,35 @@ function humanizeError(name: string): string {
   flex-wrap: wrap;
   gap: 4px;
   margin: 0;
+  padding: 4px 8px;
   font-size: 11px;
   color: #475467;
   line-height: 1.5;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  text-align: left;
+  width: 100%;
+  font-family: inherit;
+}
+
+.trace-line.clickable {
+  cursor: pointer;
+}
+
+.trace-line.clickable:hover {
+  background: rgba(15, 23, 42, 0.08);
+}
+
+.trace-line:disabled {
+  cursor: default;
+}
+
+.trace-chevron {
+  margin-left: auto;
+  color: #98a2b3;
+  font-size: 14px;
+  line-height: 1;
 }
 
 .trace-line.failed {

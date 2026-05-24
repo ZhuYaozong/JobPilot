@@ -112,6 +112,36 @@ export interface StreamErrorData {
   agent_run: AgentRunSummary;
 }
 
+// 任务 4 Agent 可观测:从 GET /conversations/{cid}/agent-runs 返回的完整工具调用详情。
+// 与上面的 ``ToolCallTrace``(SSE 实时事件 + 简洁展示)互补:这里多了
+// arguments_json / result_json / error_detail / started_at / finished_at,
+// 用于"点击 trace 行 → 弹 Dialog 看完整内容"。
+export interface ToolCallLogDetail {
+  id: number;
+  tool_name: string;
+  status: ToolCallStatus;
+  arguments_json: JsonObject;
+  result_json: JsonObject | null;
+  error_class: string | null;
+  error_detail: string | null;
+  started_at: ISODateString;
+  finished_at: ISODateString | null;
+  latency_ms: number | null;
+}
+
+export interface AgentRunDetail {
+  id: number;
+  status: AgentRunStatus | string;
+  intent: string | null;
+  error_class: string | null;
+  error_detail: string | null;
+  token_usage: JsonObject | null;
+  started_at: ISODateString;
+  finished_at: ISODateString | null;
+  trigger_message_id: number | null;
+  tool_calls: ToolCallLogDetail[];
+}
+
 export interface AssistantStreamCallbacks {
   onStarted?: (data: StreamStartedData) => void;
   onPhase?: (data: StreamPhaseData) => void;

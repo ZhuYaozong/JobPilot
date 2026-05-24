@@ -19,12 +19,14 @@
       <MessageThread
         :messages="messages"
         :tool-calls-for-run="toolCallsForRun"
+        :agent-runs-by-run-id="agentRunsByRunId"
         :is-running="isRunning"
         :last-error="lastError"
         :running-phase="runningPhase"
         :running-tool="runningTool"
         :live-tool-trace="liveToolTrace"
         @retry="handleRetry"
+        @tool-call-expand="handleToolCallExpand"
       />
 
       <SuggestedPrompts
@@ -53,6 +55,11 @@
       v-model:knowledge-base-id="contextKnowledgeBaseId"
       v-model:assistant-mode="assistantMode"
     />
+
+    <ToolCallDetailDialog
+      v-model="detailDialogOpen"
+      :detail="detailDialogPayload"
+    />
   </div>
 </template>
 
@@ -65,10 +72,12 @@ import ContextPanel from "@/components/assistant/ContextPanel.vue";
 import ComposerBar from "@/components/assistant/ComposerBar.vue";
 import MessageThread from "@/components/assistant/MessageThread.vue";
 import SuggestedPrompts from "@/components/assistant/SuggestedPrompts.vue";
+import ToolCallDetailDialog from "@/components/assistant/ToolCallDetailDialog.vue";
 
 import { listApplications } from "@/api/applications";
 import {
   deleteConversation,
+  listConversationAgentRuns,
   listConversations,
   listMessages,
   runAssistantStream,
@@ -80,11 +89,13 @@ import { listResumes } from "@/api/resumes";
 
 import type { ApplicationRecordListItem } from "@/types/application_record";
 import type {
+  AgentRunDetail,
   AgentRunSummary,
   AssistantMode,
   AssistantPhase,
   ConversationListItem,
   MessageRead,
+  ToolCallLogDetail,
   ToolCallTrace,
 } from "@/types/assistant";
 import type { JobPostingListItem } from "@/types/job_posting";
@@ -102,6 +113,16 @@ const conversationsLoading = ref(false);
 const conversationId = ref<number | null>(null);
 const messages = ref<MessageRead[]>([]);
 const toolCallsForRun = ref<Record<number, ToolCallTrace[]>>({});
+
+// 任务 4 Agent 可观测:从 /agent-runs 端点回填的完整工具调用详情。
+// 按 ToolCallLog.id 索引,Dialog 弹出时按 callId 查这里。
+const toolCallDetails = ref<Record<number, ToolCallLogDetail>>({});
+// 按 AgentRun.id 索引,失败时给 MessageBubble 显示红色 banner。
+const agentRunsByRunId = ref<Record<number, AgentRunDetail>>({});
+
+// ToolCallDetailDialog 状态。
+const detailDialogOpen = ref(false);
+const detailDialogPayload = ref<ToolCallLogDetail | null>(null);
 
 const draftPrompt = ref("");
 const isRunning = ref(false);
@@ -253,19 +274,51 @@ watch(conversationId, async (newId) => {
   if (newId === null) {
     messages.value = [];
     toolCallsForRun.value = {};
+    toolCallDetails.value = {};
+    agentRunsByRunId.value = {};
     return;
   }
   try {
-    const fetched = await listMessages(newId);
-    messages.value = fetched;
-    // messages 载荷里没有 tool_call 轨迹，因此刷新后会丢失。
-    // 后续如果需要，可以通过 /agent-runs 再拼回来；当前先保持为空，
-    // 让既有助手消息只展示纯文本。
-    toolCallsForRun.value = {};
+    const [fetchedMessages, fetchedRuns] = await Promise.all([
+      listMessages(newId),
+      listConversationAgentRuns(newId),
+    ]);
+    messages.value = fetchedMessages;
+    applyAgentRunsSnapshot(fetchedRuns);
   } catch (error) {
     ElMessage.error(getErrorMessage(error, "对话消息加载失败"));
   }
 });
+
+// 任务 4 Agent 可观测:把 /agent-runs 返回的嵌套结构拆成三份索引,
+// 分别供既有 trace 展示、Dialog 详情、失败 banner 使用。
+function applyAgentRunsSnapshot(runs: AgentRunDetail[]) {
+  const trace: Record<number, ToolCallTrace[]> = {};
+  const detailMap: Record<number, ToolCallLogDetail> = {};
+  const runMap: Record<number, AgentRunDetail> = {};
+  for (const run of runs) {
+    runMap[run.id] = run;
+    trace[run.id] = run.tool_calls.map((c) => ({
+      id: c.id,
+      tool_name: c.tool_name,
+      status: c.status,
+      error_class: c.error_class,
+      latency_ms: c.latency_ms,
+    }));
+    for (const c of run.tool_calls) {
+      detailMap[c.id] = c;
+    }
+  }
+  toolCallsForRun.value = trace;
+  toolCallDetails.value = detailMap;
+  agentRunsByRunId.value = runMap;
+}
+
+function handleToolCallExpand(callId: number) {
+  const detail = toolCallDetails.value[callId] ?? null;
+  detailDialogPayload.value = detail;
+  detailDialogOpen.value = true;
+}
 
 // --- 操作 ----------------------------------------------------------------
 
@@ -273,6 +326,8 @@ function handleNewConversation() {
   conversationId.value = null;
   messages.value = [];
   toolCallsForRun.value = {};
+  toolCallDetails.value = {};
+  agentRunsByRunId.value = {};
   lastError.value = null;
   draftPrompt.value = "";
 }
@@ -487,6 +542,18 @@ async function sendMessage(content: string) {
       // 按服务端契约这不应发生；这里显式报错，避免界面静默卡住。
       lastError.value = "Agent 没有返回结果";
       lastFailedUserText.value = content;
+    }
+
+    // 任务 4 Agent 可观测:流式结束后从 /agent-runs 重新拉一遍,把本轮新生成的
+    // ToolCallLog.id / arguments_json / result_json 灌进 toolCallDetails,
+    // 让 Dialog 可以展开本轮新工具调用。
+    if (conversationId.value !== null) {
+      try {
+        const fetched = await listConversationAgentRuns(conversationId.value);
+        applyAgentRunsSnapshot(fetched);
+      } catch {
+        // 拉详情失败不影响主对话,只是 Dialog 暂时拿不到详情;静默忽略。
+      }
     }
 
     if (wasNew && conversationId.value !== null) {
