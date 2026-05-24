@@ -6,12 +6,18 @@
 
 - 岗位、简历、匹配、材料、投递的核心业务 API。
 - JD / Resume 结构化解析、匹配分析、求职信、面试准备和定制简历生成。
+- AI 草稿端点：JD 文本 / URL → LLM 起草岗位；简历文本 → LLM 起草简历；不落库,前端预览编辑后再保存。
+- 通用导出端点：简历版本与求职材料导出 Markdown / DOCX。
+- JWT 注册 / 登录 / me，bcrypt 密码哈希；与 dev 模式 `X-User-Name` 并存。
 - Conversation / Message / AgentRun / ToolCallLog 的 Agent 数据层。
 - LangGraph 1.x 工作流和基于 `langchain-core` 的工具抽象。
+- 20 个 Agent 工具：list / read / parse / draft / create / update / 投递 / 知识库写入 / 已生成材料查询 / 检索 / 匹配 / 求职信 / 面试准备 / 定制简历。
+- Agent 可观测端点：列出会话所有 AgentRun + 嵌套 ToolCallLog(arguments / result / error_detail / latency),供前端展开看完整工具调用详情。
+- write 类工具必填字段缺失统一走 `missing_required_field` 业务错,引导 LLM 自然追问而不是抛 ValidationError。
 - SSE 流式 Assistant。
 - KnowledgeBase / KnowledgeDocument / KnowledgeChunk 数据层。
 - 自研文本切片、OpenAI-compatible embedding client、pgvector 检索。
-- 开发阶段用户作用域隔离。
+- 用户作用域隔离(JWT 用户与 dev 用户共享同一份作用域规则)。
 
 ## Technology
 
@@ -181,13 +187,26 @@ uv --cache-dir .uv-cache --directory backend run python -m app.eval.cli
 
 ## User Scope
 
-当前没有正式登录系统。后端通过 dev-only 请求头识别用户：
+后端支持两条认证路径,二者**共享同一份用户作用域规则**:
+
+### JWT 认证(主路径)
+
+- `POST /api/auth/register`:用户名 + email(可选) + 密码注册,bcrypt 哈希。
+- `POST /api/auth/login`:用户名 + 密码,签发 JWT(默认 `AUTH_ACCESS_TOKEN_EXPIRE_MINUTES=1440`,即 24 小时)。
+- `GET /api/auth/me`:校验 token 并返回当前用户公开信息。
+- 后续业务请求带 `Authorization: Bearer <token>`,服务端从 token 解析 user_id 加载用户。
+
+JWT secret 当前仍是开发占位(`AUTH_SECRET_KEY` env,默认 `jobpilot-dev-secret-change-in-production`),**上线前必须替换**。
+
+### Dev 模式(开发与测试路径)
+
+无 `Authorization` 时,服务端回落到 dev 模式,通过请求头识别用户:
 
 ```http
 X-User-Name: demo
 ```
 
-默认用户：
+默认 dev 用户:
 
 | User | Purpose |
 | --- | --- |
@@ -195,12 +214,12 @@ X-User-Name: demo
 | `sandbox` | 前端可切换的第二个演示用户 |
 | `test` | 自动化测试用户 |
 
-作用域规则集中在：
+### 作用域执行
 
-- `app/api/deps.py`
-- `app/services/user_scope_service.py`
+- 依赖解析:`app/api/deps.py`(JWT 优先,无 token 则回落到 dev header)
+- 资源归属校验:`app/services/user_scope_service.py`(`get_resume_for_user_or_404` 等)
 
-核心业务对象都直接或间接受当前用户约束，避免跨用户读取或写入。
+核心业务对象都直接或间接受当前用户约束,避免跨用户读取或写入。JWT 用户和 dev 用户在数据库中是同一张 `users` 表,只是登入路径不同。
 
 ## Core Models
 
@@ -233,12 +252,23 @@ X-User-Name: demo
 | `GET` | `/health` | 应用健康检查 |
 | `GET` | `/health/db` | 数据库健康检查 |
 
+### Auth
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/api/auth/register` | 用户名 + email + 密码注册,bcrypt 哈希,返回 JWT |
+| `POST` | `/api/auth/login` | 用户名 + 密码登录,返回 JWT |
+| `GET` | `/api/auth/me` | 校验 token 并返回当前用户公开信息 |
+
+注意:auth router 的 prefix 是 `/api/auth`,**不带 `/v1`**;其它业务 API 仍走 `/api/v1`。
+
 ### Resumes
 
 | Method | Path | Description |
 | --- | --- | --- |
 | `POST` | `/api/v1/resumes` | 创建简历 |
 | `POST` | `/api/v1/resumes/upload` | 上传 PDF / DOCX / TXT / MD 并抽取文本 |
+| `POST` | `/api/v1/resumes/draft-from-input` | 把简历文本喂给 LLM 起草一份简历草稿,不落库 |
 | `GET` | `/api/v1/resumes` | 当前用户简历列表 |
 | `GET` | `/api/v1/resumes/{resume_id}` | 简历详情 |
 | `PATCH` | `/api/v1/resumes/{resume_id}` | 更新简历 |
@@ -254,6 +284,7 @@ X-User-Name: demo
 | `GET` | `/api/v1/resume-versions` | 简历版本列表 |
 | `GET` | `/api/v1/resume-versions/{version_id}` | 简历版本详情 |
 | `PATCH` | `/api/v1/resume-versions/{version_id}` | 更新简历版本 |
+| `GET` | `/api/v1/resume-versions/{version_id}/export` | 导出为 Markdown / DOCX(query `format=markdown\|docx`) |
 | `GET` | `/api/v1/resumes/{resume_id}/versions` | 某份简历的版本列表 |
 
 ### Jobs
@@ -261,7 +292,8 @@ X-User-Name: demo
 | Method | Path | Description |
 | --- | --- | --- |
 | `POST` | `/api/v1/jobs` | 创建岗位 |
-| `POST` | `/api/v1/jobs/fetch-from-url` | 抓取岗位 URL 并返回预览 |
+| `POST` | `/api/v1/jobs/fetch-from-url` | 抓取岗位 URL 并返回预览(不落库) |
+| `POST` | `/api/v1/jobs/draft-from-input` | 把 JD 文本或 URL 喂给 LLM 起草岗位草稿,不落库 |
 | `GET` | `/api/v1/jobs` | 岗位列表 |
 | `GET` | `/api/v1/jobs/{job_id}` | 岗位详情 |
 | `PATCH` | `/api/v1/jobs/{job_id}` | 更新岗位 |
@@ -300,6 +332,7 @@ X-User-Name: demo
 | `GET` | `/api/v1/artifacts/{artifact_id}` | 材料详情 |
 | `PATCH` | `/api/v1/artifacts/{artifact_id}` | 更新材料 |
 | `DELETE` | `/api/v1/artifacts/{artifact_id}` | 删除材料及反馈 |
+| `GET` | `/api/v1/artifacts/{artifact_id}/export` | 导出为 Markdown / DOCX(query `format=markdown\|docx`) |
 | `POST` | `/api/v1/artifacts/generate-cover-letter` | 生成求职信 |
 | `POST` | `/api/v1/artifacts/generate-interview-prep` | 生成面试准备 |
 | `POST` | `/api/v1/artifacts/{artifact_id}/feedback` | 记录材料反馈 |
@@ -311,6 +344,7 @@ X-User-Name: demo
 | --- | --- | --- |
 | `GET` | `/api/v1/conversations` | 会话列表 |
 | `GET` | `/api/v1/conversations/{conversation_id}/messages` | 会话消息 |
+| `GET` | `/api/v1/conversations/{conversation_id}/agent-runs` | 列出会话所有 AgentRun + 嵌套 ToolCallLog(供前端可观测) |
 | `PATCH` | `/api/v1/conversations/{conversation_id}` | 更新会话标题或状态 |
 | `DELETE` | `/api/v1/conversations/{conversation_id}` | 删除会话 |
 | `POST` | `/api/v1/assistant/run` | 非流式 Agent 运行 |
@@ -370,20 +404,47 @@ X-User-Name: demo
 - `knowledge_base_id`
 - `assistant_mode`
 
-工具注册表：
+工具注册表(共 20 个,按类型分组):
 
-| Tool | Side Effect | Description |
-| --- | --- | --- |
-| `list_user_jobs` | No | 查找岗位 |
-| `list_user_resumes` | No | 查找简历 |
-| `list_user_applications` | No | 查找投递记录 |
-| `search_knowledge` | No | 语义检索知识库 |
-| `analyze_match` | Yes | 创建匹配分析 |
-| `generate_cover_letter` | Yes | 创建求职信材料 |
-| `generate_interview_prep` | Yes | 创建面试准备材料 |
-| `generate_tailored_resume` | Yes | 创建定制简历版本 |
+| Tool | Category | Side Effect | Description |
+| --- | --- | --- | --- |
+| `list_user_jobs` | list | No | 查找岗位 |
+| `list_user_resumes` | list | No | 查找简历 |
+| `list_user_applications` | list | No | 查找投递记录 |
+| `list_generated_artifacts` | list | No | 列已生成的求职信/面试材料等(紧凑列表,不返正文) |
+| `read_resume` | read | No | 按 id 读取简历完整结构(parsed_json + raw_text) |
+| `read_job_posting` | read | No | 按 id 读取岗位完整结构(parsed_json + jd_text) |
+| `search_knowledge` | retrieval | No | 语义检索知识库 |
+| `parse_resume` | parse | Yes | 触发简历 LLM 解析,把 parse_status 升级为 parsed |
+| `parse_job_posting` | parse | Yes | 触发岗位 LLM 解析,填 parsed_json |
+| `analyze_match` | action | Yes | 创建匹配分析 |
+| `generate_cover_letter` | action | Yes | 创建求职信材料 |
+| `generate_interview_prep` | action | Yes | 创建面试准备材料 |
+| `generate_tailored_resume` | action | Yes | 创建定制简历版本 |
+| `draft_job` | draft | No | 用户在对话里贴 JD 文本或 URL → LLM 起草岗位草稿,不落库 |
+| `draft_resume` | draft | No | 用户在对话里贴简历文本 → LLM 起草简历草稿,不落库 |
+| `create_job` | create | Yes | 用户确认草稿后落库岗位;可携带 `parsed_json` 一次写入 |
+| `create_resume` | create | Yes | 用户确认草稿后落库简历;`content_hash` 服务端计算 |
+| `create_application` | application | Yes | 创建投递记录,把简历和岗位绑定起来 |
+| `update_application_stage` | application | Yes | 推进投递阶段并写一条 `stage_changed` 事件(`operator_type=assistant`) |
+| `add_knowledge_text` | knowledge | Yes | 把文本存入指定知识库(**仅在用户明确要求保存时调用**,decide prompt 与 tool description 双重防御) |
 
-SSE endpoint 会发送阶段、工具开始、工具完成、消息、错误和完成事件，前端据此展示“正在思考”“正在调用工具”等运行状态。
+SSE endpoint 会发送阶段、工具开始、工具完成、消息、错误和完成事件,前端据此展示"正在思考""正在调用工具"等运行状态。完整工具调用详情(arguments_json / result_json / error_detail)通过 `GET /api/v1/conversations/{cid}/agent-runs` 端点提供给前端可观测面板。
+
+### Write 工具必填字段约定
+
+`create_* / draft_* / add_* / update_*` 类工具的"用户输入"必填字段(例如 `create_job.jd_text`、`create_resume.raw_text`、`add_knowledge_text.content`、`create_application.resume_id`)在 schema 层都是 `Optional` 的,`_execute` 入口检查后返回:
+
+```jsonc
+{
+  "ok": false,
+  "error_class": "missing_required_field",
+  "message_for_llm": "缺少必填字段: JD 正文。请用 respond_directly 向用户追问...",
+  "missing_fields": ["jd_text"]
+}
+```
+
+这条约定避免了"用户没贴 JD → schema 拒收 → ValidationError → repair loop → 失败"的死循环。LLM 看到业务错就用 `respond_directly` 自然追问用户那个具体字段。新增 write 工具时**必须沿用**这条约定,纯系统字段(例如前一个工具已经产出的 id)才保留 required。
 
 ## Knowledge Indexing
 
@@ -439,14 +500,15 @@ uv --cache-dir .uv-cache --directory backend run alembic current
 
 ## Current Boundaries
 
-后端当前仍不包含：
+后端当前仍不包含:
 
-- 正式认证、注册、JWT、团队权限或 OAuth。
-- 生产级异步任务队列。
+- 团队空间、企业级权限或 OAuth(JWT 已上线但仅个人作用域;`JWT_SECRET` 仍是开发占位,上线前需替换)。
+- 生产级异步任务队列(知识库索引仍在 HTTP 请求内同步执行)。
 - 邮件、日历、通知或真实投递集成。
-- PDF / DOCX 导出和模板排版。
+- PDF 导出和模板排版(已支持简历版本 / 求职材料的 Markdown / DOCX 导出)。
 - embedding 维度在线切换。
-- 简历版本号并发锁或唯一约束。
+- 简历版本号并发锁或唯一约束(当前按 `max(version_no)+1` 派生)。
 - 完整 CI/CD 发布流水线。
+- AgentRun token_usage 字段尚未真填(schema 已透出,等接入 token 计费时再补)。
 
-这些边界是刻意保留的工程取舍，避免在核心求职 workflow 和 Agent 可控性尚未完全稳定前引入过多平台复杂度。
+这些边界是刻意保留的工程取舍,避免在核心求职 workflow 和 Agent 可控性尚未完全稳定前引入过多平台复杂度。
