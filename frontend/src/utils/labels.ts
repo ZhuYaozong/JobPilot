@@ -125,6 +125,10 @@ const TOOL_DISPLAY: Record<string, ToolDisplay> = {
   generate_cover_letter: { label: "生成求职信", icon: "✍️" },
   generate_interview_prep: { label: "准备面试", icon: "🎤" },
   generate_tailored_resume: { label: "定制简历", icon: "🧩" },
+  draft_job: { label: "起草岗位", icon: "🤖" },
+  draft_resume: { label: "起草简历", icon: "🤖" },
+  create_job: { label: "保存岗位", icon: "💾" },
+  create_resume: { label: "保存简历", icon: "💾" },
 };
 
 export function formatToolName(name: string): ToolDisplay {

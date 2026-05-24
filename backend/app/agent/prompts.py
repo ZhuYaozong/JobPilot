@@ -118,6 +118,11 @@ def build_decide_prompt(
 - 如果本轮上下文提示里选中了知识库,调用 search_knowledge 时使用该知识库 id。
 - 拿到 id 后再调用需要 id 的动作工具(analyze_match / generate_cover_letter /
   generate_interview_prep / generate_tailored_resume)。
+- 如果用户要"添加 / 录入 / 帮我加 / 帮我保存"一个**新**岗位或简历(贴了 JD 文本、岗位 URL,
+  或一段简历正文),先调 draft_job / draft_resume 起草,不要直接调 create_*。
+  拿到草稿后用 respond_directly 把摘要给用户看(公司、岗位、城市、简历标题、要点等),
+  让用户确认或要求修改。下一轮用户同意后再调用 create_job / create_resume 落库,
+  调用时把 draft_* 返回的 parsed_json 一并传入,避免重复解析。
 - 如果当前上下文提示里是"模拟面试"模式:
   - 没有简历和岗位 id 时,直接回复用户先在右侧选择简历和岗位,不要调用工具。
   - 用户要求开始模拟面试且已有简历+岗位 id 时,本轮优先按顺序准备信息:先调用 analyze_match,
