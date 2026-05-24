@@ -22,6 +22,7 @@ build/
 .vite/
 
 # Editors
+.claude/
 .idea/
 .vscode/
 *.swp

@@ -23,7 +23,7 @@ export interface UserSession {
 
 const DEV_SESSIONS: UserSession[] = [
   { username: "demo", displayName: "朱耀宗", type: "dev" },
-  { username: "sandbox", displayName: "Demo 用户", type: "dev" },
+  // { username: "sandbox", displayName: "Demo 用户", type: "dev" },
 ];
 
 // ============ localStorage key ============

@@ -60,6 +60,7 @@ Copy-Item .env.example .env
 
 ```env
 VITE_API_BASE_URL=/
+VITE_AUTH_DEV_MODE=true
 ```
 
 开发环境推荐使用同源代理：Vite 将 `/api` 和 `/health` 转发到本地 FastAPI。若后端已开放 CORS 或部署在单独域名，也可以把 `VITE_API_BASE_URL` 改为完整地址，例如 `http://localhost:8000`。
@@ -80,7 +81,7 @@ VITE_API_BASE_URL=/
 - 可在侧边栏菜单切到 `sandbox` 演示用户。
 - `test` 用户只用于后端自动化测试,不在 UI 中暴露。
 
-dev 模式保留是为了快速本地调试不必每次走注册;部署到生产时建议关闭 dev 回落。
+dev 模式保留是为了快速本地调试不必每次走注册;部署到生产时应在前端设置 `VITE_AUTH_DEV_MODE=false`,并在后端设置 `AUTH_DEV_MODE=false`。
 
 ## Routes
 
