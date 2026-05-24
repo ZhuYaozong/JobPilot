@@ -6,13 +6,12 @@
 import asyncio
 import hashlib
 
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from app.agent.tool_adapter import ToolContext, ToolValidationError
+from app.agent.tool_adapter import ToolContext
 from app.agent.tools.add_knowledge_text_tool import AddKnowledgeTextTool
 from app.core.config import settings
 from app.llm.embedding_client import EmbeddingClient
@@ -139,26 +138,54 @@ def test_add_knowledge_text_tool_kb_not_found(
     _run(_scenario)
 
 
-def test_add_knowledge_text_tool_content_too_short_validation_error(
+def test_add_knowledge_text_tool_content_too_short_returns_business_error(
     client: TestClient,
     test_marker: str,
 ) -> None:
-    """schema 层 min_length=30 直接拦下,工具层不需要走 service。"""
+    """content 非空但不足 30 字符 → service 层拒收 → 业务错 content_too_short。
+
+    现在 schema 层 content 是 optional 没有 min_length;只在 _execute 检查空。
+    "短" 这种非空但太短的内容会到 create_manual_document,service 用 400 拒掉,
+    工具层把它转成 content_too_short 业务错。
+    """
     assert client.get("/health/db").status_code == 200
 
     async def _scenario(db: AsyncSession) -> None:
         user, agent_run_id, kb_id = await _setup(db, marker=test_marker)
         ctx = ToolContext(db=db, current_user=user, agent_run_id=agent_run_id)
-        # content 不足 30 字符 → Pydantic validation 抛 ToolValidationError(tool_adapter 包装)。
-        with pytest.raises(ToolValidationError):
-            await AddKnowledgeTextTool().invoke(
-                {
-                    "knowledge_base_id": kb_id,
-                    "title": "t",
-                    "content": "短",
-                },
-                ctx,
-            )
+        result = await AddKnowledgeTextTool().invoke(
+            {
+                "knowledge_base_id": kb_id,
+                "title": "t",
+                "content": "短",
+            },
+            ctx,
+        )
+        assert result["ok"] is False
+        assert result["error_class"] == "content_too_short"
+
+    _run(_scenario)
+
+
+def test_add_knowledge_text_tool_missing_title_or_content_returns_missing_required_field(
+    client: TestClient,
+    test_marker: str,
+) -> None:
+    """title / content 完全缺失 → 业务错 missing_required_field,指引 LLM 追问用户。"""
+    assert client.get("/health/db").status_code == 200
+
+    async def _scenario(db: AsyncSession) -> None:
+        user, agent_run_id, kb_id = await _setup(db, marker=test_marker)
+        ctx = ToolContext(db=db, current_user=user, agent_run_id=agent_run_id)
+        # 全缺
+        result = await AddKnowledgeTextTool().invoke(
+            {"knowledge_base_id": kb_id},
+            ctx,
+        )
+        assert result["ok"] is False
+        assert result["error_class"] == "missing_required_field"
+        assert set(result["missing_fields"]) == {"title", "content"}
+        assert "respond_directly" in result["message_for_llm"]
 
     _run(_scenario)
 

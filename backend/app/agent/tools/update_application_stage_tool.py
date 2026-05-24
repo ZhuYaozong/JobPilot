@@ -31,9 +31,15 @@ _BUSINESS_LLM_MESSAGES: dict[str, str] = {
 
 
 class UpdateApplicationStageToolArgs(BaseModel):
-    application_id: int = Field(..., description="要推进的投递记录 id。")
-    target_stage: str = Field(
-        ...,
+    """update_application_stage 工具入参。
+
+    application_id / target_stage 在 schema 是 optional,_execute 强制检查。
+    缺失时返回 missing_required_field 业务错。
+    """
+
+    application_id: int | None = Field(default=None, description="要推进的投递记录 id。")
+    target_stage: str | None = Field(
+        default=None,
         max_length=50,
         description=(
             "目标投递阶段:saved / applied / screening / assessment / interview / offer / "
@@ -51,6 +57,12 @@ class UpdateApplicationStageToolArgs(BaseModel):
     )
 
 
+_FIELD_LABELS: dict[str, str] = {
+    "application_id": "投递记录 id",
+    "target_stage": "目标阶段",
+}
+
+
 class UpdateApplicationStageTool(BaseTool):
     name = "update_application_stage"
     description = (
@@ -59,6 +71,8 @@ class UpdateApplicationStageTool(BaseTool):
         "target_stage 必须是合法阶段枚举值。可选 next_action / notes 会覆盖投递主记录;"
         "可选 note 只写入本次阶段流转事件备注,适合记录『面试官反馈』『为什么拒绝』等。"
         "事件 operator_type 固定为 assistant,以便审计区分用户手动操作与 Agent 操作。"
+        "**调用前必须确认 application_id 和 target_stage 都已知**:不知道 application_id "
+        "先 list_user_applications;不清楚目标阶段先 respond_directly 追问用户。"
     )
     args_schema = UpdateApplicationStageToolArgs
 
@@ -67,7 +81,30 @@ class UpdateApplicationStageTool(BaseTool):
         args: UpdateApplicationStageToolArgs,
         ctx: ToolContext,
     ) -> dict[str, Any]:
+        # 必填字段缺失 → 业务错。
+        missing: list[str] = []
+        if args.application_id is None:
+            missing.append("application_id")
+        if not args.target_stage or not args.target_stage.strip():
+            missing.append("target_stage")
+        if missing:
+            labels = ", ".join(_FIELD_LABELS[f] for f in missing)
+            return {
+                "ok": False,
+                "error_class": "missing_required_field",
+                "message_for_llm": (
+                    f"缺少必填字段: {labels}。application_id 缺失请先 list_user_applications;"
+                    f"target_stage 缺失请 respond_directly 追问用户想改到哪个阶段。"
+                    f"**不要**自己猜测。"
+                ),
+                "user_facing_detail": f"缺少必填字段: {labels}",
+                "missing_fields": missing,
+            }
+
         # operator_type 强制 "assistant",不接收模型输入(避免 Agent 伪装成 user)。
+        # 上面 missing 检查保证两个字段非空,这里直接 strip 不会 None。
+        assert args.target_stage is not None
+        assert args.application_id is not None
         request = ApplicationTransitionRequest(
             target_stage=args.target_stage.strip()[:50],
             next_action=args.next_action,

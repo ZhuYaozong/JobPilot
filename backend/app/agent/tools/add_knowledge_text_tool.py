@@ -48,6 +48,15 @@ _BUSINESS_LLM_MESSAGES: dict[str, str] = {
 
 
 class AddKnowledgeTextToolArgs(BaseModel):
+    """add_knowledge_text 工具入参。
+
+    title / content 在 schema 层是 optional,_execute 里会强制检查并返回
+    missing_required_field 业务错,引导 Agent 用 respond_directly 询问用户。
+
+    knowledge_base_id 保留 required(int 强类型):没有 id 时 LLM 应当先
+    respond_directly 问"要存到哪个知识库",由 decide prompt 规则保障。
+    """
+
     knowledge_base_id: int = Field(
         ...,
         description=(
@@ -55,17 +64,24 @@ class AddKnowledgeTextToolArgs(BaseModel):
             "先 respond_directly 询问用户。"
         ),
     )
-    title: str = Field(
-        ...,
-        min_length=1,
+    title: str | None = Field(
+        default=None,
         max_length=512,
         description="知识库文档标题,例如『腾讯 AI 应用工程师面试反馈 2026-05』。",
     )
-    content: str = Field(
-        ...,
-        min_length=30,
-        description="文档正文,至少 30 字;太短的内容会被 service 拒绝。",
+    content: str | None = Field(
+        default=None,
+        description=(
+            "文档正文,至少 30 字;太短的内容会被 service 拒绝。"
+            "为空时返回 missing_required_field 业务错,Agent 应当 respond_directly 询问用户。"
+        ),
     )
+
+
+_FIELD_LABELS: dict[str, str] = {
+    "title": "文档标题",
+    "content": "文档正文",
+}
 
 
 class AddKnowledgeTextTool(BaseTool):
@@ -86,6 +102,25 @@ class AddKnowledgeTextTool(BaseTool):
         args: AddKnowledgeTextToolArgs,
         ctx: ToolContext,
     ) -> dict[str, Any]:
+        # 必填字段缺失 → 业务错,让 LLM 转 respond_directly 询问用户。
+        # title 与 content 在 schema 是 optional,需要在这里强制检查。
+        missing: list[str] = [
+            field for field in ("title", "content")
+            if not (getattr(args, field) or "").strip()
+        ]
+        if missing:
+            labels = ", ".join(_FIELD_LABELS[f] for f in missing)
+            return {
+                "ok": False,
+                "error_class": "missing_required_field",
+                "message_for_llm": (
+                    f"缺少必填字段: {labels}。请用 respond_directly 向用户追问这些信息,"
+                    f"**不要**自己瞎填或留空重试。"
+                ),
+                "user_facing_detail": f"缺少必填字段: {labels}",
+                "missing_fields": missing,
+            }
+
         # 先校验 KB 归属,业务错走 ok=false,不让 service 内部 raise 散在多处。
         try:
             kb = await get_knowledge_base_for_user_or_404(
@@ -96,6 +131,9 @@ class AddKnowledgeTextTool(BaseTool):
         except HTTPException as exc:
             return self._http_exception_to_result(exc)
 
+        # 上面 missing 检查保证 title / content 非空,这里直接使用。
+        assert args.title is not None
+        assert args.content is not None
         try:
             doc = await create_manual_document(
                 ctx.db,

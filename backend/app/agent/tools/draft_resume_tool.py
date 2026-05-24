@@ -16,21 +16,32 @@ from app.services.resume_draft_service import generate_resume_draft
 
 
 _BUSINESS_DETAIL_TO_ERROR_CLASS: dict[str, str] = {
-    "Resume text is empty": "draft_input_empty",
+    "Resume text is empty": "missing_required_field",
 }
 
+# write 类工具的"必填字段缺失"业务错统一引导 LLM 用 respond_directly 向用户追问,
+# 不要瞎填字段重试。
 _BUSINESS_LLM_MESSAGES: dict[str, str] = {
-    "draft_input_empty": "简历文本为空;请让用户至少提供一段简历正文。",
+    "missing_required_field": (
+        "缺少简历正文。请用 respond_directly 向用户追问:把要起草的简历文本发过来。"
+        "**不要**自己瞎填 text 重试。"
+    ),
 }
 
 
 class DraftResumeToolArgs(BaseModel):
-    """draft_resume 的入参,text 为简历正文。"""
+    """draft_resume 的入参,text 为简历正文。
 
-    text: str = Field(
-        ...,
-        min_length=1,
-        description="用户粘贴的简历正文,LLM 会推断标题并抽取结构化字段。",
+    text 字段对外是 optional,允许 LLM 在还没拿到用户输入时也能合法调用,
+    走 missing_required_field 业务错让 LLM 转去用 respond_directly 询问用户。
+    """
+
+    text: str | None = Field(
+        default=None,
+        description=(
+            "用户粘贴的简历正文,LLM 会推断标题并抽取结构化字段。"
+            "为空时本工具返回 missing_required_field 业务错,Agent 应当用 respond_directly 询问用户。"
+        ),
     )
 
 
@@ -52,6 +63,16 @@ class DraftResumeTool(BaseTool):
         args: DraftResumeToolArgs,
         ctx: ToolContext,  # noqa: ARG002 — draft 不落库,不需要 db/current_user
     ) -> dict[str, Any]:
+        # 缺简历正文 → 业务错让 LLM 转去 respond_directly 询问;不抛 ValidationError。
+        if not args.text or not args.text.strip():
+            return {
+                "ok": False,
+                "error_class": "missing_required_field",
+                "message_for_llm": _BUSINESS_LLM_MESSAGES["missing_required_field"],
+                "user_facing_detail": "缺少必填字段: text(简历正文)",
+                "missing_fields": ["text"],
+            }
+
         try:
             draft = await generate_resume_draft(args.text, llm_client=self._llm_client)
         except HTTPException as exc:

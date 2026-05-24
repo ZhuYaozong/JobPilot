@@ -141,6 +141,13 @@ def build_decide_prompt(
   - 用户**只是粘贴**公司背景、面试笔记、项目描述,**没说要保存**:用 respond_directly 回应,
     **绝不主动**调 add_knowledge_text。
   - 没指定 knowledge_base_id 时,先 respond_directly 询问要存到哪个库,而不是猜一个 id。
+- **关于 write 类工具的必填字段(create_* / draft_* / add_* / update_*)**:
+  - 调用前必须确认所有必填字段都从对话/工具历史里拿到了真实值,**绝不**用空串、占位、
+    或自己猜的内容凑数。
+  - 缺任何必填字段,**先用 respond_directly 自然地向用户追问**那个具体字段,
+    例如"好的,请把 JD 文本发过来"或"想保存到哪个知识库?",**不要**先调工具试错。
+  - 工具如果返回 `error_class=missing_required_field`(因为模型仍硬调了),
+    回复用户时按 message_for_llm 用自然语言追问缺失字段,不要暴露 error_class 这种内部词。
 - 如果当前上下文提示里是"模拟面试"模式:
   - 没有简历和岗位 id 时,直接回复用户先在右侧选择简历和岗位,不要调用工具。
   - 用户要求开始模拟面试且已有简历+岗位 id 时,本轮优先按顺序准备信息:先调用 analyze_match,

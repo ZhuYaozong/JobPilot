@@ -30,8 +30,14 @@ _BUSINESS_LLM_MESSAGES: dict[str, str] = {
 
 
 class CreateApplicationToolArgs(BaseModel):
-    resume_id: int = Field(..., description="投递使用的简历 id。")
-    job_posting_id: int = Field(..., description="被投递的岗位 id。")
+    """create_application 工具入参。
+
+    resume_id / job_posting_id 在 schema 是 optional,_execute 强制检查。
+    缺失时返回 missing_required_field 业务错,引导 LLM 先 list_user_* 查 id 或追问用户。
+    """
+
+    resume_id: int | None = Field(default=None, description="投递使用的简历 id。")
+    job_posting_id: int | None = Field(default=None, description="被投递的岗位 id。")
     current_stage: str = Field(
         default="saved",
         max_length=50,
@@ -45,13 +51,20 @@ class CreateApplicationToolArgs(BaseModel):
     notes: str | None = Field(default=None)
 
 
+_FIELD_LABELS: dict[str, str] = {
+    "resume_id": "简历 id",
+    "job_posting_id": "岗位 id",
+}
+
+
 class CreateApplicationTool(BaseTool):
     name = "create_application"
     description = (
         "创建一条新的投递记录,把指定简历和指定岗位绑定起来。"
         "用户说『帮我记一下投递了 X 公司』『把这条标记成投递了』『建一个 application』时使用。"
         "current_stage 默认 saved,可由用户指明(applied / interview / offer / rejected 等)。"
-        "调用前确保已经有 resume_id 和 job_posting_id(必要时先 list_user_resumes / list_user_jobs)。"
+        "**调用前必须确认 resume_id 和 job_posting_id 都已知**:不知道时先 list_user_resumes / "
+        "list_user_jobs 查,或 respond_directly 向用户追问用哪份简历投哪个岗位。"
         "**不做去重**,同一 (resume, job) 可以存在多条投递。"
     )
     args_schema = CreateApplicationToolArgs
@@ -61,6 +74,25 @@ class CreateApplicationTool(BaseTool):
         args: CreateApplicationToolArgs,
         ctx: ToolContext,
     ) -> dict[str, Any]:
+        # 必填 id 字段缺失 → 业务错,引导 LLM 先查 id 或追问。
+        missing: list[str] = [
+            field for field in ("resume_id", "job_posting_id")
+            if getattr(args, field) is None
+        ]
+        if missing:
+            labels = ", ".join(_FIELD_LABELS[f] for f in missing)
+            return {
+                "ok": False,
+                "error_class": "missing_required_field",
+                "message_for_llm": (
+                    f"缺少必填字段: {labels}。请先调用 list_user_resumes / list_user_jobs 查找 id;"
+                    f"如果用户没说清楚用哪份简历或哪个岗位,请用 respond_directly 追问。"
+                    f"**不要**自己猜 id。"
+                ),
+                "user_facing_detail": f"缺少必填字段: {labels}",
+                "missing_fields": missing,
+            }
+
         # ensure_resume_and_job_exist_for_user 内部会用 get_*_for_user_or_404,
         # 失败时抛 HTTPException 404,统一转业务错。
         try:

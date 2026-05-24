@@ -152,6 +152,27 @@ def test_update_application_stage_tool_not_found(
     _run(_scenario)
 
 
+def test_update_application_stage_tool_missing_fields_returns_business_error(
+    client: TestClient,
+    test_marker: str,
+) -> None:
+    """缺 application_id / target_stage → 业务错 missing_required_field,
+    引导 LLM 先 list_user_applications 或追问用户。
+    """
+    assert client.get("/health/db").status_code == 200
+
+    async def _scenario(db: AsyncSession) -> None:
+        user, agent_run_id, _application_id = await _setup(db, marker=test_marker)
+        ctx = ToolContext(db=db, current_user=user, agent_run_id=agent_run_id)
+        result = await UpdateApplicationStageTool().invoke({}, ctx)
+        assert result["ok"] is False
+        assert result["error_class"] == "missing_required_field"
+        assert set(result["missing_fields"]) == {"application_id", "target_stage"}
+        assert "list_user_applications" in result["message_for_llm"]
+
+    _run(_scenario)
+
+
 def test_update_application_stage_tool_is_registered() -> None:
     from app.agent.tools import TOOL_REGISTRY
 
