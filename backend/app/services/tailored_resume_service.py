@@ -48,9 +48,13 @@ def build_tailored_resume_prompt(
     return f"""你是 JobPilot 的真实简历定制助手。
 请基于原始简历、结构化岗位描述和最新匹配分析，生成一份针对该岗位的 Markdown 简历变体。
 
+目标岗位上下文:
+- 公司名称: {job.company_name}
+- 岗位名称: {job.job_title}
+
 只返回 JSON，不要返回解释、Markdown 代码块或额外前后缀。JSON 字段名必须严格保持以下英文名称和结构:
 {{
-  "version_label": "中文短标签,不超过 255 个字符",
+  "version_label": "格式必须是 '公司简称 岗位名称定制版'，例如 '阿里 AI 应用研发定制版'、'字节 后端开发定制版'。公司可以使用通用简称(阿里/腾讯/字节/美团等)。总长度不超过 60 个字符。",
   "content_markdown": "Markdown 格式的定制简历正文",
   "change_summary": ["中文变更摘要条目", "..."]
 }}
@@ -169,11 +173,12 @@ async def generate_tailored_resume_version(
 
     output = validate_tailored_resume_output(raw_content)
     version_no = await _next_version_no(db, payload.resume_id)
+    label = _resolve_version_label(output.version_label, job)
     version = ResumeVersion(
         resume_id=resume.id,
         job_posting_id=job.id,
         version_no=version_no,
-        version_label=output.version_label,
+        version_label=label,
         content=output.content_markdown,
         content_format="markdown",
         source_type="ai_tailored",
@@ -199,3 +204,20 @@ def _format_change_summary(items: list[str]) -> str | None:
     if not items:
         return None
     return "\n".join(f"- {item}" for item in items)
+
+
+def _resolve_version_label(llm_label: str, job: JobPosting) -> str:
+    """优先用 LLM 生成的 label;不合规时回退到 '公司 岗位定制版' 兜底。
+
+    回退场景: label 为空、过长、或明显丢失公司/岗位信息。
+    """
+    fallback = f"{job.company_name} {job.job_title}定制版"[:255]
+    label = (llm_label or "").strip()
+    if not label:
+        return fallback
+    if len(label) > 80:
+        return fallback
+    # 简单启发: 标签里既没出现公司也没出现岗位,大概率走偏了
+    if job.company_name not in label and job.job_title not in label:
+        return fallback
+    return label

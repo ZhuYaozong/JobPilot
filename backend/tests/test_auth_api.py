@@ -1,18 +1,26 @@
 """认证 API 测试:注册、登录、me、双模认证。"""
 
+from collections.abc import Iterator
 from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app
 
+@pytest.fixture
+def auth_client(client: TestClient) -> Iterator[TestClient]:
+    """复用 conftest 的全局 client,但临时移除默认的 X-User-Name header
+    (模拟真实前端不带该 header 的情况)。
 
-@pytest.fixture(scope="module")
-def auth_client() -> TestClient:
-    """独立 TestClient——不带默认 X-User-Name header,模拟真实前端。"""
-    with TestClient(app) as c:
-        yield c
+    起单独的 TestClient 会创建第二条 asyncpg 事件循环,
+    跟全局 client 持有的连接池冲突,导致 "Future attached to a different loop"。
+    """
+    original = client.headers.pop("X-User-Name", None)
+    try:
+        yield client
+    finally:
+        if original is not None:
+            client.headers["X-User-Name"] = original
 
 
 def _unique_username() -> str:

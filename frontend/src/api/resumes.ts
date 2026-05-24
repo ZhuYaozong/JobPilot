@@ -11,6 +11,10 @@ import type {
   ResumeVersionListItem,
   TailoredResumeGenerateRequest,
 } from "@/types/resume_version";
+import {
+  parseFilenameFromContentDisposition,
+  triggerBlobDownload,
+} from "@/utils/download";
 
 export async function listResumes(params: ListParams = {}) {
   const response = await apiClient.get<ResumeListItem[]>("/api/v1/resumes", {
@@ -83,6 +87,13 @@ export async function listResumeVersions(
   return response.data;
 }
 
+export async function getResumeVersion(versionId: number) {
+  const response = await apiClient.get<ResumeVersion>(
+    `/api/v1/resume-versions/${versionId}`,
+  );
+  return response.data;
+}
+
 export async function generateTailoredResumeVersion(
   payload: TailoredResumeGenerateRequest,
 ) {
@@ -92,4 +103,22 @@ export async function generateTailoredResumeVersion(
     { timeout: LLM_OPERATION_TIMEOUT_MS },
   );
   return response.data;
+}
+
+/** 下载导出文件:从响应头解析文件名,触发浏览器下载。 */
+export async function exportResumeVersion(
+  versionId: number,
+  format: "markdown" | "docx",
+) {
+  const response = await apiClient.get<Blob>(
+    `/api/v1/resume-versions/${versionId}/export`,
+    { params: { format }, responseType: "blob" },
+  );
+  triggerBlobDownload(
+    response.data,
+    parseFilenameFromContentDisposition(
+      response.headers["content-disposition"] as string | undefined,
+      `resume-version-${versionId}.${format === "docx" ? "docx" : "md"}`,
+    ),
+  );
 }
