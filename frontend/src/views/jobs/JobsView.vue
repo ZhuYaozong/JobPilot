@@ -205,6 +205,14 @@
       <div class="drawer-tabs">
         <button
           class="drawer-tab"
+          :class="{ 'drawer-tab--active': createMode === 'ai' }"
+          type="button"
+          @click="createMode = 'ai'"
+        >
+          🤖 AI 草稿
+        </button>
+        <button
+          class="drawer-tab"
           :class="{ 'drawer-tab--active': createMode === 'url' }"
           type="button"
           @click="createMode = 'url'"
@@ -221,8 +229,95 @@
         </button>
       </div>
 
+      <!-- AI 草稿模式 -->
+      <div v-if="createMode === 'ai'" class="url-pane">
+        <p class="drawer-hint">
+          粘贴一段 JD 文本，或给一个岗位链接,AI 会自动推断公司、岗位、城市并抽取结构化字段。
+          所有字段生成后都可以编辑,确认无误再保存。
+        </p>
+
+        <div class="ai-input-mode">
+          <label class="ai-input-mode__item">
+            <input v-model="aiInputMode" type="radio" value="text" />
+            <span>粘贴文本</span>
+          </label>
+          <label class="ai-input-mode__item">
+            <input v-model="aiInputMode" type="radio" value="url" />
+            <span>用 URL</span>
+          </label>
+        </div>
+
+        <el-input
+          v-if="aiInputMode === 'text'"
+          v-model="aiText"
+          type="textarea"
+          :rows="6"
+          placeholder="把 JD 原文粘贴到这里"
+          :disabled="aiPending"
+        />
+        <div v-else class="url-input-row">
+          <el-input
+            v-model="aiUrl"
+            placeholder="https://example.com/jobs/xxx"
+            :disabled="aiPending"
+            @keyup.enter="handleGenerateJobDraft"
+          />
+        </div>
+
+        <div class="ai-action-row">
+          <el-button
+            type="primary"
+            :loading="aiPending"
+            :disabled="!canRequestAiDraft"
+            @click="handleGenerateJobDraft"
+          >
+            <template v-if="aiPending">AI 生成中…</template>
+            <template v-else>生成草稿</template>
+          </el-button>
+        </div>
+
+        <div v-if="aiHint" class="url-hint" :class="`url-hint--${aiHintTone}`">
+          {{ aiHint }}
+        </div>
+
+        <el-form
+          v-if="aiDraftReady"
+          label-position="top"
+          class="drawer-form"
+          @submit.prevent
+        >
+          <el-form-item label="公司名称" required>
+            <el-input v-model="createForm.company_name" placeholder="例如 OpenAI" />
+          </el-form-item>
+
+          <el-form-item label="岗位名称" required>
+            <el-input v-model="createForm.job_title" placeholder="例如 AI Application Engineer" />
+          </el-form-item>
+
+          <el-form-item label="城市">
+            <el-input v-model="createForm.city" placeholder="例如 上海" />
+          </el-form-item>
+
+          <el-form-item label="投递网址 / 岗位链接">
+            <el-input
+              v-model="createForm.source_url"
+              placeholder="https://example.com/job/123"
+            />
+          </el-form-item>
+
+          <el-form-item label="JD 原文" required>
+            <el-input
+              v-model="createForm.jd_text"
+              type="textarea"
+              :rows="10"
+              placeholder="AI 抽取的 JD 文本"
+            />
+          </el-form-item>
+        </el-form>
+      </div>
+
       <!-- URL 模式 -->
-      <div v-if="createMode === 'url'" class="url-pane">
+      <div v-else-if="createMode === 'url'" class="url-pane">
         <p class="drawer-hint">
           粘贴一个岗位链接（公司官网 careers 页 / Greenhouse / Lever 等公开页效果最好），
           系统会自动抓取并填好下方表单。
@@ -340,6 +435,7 @@ import {
   createJob,
   deleteJob,
   fetchJobFromUrl,
+  generateJobDraft,
   getJob,
   listJobs,
   parseJob,
@@ -361,14 +457,30 @@ const selectedJob = ref<JobPosting | null>(null);
 const createDrawerOpen = ref(false);
 const jdCopied = ref(false);
 
-// 抽屉模式：优先 URL 抓取（7'b 后的推荐路径），
-// 对当前抓取器处理不了的网站，再回落到手动粘贴。
-const createMode = ref<"url" | "manual">("url");
+// 抽屉模式:默认走 AI 草稿(任务 3 起的推荐入口);
+// 仍保留 URL 抓取与手动填写作为兜底。
+const createMode = ref<"ai" | "url" | "manual">("ai");
 const fetchUrlInput = ref("");
 const fetchPending = ref(false);
 const fetchPreviewReady = ref(false);
 const fetchHint = ref<string>("");
 const fetchHintTone = ref<"info" | "ok" | "warn">("info");
+
+// AI 草稿模式相关 state
+const aiInputMode = ref<"text" | "url">("text");
+const aiText = ref("");
+const aiUrl = ref("");
+const aiPending = ref(false);
+const aiDraftReady = ref(false);
+const aiHint = ref<string>("");
+const aiHintTone = ref<"info" | "ok" | "warn">("info");
+
+const canRequestAiDraft = computed(() => {
+  if (aiPending.value) return false;
+  return aiInputMode.value === "text"
+    ? aiText.value.trim().length > 0
+    : aiUrl.value.trim().length > 0;
+});
 
 const createForm = ref({
   company_name: "",
@@ -450,6 +562,15 @@ function resetFetchState() {
   fetchHintTone.value = "info";
 }
 
+function resetAiState() {
+  aiInputMode.value = "text";
+  aiText.value = "";
+  aiUrl.value = "";
+  aiDraftReady.value = false;
+  aiHint.value = "";
+  aiHintTone.value = "info";
+}
+
 function openCreateDrawer() {
   createDrawerOpen.value = true;
 }
@@ -457,11 +578,48 @@ function openCreateDrawer() {
 function closeCreateDrawer() {
   createDrawerOpen.value = false;
   resetFetchState();
+  resetAiState();
+  resetCreateForm();
 }
 
 function handleDrawerClose(done: () => void) {
   // 即使表单有未保存字段也允许关闭，这里保持轻量，不额外弹确认。
   done();
+}
+
+async function handleGenerateJobDraft() {
+  if (!canRequestAiDraft.value) return;
+
+  aiPending.value = true;
+  aiHint.value = "AI 正在生成草稿,通常 5-15 秒…";
+  aiHintTone.value = "info";
+
+  const payload = aiInputMode.value === "text"
+    ? { text: aiText.value.trim() }
+    : { url: aiUrl.value.trim() };
+
+  try {
+    const draft = await generateJobDraft(payload);
+
+    // 直接覆盖创建表单:草稿场景下用户的预期是"以 AI 结果为准,再做编辑"。
+    createForm.value = {
+      company_name: draft.company_name,
+      job_title: draft.job_title,
+      jd_text: draft.jd_text,
+      city: draft.city || "",
+      source_url: draft.source_url || "",
+    };
+
+    aiDraftReady.value = true;
+    aiHint.value = "AI 已生成草稿,请检查后保存。";
+    aiHintTone.value = "ok";
+  } catch (error) {
+    aiDraftReady.value = false;
+    aiHint.value = getErrorMessage(error, "AI 生成失败,请稍后重试或换种方式。");
+    aiHintTone.value = "warn";
+  } finally {
+    aiPending.value = false;
+  }
 }
 
 async function handleFetchFromUrl() {
@@ -1435,6 +1593,26 @@ onMounted(async () => {
   background: #fff7eb;
   border-color: rgba(245, 158, 11, 0.3);
   color: #b45309;
+}
+
+/* AI 草稿模式 */
+.ai-input-mode {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  color: #475467;
+}
+
+.ai-input-mode__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.ai-action-row {
+  display: flex;
+  justify-content: flex-end;
 }
 
 /* ============ 响应式 ============ */

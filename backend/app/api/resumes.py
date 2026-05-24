@@ -7,10 +7,12 @@ from sqlalchemy import select
 from app.api.deps import CurrentUserDep, DbSession, ListLimit, ListOffset
 from app.models.resume import Resume
 from app.schemas.resume import ResumeCreate, ResumeListItem, ResumeRead, ResumeUpdate
+from app.schemas.resume_draft import ResumeDraftRequest, ResumeDraftResponse
 from app.services.file_text_extractor import (
     FileExtractionError,
     extract_text_from_upload,
 )
+from app.services.resume_draft_service import generate_resume_draft
 from app.services.resume_parsing_service import parse_resume
 from app.services.resource_deletion_service import delete_resume_tree
 from app.services.user_scope_service import get_resume_for_user_or_404
@@ -24,7 +26,12 @@ async def create_resume(
     db: DbSession,
     current_user: CurrentUserDep,
 ) -> Resume:
-    resume = Resume(user_id=current_user.id, **payload.model_dump())
+    # exclude_none 让可选字段不传时回到 server_default(例如 parse_status="pending");
+    # AI 草稿模式会带上 parsed_json + parse_status,普通粘贴/上传走默认值。
+    resume = Resume(
+        user_id=current_user.id,
+        **payload.model_dump(exclude_none=True),
+    )
     db.add(resume)
     await db.commit()
     await db.refresh(resume)
@@ -99,6 +106,19 @@ def _derive_title_from_filename(filename: str) -> str:
         return stem[:255]
     from datetime import datetime
     return f"上传简历 {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+
+
+@router.post("/draft-from-input", response_model=ResumeDraftResponse)
+async def draft_resume_from_input(
+    payload: ResumeDraftRequest,
+    current_user: CurrentUserDep,  # noqa: ARG001 — 用户边界
+) -> ResumeDraftResponse:
+    """根据用户给的简历文本,让 LLM 同时推断标题 + 结构化字段。
+
+    不落库,返回 ResumeDraftResponse 供前端走"预览 → 编辑 → 保存"。
+    LLM 异常映射成 502,详见 service。
+    """
+    return await generate_resume_draft(payload.text)
 
 
 @router.get("", response_model=list[ResumeListItem])

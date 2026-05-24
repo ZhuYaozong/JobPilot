@@ -7,6 +7,10 @@ import type {
   ResumeUpdate,
 } from "@/types/resume";
 import type {
+  ResumeDraftRequest,
+  ResumeDraftResponse,
+} from "@/types/resume_draft";
+import type {
   ResumeVersion,
   ResumeVersionListItem,
   TailoredResumeGenerateRequest,
@@ -49,6 +53,19 @@ export async function parseResume(resumeId: number) {
   const response = await apiClient.post<Resume>(
     `/api/v1/resumes/${resumeId}/parse`,
     undefined,
+    { timeout: LLM_OPERATION_TIMEOUT_MS },
+  );
+  return response.data;
+}
+
+/**
+ * AI 草稿模式:把简历文本交给后端,返回标题 + 结构化字段。
+ * 服务端不落库,前端走"预览 → 编辑 → 保存"。
+ */
+export async function generateResumeDraft(payload: ResumeDraftRequest) {
+  const response = await apiClient.post<ResumeDraftResponse>(
+    "/api/v1/resumes/draft-from-input",
+    payload,
     { timeout: LLM_OPERATION_TIMEOUT_MS },
   );
   return response.data;

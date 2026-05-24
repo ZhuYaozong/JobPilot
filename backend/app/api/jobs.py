@@ -3,6 +3,7 @@ from sqlalchemy import select
 
 from app.api.deps import CurrentUserDep, DbSession, ListLimit, ListOffset
 from app.models.job_posting import JobPosting
+from app.schemas.job_draft import JobDraftRequest, JobDraftResponse
 from app.schemas.job_posting import (
     JobPostingCreate,
     JobPostingListItem,
@@ -11,6 +12,7 @@ from app.schemas.job_posting import (
     JobURLFetchPreview,
     JobURLFetchRequest,
 )
+from app.services.job_draft_service import generate_job_draft
 from app.services.job_parsing_service import parse_job_posting
 from app.services.job_url_fetcher import JobURLFetchError, fetch_jd_from_url
 from app.services.resource_deletion_service import delete_job_posting_tree
@@ -25,7 +27,12 @@ async def create_job(
     db: DbSession,
     current_user: CurrentUserDep,
 ) -> JobPosting:
-    job = JobPosting(user_id=current_user.id, **payload.model_dump())
+    # exclude_none: parsed_json 在普通 URL/手动模式下不传,走默认 NULL;
+    # AI 草稿模式带上 parsed_json,一次落库省一次 LLM 调用。
+    job = JobPosting(
+        user_id=current_user.id,
+        **payload.model_dump(exclude_none=True),
+    )
     db.add(job)
     await db.commit()
     await db.refresh(job)
@@ -54,6 +61,19 @@ async def fetch_job_from_url(
         city_hint=result.city_hint,
         source_url=result.source_url,
     )
+
+
+@router.post("/draft-from-input", response_model=JobDraftResponse)
+async def draft_job_from_input(
+    payload: JobDraftRequest,
+    current_user: CurrentUserDep,  # noqa: ARG001 — 用户边界
+) -> JobDraftResponse:
+    """根据用户给的文本或 URL,让 LLM 同时推断岗位基本信息 + 结构化字段。
+
+    不落库,返回 JobDraftResponse 供前端走"预览 → 编辑 → 保存"。
+    URL 抓不到时映射成 422,LLM 异常映射成 502,详见 service。
+    """
+    return await generate_job_draft(payload)
 
 
 @router.get("", response_model=list[JobPostingListItem])
