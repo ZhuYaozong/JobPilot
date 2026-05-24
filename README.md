@@ -11,8 +11,8 @@ JobPilot 是面向求职者的 AI Copilot。它把岗位收集、简历管理、
 - Agent Runtime：基于 LangGraph 1.x 的多节点工作流，支持工具调用、运行记录和 SSE 流式返回。
 - RAG 知识库：支持资料上传、手工文本、切片、embedding、pgvector 检索和 chunk 预览。
 - 交互式模拟面试：基于当前岗位、简历、匹配结果、interview_prep 和 search_knowledge 逐轮提问。
-- 定制简历版本：针对岗位生成 `ai_tailored` 简历版本，保留版本号、来源类型和变更摘要。
-- 用户作用域：开发阶段通过 `X-User-Name` 隔离 `demo` / `sandbox` / `test` 用户数据。
+- 定制简历版本：针对岗位生成 `ai_tailored` 简历版本，保留版本号、来源类型和变更摘要，前端可查看 / 复制 / 导出 Markdown 与 DOCX。
+- 多用户认证：JWT 注册 / 登录 / me 与 dev 模式（`X-User-Name`）并存；侧边栏支持多会话切换、登录其他、注册新用户、退出登录。
 - 工程约束清晰：不引入 `langchain-openai`、`langchain-community`、`langchain-text-splitters`，模型调用由自研 OpenAI-compatible client 承载。
 
 ## Product Scope
@@ -43,7 +43,7 @@ JobPilot 当前覆盖的求职主链路：
 | --- | --- |
 | 首页 | 展示最近岗位、简历、匹配、材料和投递进展，给出今日建议动作 |
 | 岗位管理 | 创建、编辑、删除岗位；从 URL 抓取 JD 预览；结构化解析 JD |
-| 简历管理 | 创建、编辑、删除简历；上传 PDF / DOCX / TXT / MD；结构化解析简历；查看版本 |
+| 简历管理 | 创建、编辑、删除简历；上传 PDF / DOCX / TXT / MD；结构化解析简历；版本卡片可查看 / 复制 / 导出 Markdown 与 DOCX |
 | 匹配分析 | 选择岗位和简历生成匹配分、优势、短板、缺失关键词和修改建议 |
 | 求职材料 | 生成求职信、面试准备；记录材料反馈；查看历史材料 |
 | 定制简历 | 针对岗位生成 `ai_tailored` 简历版本，版本号按 `max(version_no)+1` 递增 |
@@ -296,7 +296,7 @@ docker compose down -v
 
 ## Current Status
 
-截至切片 7'e，当前主线已合入：
+截至 2026-05-24（任务 2 完成），当前主线已合入：
 
 - 基础数据层、用户作用域、recent-first list 规则
 - Tool Adapter、LangGraph 三节点工作流、多工具 ReAct 循环
@@ -310,6 +310,12 @@ docker compose down -v
 - Assistant 可选择知识库，文档 chunks 可预览
 - 交互式模拟面试：基于 `search_knowledge` + `interview_prep`
 - 定制简历生成：针对岗位生成简历变体
+- 8'a Agent 行为 eval 框架 + 6 个 baseline case
+- 8'b LLM-as-judge 评分断言
+- 多用户认证：JWT 注册 / 登录 / me + bcrypt 密码哈希；dev 模式 `X-User-Name` 仍可用
+- 侧边栏多会话切换：dev 用户 + 多个 JWT 会话并存，支持切换 / 登录 / 注册 / 退出
+- 简历版本前端可视化：版本卡片展示改动摘要，查看 / 复制 / 导出 Markdown 与 DOCX
+- 通用导出端点：`/api/v1/resume-versions/{id}/export` 与 `/api/v1/artifacts/{id}/export`
 
 最近一次合入前验证：
 
@@ -322,20 +328,22 @@ frontend npm run build: passed
 
 JobPilot 仍然是开发阶段项目，以下能力没有被包装成已完成：
 
-- 没有正式注册、登录、JWT、团队空间或企业级权限。
+- 注册 / 登录 / JWT 已就绪，但没有团队空间或企业级权限模型；JWT secret 当前仍是开发占位，需上线前替换。
 - 知识库索引当前是请求内同步执行，还没有生产级异步队列。
-- 没有 PDF / DOCX 导出和模板排版系统。
+- 仅支持 Markdown / DOCX 导出，没有 PDF 导出与模板排版系统。
 - 没有生产级通知、日历提醒或邮件投递集成。
 - 没有完整 CI/CD 发布流水线。
 - 没有并发安全的简历版本唯一约束；定制简历版本号当前按 `max(version_no)+1` 生成。
+- AgentRun / ToolCallLog 已持久化但还没有前端可观测界面。
 
 ## Roadmap
 
+- AI 帮助添加简历或岗位：基于文本 / URL 自动解析草稿，后续接 MCP 搜索工具。
+- Agent 可观测页面：AgentRun / ToolCallLog / 工具调用结果与失败原因前端可查看。
+- 让 Agent 能直接读取当前用户的简历和岗位详情。
 - 将知识库索引从同步请求演进为后台任务。
-- 为 AgentRun / ToolCallLog 增加更完整的前端可观测界面。
-- 支持求职材料导出 PDF / DOCX。
+- 支持求职材料导出 PDF。
 - 为定制简历版本增加并发锁或唯一约束。
-- 增加正式认证和更完整的权限模型。
 - 扩展 Agent 质量评估和反馈分析。
 
 ## License
