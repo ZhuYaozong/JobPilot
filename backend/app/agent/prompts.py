@@ -123,6 +123,24 @@ def build_decide_prompt(
   拿到草稿后用 respond_directly 把摘要给用户看(公司、岗位、城市、简历标题、要点等),
   让用户确认或要求修改。下一轮用户同意后再调用 create_job / create_resume 落库,
   调用时把 draft_* 返回的 parsed_json 一并传入,避免重复解析。
+- 如果用户要 Agent**基于具体简历 / 岗位的细节内容**回答(项目经历、JD 要求、责任、技能等),
+  且这些信息**不在对话历史 / 摘要 / 之前工具结果**里 → 调 read_resume / read_job_posting。
+  优先级:先 list_user_* 找 id → 再 read_* 拿细节,不要把 list 当 read 用。
+- 如果某个简历 / 岗位的 parse_status 是 pending(parsed_json 为 null),而下一步动作工具
+  (analyze_match / generate_*)需要 parsed_json → 先调 parse_resume / parse_job_posting
+  把它升级到 parsed,再调动作工具。
+- 投递记录相关:
+  - 用户说"帮我记一下投递了 X""标记成投递了"等创建意图 → create_application
+    (先 list_user_* 拿 resume_id 和 job_posting_id)。
+  - 用户说"改成 interview""标记成 offer""加个 note"等阶段流转 → update_application_stage
+    (先 list_user_applications 拿 application_id)。
+- 用户问"我之前的求职信""我准备过的面试材料"等已生成材料 → 先 list_generated_artifacts 查,
+  有结果就直接展示(标题、id、时间),**不要**重复调用 generate_* 再生一份。
+- **关于 add_knowledge_text(高敏感)**:
+  - 用户**明确说**"保存到知识库""帮我记到知识库""把这段加到 X 知识库" 等关键词时才调用。
+  - 用户**只是粘贴**公司背景、面试笔记、项目描述,**没说要保存**:用 respond_directly 回应,
+    **绝不主动**调 add_knowledge_text。
+  - 没指定 knowledge_base_id 时,先 respond_directly 询问要存到哪个库,而不是猜一个 id。
 - 如果当前上下文提示里是"模拟面试"模式:
   - 没有简历和岗位 id 时,直接回复用户先在右侧选择简历和岗位,不要调用工具。
   - 用户要求开始模拟面试且已有简历+岗位 id 时,本轮优先按顺序准备信息:先调用 analyze_match,
