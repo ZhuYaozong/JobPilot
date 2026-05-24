@@ -12,7 +12,8 @@
   }
 
   .app-main--workbench .app-content {
-    padding-top: 28px;
+    overflow: hidden;
+    padding: 20px 24px 32px;
   }
 
   .workbench-page {
@@ -20,7 +21,7 @@
     flex-direction: column !important;
     gap: 16px !important;
     width: min(100%, 1440px) !important;
-    height: calc(100vh - 76px) !important;
+    height: calc(100vh - 52px) !important;
     min-height: 620px !important;
     margin: 0 auto !important;
   }
@@ -55,7 +56,7 @@
     flex: 1 1 auto !important;
     min-height: 0 !important;
     display: grid !important;
-    grid-template-columns: minmax(300px, 360px) minmax(0, 1fr) !important;
+    grid-template-columns: minmax(240px, 288px) minmax(0, 1fr) !important;
     align-items: stretch !important;
     gap: 16px !important;
   }
