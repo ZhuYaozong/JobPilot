@@ -129,6 +129,14 @@ const TOOL_DISPLAY: Record<string, ToolDisplay> = {
   draft_resume: { label: "起草简历", icon: "🤖" },
   create_job: { label: "保存岗位", icon: "💾" },
   create_resume: { label: "保存简历", icon: "💾" },
+  read_resume: { label: "读取简历", icon: "📄" },
+  read_job_posting: { label: "读取岗位", icon: "📄" },
+  parse_resume: { label: "解析简历", icon: "🔬" },
+  parse_job_posting: { label: "解析岗位", icon: "🔬" },
+  add_knowledge_text: { label: "存入知识库", icon: "📚" },
+  create_application: { label: "记录投递", icon: "🗂️" },
+  update_application_stage: { label: "推进投递阶段", icon: "🔁" },
+  list_generated_artifacts: { label: "查询历史材料", icon: "📁" },
 };
 
 export function formatToolName(name: string): ToolDisplay {
