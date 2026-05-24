@@ -10,6 +10,10 @@ import type {
   GeneratedArtifactUpdate,
   InterviewPrepGenerateRequest,
 } from "@/types/generated_artifact";
+import {
+  parseFilenameFromContentDisposition,
+  triggerBlobDownload,
+} from "@/utils/download";
 
 export async function listArtifacts(params: ListParams = {}) {
   const response = await apiClient.get<GeneratedArtifactListItem[]>(
@@ -89,4 +93,22 @@ export async function createArtifactFeedback(
     payload,
   );
   return response.data;
+}
+
+/** 下载求职材料导出文件(Markdown 或 DOCX)。 */
+export async function exportArtifact(
+  artifactId: number,
+  format: "markdown" | "docx",
+) {
+  const response = await apiClient.get<Blob>(
+    `/api/v1/artifacts/${artifactId}/export`,
+    { params: { format }, responseType: "blob" },
+  );
+  triggerBlobDownload(
+    response.data,
+    parseFilenameFromContentDisposition(
+      response.headers["content-disposition"] as string | undefined,
+      `artifact-${artifactId}.${format === "docx" ? "docx" : "md"}`,
+    ),
+  );
 }

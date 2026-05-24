@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +14,12 @@ from app.schemas.resume_version import (
     ResumeVersionUpdate,
 )
 from app.schemas.tailored_resume_generation import TailoredResumeGenerateRequest
+from app.services.export_service import (
+    SUPPORTED_FORMATS,
+    build_content_disposition,
+    export_docx,
+    export_markdown,
+)
 from app.services.tailored_resume_service import generate_tailored_resume_version
 from app.services.user_scope_service import (
     get_job_posting_for_user_or_404,
@@ -129,6 +136,32 @@ async def update_resume_version(
     await db.commit()
     await db.refresh(version)
     return version
+
+
+@router.get("/api/v1/resume-versions/{version_id}/export")
+async def export_resume_version(
+    version_id: int,
+    db: DbSession,
+    current_user: CurrentUserDep,
+    format: str = Query("markdown", description="markdown | docx"),
+) -> Response:
+    """把简历版本的 Markdown 正文渲染成可下载文件。"""
+    if format not in SUPPORTED_FORMATS:
+        raise HTTPException(status_code=400, detail="Unsupported export format")
+
+    version = await get_resume_version_or_404(db, version_id, current_user)
+    title = (version.version_label or f"resume-v{version.version_no}").strip()
+
+    payload = (
+        export_markdown(title, version.content)
+        if format == "markdown"
+        else export_docx(title, version.content)
+    )
+    return Response(
+        content=payload.content,
+        media_type=payload.media_type,
+        headers={"Content-Disposition": build_content_disposition(payload.filename)},
+    )
 
 
 @router.get(

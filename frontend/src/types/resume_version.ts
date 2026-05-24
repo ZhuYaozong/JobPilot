@@ -9,13 +9,13 @@ export interface ResumeVersionListItem {
   content_format: string;
   source_type: string;
   is_active: boolean;
+  change_summary: string | null;
   created_at: ISODateString;
   updated_at: ISODateString;
 }
 
 export interface ResumeVersion extends ResumeVersionListItem {
   content: string;
-  change_summary: string | null;
 }
 
 export interface ResumeVersionCreate {

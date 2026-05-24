@@ -197,17 +197,56 @@
             <div v-if="versionsLoading" class="versions-loading">正在加载版本…</div>
             <div v-else-if="resumeVersions.length" class="versions">
               <article v-for="version in resumeVersions" :key="version.id" class="version">
-                <div class="version__head">
-                  <span class="version__no">v{{ version.version_no }}</span>
-                  <strong class="version__label">{{ version.version_label }}</strong>
+                <div class="version__top">
+                  <div class="version__head">
+                    <span class="version__no">v{{ version.version_no }}</span>
+                    <strong class="version__label">{{ version.version_label }}</strong>
+                    <span
+                      class="version__type"
+                      :class="`version__type--${version.source_type}`"
+                    >{{ formatSourceType(version.source_type) }}</span>
+                  </div>
+                  <div class="version__actions">
+                    <button
+                      class="version-btn"
+                      type="button"
+                      @click="openVersionViewer(version.id)"
+                    >查看</button>
+                    <button
+                      class="version-btn"
+                      type="button"
+                      :disabled="copyingVersionId === version.id"
+                      @click="handleCopyVersion(version.id)"
+                    >{{ copyingVersionId === version.id ? "复制中…" : "复制" }}</button>
+                    <el-dropdown
+                      trigger="click"
+                      @command="(fmt: 'markdown' | 'docx') => handleExportVersion(version.id, fmt)"
+                    >
+                      <button
+                        class="version-btn version-btn--primary"
+                        type="button"
+                        :disabled="exportingVersionId === version.id"
+                      >
+                        {{ exportingVersionId === version.id ? "导出中…" : "导出" }}
+                        <span class="version-btn__caret">▾</span>
+                      </button>
+                      <template #dropdown>
+                        <el-dropdown-menu>
+                          <el-dropdown-item command="markdown">Markdown (.md)</el-dropdown-item>
+                          <el-dropdown-item command="docx">Word 文档 (.docx)</el-dropdown-item>
+                        </el-dropdown-menu>
+                      </template>
+                    </el-dropdown>
+                  </div>
                 </div>
                 <div class="version__meta">
-                  <span>{{ formatSourceType(version.source_type) }}</span>
+                  <span>{{ formatRelativeTime(version.updated_at) }}</span>
                   <span class="dot" />
                   <span>{{ version.content_format }}</span>
-                  <span class="dot" />
-                  <span>{{ formatRelativeTime(version.updated_at) }}</span>
                 </div>
+                <p v-if="version.change_summary" class="version__summary">
+                  {{ version.change_summary }}
+                </p>
               </article>
             </div>
             <p v-else class="versions-empty">当前还没有版本记录。</p>
@@ -367,6 +406,40 @@
         </div>
       </template>
     </el-drawer>
+
+    <!-- ========== 版本查看抽屉 ========== -->
+    <el-drawer
+      v-model="versionViewerOpen"
+      :title="versionViewerTitle"
+      direction="rtl"
+      size="60%"
+    >
+      <div v-if="versionViewerLoading" class="version-viewer__loading">
+        正在加载版本内容…
+      </div>
+      <div v-else-if="versionViewerError" class="version-viewer__error">
+        {{ versionViewerError }}
+      </div>
+      <div v-else-if="versionViewerData" class="version-viewer">
+        <div class="version-viewer__meta">
+          <span class="version-viewer__chip">v{{ versionViewerData.version_no }}</span>
+          <span>{{ formatSourceType(versionViewerData.source_type) }}</span>
+          <span class="dot" />
+          <span>{{ formatRelativeTime(versionViewerData.updated_at) }}</span>
+        </div>
+        <div
+          v-if="versionViewerData.change_summary"
+          class="version-viewer__summary"
+        >
+          <h4>改动摘要</h4>
+          <p>{{ versionViewerData.change_summary }}</p>
+        </div>
+        <article
+          class="version-viewer__body markdown-body"
+          v-html="renderedVersionMarkdown"
+        />
+      </div>
+    </el-drawer>
   </div>
 </template>
 
@@ -377,18 +450,24 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import {
   createResume,
   deleteResume,
+  exportResumeVersion,
   getResume,
+  getResumeVersion,
   listResumeVersions,
   listResumes,
   parseResume,
   uploadResume,
 } from "@/api/resumes";
 import type { Resume, ResumeCreate, ResumeListItem } from "@/types/resume";
-import type { ResumeVersionListItem } from "@/types/resume_version";
+import type {
+  ResumeVersion,
+  ResumeVersionListItem,
+} from "@/types/resume_version";
 import { formatRelativeTime } from "@/utils/format";
 import { sha256Hex } from "@/utils/hash";
 import { getErrorMessage } from "@/utils/http";
 import { formatParseStatus, formatSourceType } from "@/utils/labels";
+import { renderMarkdownToHtml } from "@/utils/markdown";
 
 const resumes = ref<ResumeListItem[]>([]);
 const resumeVersions = ref<ResumeVersionListItem[]>([]);
@@ -403,6 +482,23 @@ const selectedResume = ref<Resume | null>(null);
 
 const createDrawerOpen = ref(false);
 const rawCopied = ref(false);
+
+// 版本查看抽屉 + 复制 / 导出按钮的过程态
+const versionViewerOpen = ref(false);
+const versionViewerLoading = ref(false);
+const versionViewerError = ref("");
+const versionViewerData = ref<ResumeVersion | null>(null);
+const copyingVersionId = ref<number | null>(null);
+const exportingVersionId = ref<number | null>(null);
+
+const versionViewerTitle = computed(
+  () => versionViewerData.value?.version_label || "版本详情",
+);
+const renderedVersionMarkdown = computed(() =>
+  versionViewerData.value
+    ? renderMarkdownToHtml(versionViewerData.value.content)
+    : "",
+);
 
 // 抽屉支持两种模式：上传文件或粘贴原始文本。默认走上传，因为 7'a 后手动粘贴
 // 主要作为保留的兜底入口；仍然保留它，是为了让高级用户或习惯写 Markdown 的用户
@@ -599,12 +695,53 @@ async function copyRawText() {
 async function fetchResumeVersions(resumeId: number) {
   versionsLoading.value = true;
   try {
-    resumeVersions.value = await listResumeVersions(resumeId, { limit: 5 });
+    resumeVersions.value = await listResumeVersions(resumeId, { limit: 20 });
   } catch (error) {
     resumeVersions.value = [];
     ElMessage.error(getErrorMessage(error, "简历版本列表加载失败"));
   } finally {
     versionsLoading.value = false;
+  }
+}
+
+async function openVersionViewer(versionId: number) {
+  versionViewerOpen.value = true;
+  versionViewerLoading.value = true;
+  versionViewerError.value = "";
+  versionViewerData.value = null;
+  try {
+    versionViewerData.value = await getResumeVersion(versionId);
+  } catch (error) {
+    versionViewerError.value = getErrorMessage(error, "无法加载版本内容");
+  } finally {
+    versionViewerLoading.value = false;
+  }
+}
+
+async function handleCopyVersion(versionId: number) {
+  copyingVersionId.value = versionId;
+  try {
+    const version = await getResumeVersion(versionId);
+    await navigator.clipboard.writeText(version.content);
+    ElMessage.success("已复制到剪贴板");
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, "复制失败"));
+  } finally {
+    copyingVersionId.value = null;
+  }
+}
+
+async function handleExportVersion(
+  versionId: number,
+  format: "markdown" | "docx",
+) {
+  exportingVersionId.value = versionId;
+  try {
+    await exportResumeVersion(versionId, format);
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, "导出失败"));
+  } finally {
+    exportingVersionId.value = null;
   }
 }
 
@@ -1424,17 +1561,33 @@ onMounted(async () => {
 .version {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 12px 14px;
+  gap: 8px;
+  padding: 14px 16px;
   border: 1px solid rgba(15, 23, 42, 0.06);
   border-radius: 10px;
   background: #fafbfc;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.version:hover {
+  border-color: rgba(37, 99, 235, 0.25);
+  background: #ffffff;
+}
+
+.version__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .version__head {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex: 1;
+  min-width: 0;
 }
 
 .version__no {
@@ -1453,6 +1606,27 @@ onMounted(async () => {
   font-size: 13px;
   font-weight: 600;
   color: #0f172a;
+  word-break: break-all;
+}
+
+.version__type {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: #eef2ff;
+  color: #4f46e5;
+}
+
+.version__type--manual {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.version__type--ai_tailored {
+  background: #ecfdf5;
+  color: #047857;
 }
 
 .version__meta {
@@ -1461,6 +1635,139 @@ onMounted(async () => {
   gap: 8px;
   font-size: 12px;
   color: #667085;
+}
+
+.version__summary {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #f8fafc;
+  border-left: 3px solid #2563eb;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #334155;
+  white-space: pre-wrap;
+}
+
+.version__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.version-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #475467;
+  background: #ffffff;
+  border: 1px solid var(--line, #e2e8f0);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.version-btn:hover:not(:disabled) {
+  border-color: #2563eb;
+  color: #2563eb;
+}
+
+.version-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.version-btn--primary {
+  background: #2563eb;
+  color: #ffffff;
+  border-color: #2563eb;
+}
+
+.version-btn--primary:hover:not(:disabled) {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #ffffff;
+}
+
+.version-btn__caret {
+  font-size: 10px;
+  opacity: 0.85;
+}
+
+/* ============ 版本查看抽屉 ============ */
+.version-viewer {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.version-viewer__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #667085;
+}
+
+.version-viewer__chip {
+  display: inline-grid;
+  place-items: center;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #0f766e, #2563eb);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.version-viewer__summary {
+  padding: 12px 14px;
+  background: #f8fafc;
+  border-left: 3px solid #2563eb;
+  border-radius: 8px;
+}
+
+.version-viewer__summary h4 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475467;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.version-viewer__summary p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #334155;
+  white-space: pre-wrap;
+}
+
+.version-viewer__body {
+  padding: 16px 20px;
+  background: #ffffff;
+  border: 1px solid var(--line, #e2e8f0);
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #1e293b;
+}
+
+.version-viewer__loading,
+.version-viewer__error {
+  padding: 24px;
+  text-align: center;
+  font-size: 13px;
+  color: #667085;
+}
+
+.version-viewer__error {
+  color: #dc2626;
 }
 
 .dot {

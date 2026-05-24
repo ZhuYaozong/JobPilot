@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Query, Response
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,6 +24,12 @@ from app.services.artifact_feedback_service import (
     list_artifact_feedback,
 )
 from app.services.cover_letter_service import generate_cover_letter
+from app.services.export_service import (
+    SUPPORTED_FORMATS,
+    build_content_disposition,
+    export_docx,
+    export_markdown,
+)
 from app.services.interview_prep_service import generate_interview_prep
 from app.services.user_scope_service import (
     get_application_record_for_user_or_404,
@@ -171,6 +177,37 @@ async def read_artifact(
     current_user: CurrentUserDep,
 ) -> GeneratedArtifact:
     return await get_generated_artifact_for_user_or_404(db, artifact_id, current_user)
+
+
+@router.get("/{artifact_id}/export")
+async def export_artifact(
+    artifact_id: int,
+    db: DbSession,
+    current_user: CurrentUserDep,
+    format: str = Query("markdown", description="markdown | docx"),
+) -> Response:
+    """把求职材料(cover letter / interview prep / 其它)正文渲染成可下载文件。"""
+    if format not in SUPPORTED_FORMATS:
+        raise HTTPException(status_code=400, detail="Unsupported export format")
+
+    artifact = await get_generated_artifact_for_user_or_404(
+        db, artifact_id, current_user,
+    )
+    body = artifact.content_text or ""
+    if not body.strip():
+        raise HTTPException(status_code=400, detail="Artifact has no content to export")
+
+    title = (artifact.title or f"artifact-{artifact.id}").strip()
+    payload = (
+        export_markdown(title, body)
+        if format == "markdown"
+        else export_docx(title, body)
+    )
+    return Response(
+        content=payload.content,
+        media_type=payload.media_type,
+        headers={"Content-Disposition": build_content_disposition(payload.filename)},
+    )
 
 
 @router.patch("/{artifact_id}", response_model=GeneratedArtifactRead)

@@ -35,6 +35,9 @@ class ResumeVersionListItem(BaseModel):
     content_format: str
     source_type: str
     is_active: bool
+    # change_summary 体积小且对列表卡片"AI 改了什么"的展示很关键,
+    # 不另起一次详情请求,直接随列表返回。
+    change_summary: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -43,4 +46,3 @@ class ResumeVersionListItem(BaseModel):
 
 class ResumeVersionRead(ResumeVersionListItem):
     content: str
-    change_summary: str | None
