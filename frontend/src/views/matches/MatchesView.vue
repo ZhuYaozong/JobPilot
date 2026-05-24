@@ -1,5 +1,5 @@
 <template>
-  <div class="matches">
+  <div class="matches workbench-page">
     <!-- ========== 页面头部 ========== -->
     <header class="page-head">
       <div>
