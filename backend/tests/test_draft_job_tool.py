@@ -206,7 +206,7 @@ def test_draft_job_tool_url_fetch_failure_returns_business_error(
     _run(_scenario)
 
 
-def test_draft_job_tool_empty_input_returns_business_error(
+def test_draft_job_tool_empty_input_returns_missing_required_field(
     client: TestClient,
     test_marker: str,
 ) -> None:
@@ -215,10 +215,15 @@ def test_draft_job_tool_empty_input_returns_business_error(
     async def _scenario(db: AsyncSession) -> None:
         user, agent_run_id = await _setup_environment(db, marker=test_marker)
         ctx = ToolContext(db=db, current_user=user, agent_run_id=agent_run_id)
-        # text 与 url 都为空 → service 层的 JobDraftRequest validator 触发业务错。
+        # text 与 url 都为空 → 统一映射到 missing_required_field 业务错,
+        # 让 LLM 转 respond_directly 向用户追问。
         result = await DraftJobTool().invoke({}, ctx)
         assert result["ok"] is False
-        assert result["error_class"] == "draft_input_empty"
+        assert result["error_class"] == "missing_required_field"
+        assert result["missing_fields"] == ["text_or_url"]
+        # message 必须明确指引向用户追问。
+        assert "respond_directly" in result["message_for_llm"]
+        assert "JD 文本" in result["message_for_llm"]
 
     _run(_scenario)
 

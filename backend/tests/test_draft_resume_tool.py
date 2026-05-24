@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from app.agent.tool_adapter import ToolContext, ToolSystemError, ToolValidationError
+from app.agent.tool_adapter import ToolContext, ToolSystemError
 from app.agent.tools.draft_resume_tool import DraftResumeTool
 from app.core.config import settings
 from app.llm.client import LLMClient, LLMClientError, LLMConfigError
@@ -112,22 +112,44 @@ def test_draft_resume_tool_text_success(
     _run(_scenario)
 
 
-def test_draft_resume_tool_empty_text_raises_validation_error(
+def test_draft_resume_tool_empty_text_returns_missing_required_field(
     client: TestClient,
     test_marker: str,
 ) -> None:
+    """text 为空 → 业务错(missing_required_field),不再抛 ValidationError。"""
     assert client.get("/health/db").status_code == 200
 
     async def _scenario(db: AsyncSession) -> None:
         user, agent_run_id = await _setup_environment(db, marker=test_marker)
         ctx = ToolContext(db=db, current_user=user, agent_run_id=agent_run_id)
-        # text=空串 走 Pydantic min_length=1 → ToolValidationError(由 tool_adapter 统一抛)。
-        with pytest.raises(ToolValidationError):
-            await DraftResumeTool().invoke({"text": ""}, ctx)
+        result = await DraftResumeTool().invoke({"text": ""}, ctx)
+        assert result["ok"] is False
+        assert result["error_class"] == "missing_required_field"
+        assert result["missing_fields"] == ["text"]
+        assert "respond_directly" in result["message_for_llm"]
 
         logs = await _fetch_logs(db, agent_run_id)
         assert logs[0].status == "failed"
-        assert logs[0].error_class == "validation_error"
+        # 不再走 validation_error,而是业务错 missing_required_field。
+        assert logs[0].error_class == "missing_required_field"
+
+    _run(_scenario)
+
+
+def test_draft_resume_tool_missing_text_returns_missing_required_field(
+    client: TestClient,
+    test_marker: str,
+) -> None:
+    """完全不传 text 也应当走业务错,而不是 ValidationError。"""
+    assert client.get("/health/db").status_code == 200
+
+    async def _scenario(db: AsyncSession) -> None:
+        user, agent_run_id = await _setup_environment(db, marker=test_marker)
+        ctx = ToolContext(db=db, current_user=user, agent_run_id=agent_run_id)
+        result = await DraftResumeTool().invoke({}, ctx)
+        assert result["ok"] is False
+        assert result["error_class"] == "missing_required_field"
+        assert result["missing_fields"] == ["text"]
 
     _run(_scenario)
 

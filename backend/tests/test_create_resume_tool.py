@@ -145,6 +145,35 @@ def test_create_resume_tool_with_parsed_json_marks_parsed(
     _run(_scenario)
 
 
+def test_create_resume_tool_missing_required_fields_returns_business_error(
+    client: TestClient,
+    test_marker: str,
+) -> None:
+    """缺 title / raw_text → 业务错 missing_required_field,不再抛 ValidationError。"""
+    assert client.get("/health/db").status_code == 200
+
+    async def _scenario(db: AsyncSession) -> None:
+        user, agent_run_id = await _setup_environment(db, marker=test_marker)
+        ctx = ToolContext(db=db, current_user=user, agent_run_id=agent_run_id)
+        # 全空
+        result = await CreateResumeTool().invoke({}, ctx)
+        assert result["ok"] is False
+        assert result["error_class"] == "missing_required_field"
+        assert set(result["missing_fields"]) == {"title", "raw_text"}
+        assert "respond_directly" in result["message_for_llm"]
+        assert "简历正文" in result["message_for_llm"]
+
+        # 只缺 raw_text
+        result = await CreateResumeTool().invoke(
+            {"title": f"{test_marker} t"},
+            ctx,
+        )
+        assert result["ok"] is False
+        assert result["missing_fields"] == ["raw_text"]
+
+    _run(_scenario)
+
+
 def test_create_resume_tool_is_registered() -> None:
     from app.agent.tools import TOOL_REGISTRY
 

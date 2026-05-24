@@ -145,6 +145,27 @@ def test_create_application_tool_job_not_found(
     _run(_scenario)
 
 
+def test_create_application_tool_missing_ids_returns_business_error(
+    client: TestClient,
+    test_marker: str,
+) -> None:
+    """缺 resume_id / job_posting_id → 业务错 missing_required_field,
+    引导 LLM 先 list_user_* 查 id 或追问用户。
+    """
+    assert client.get("/health/db").status_code == 200
+
+    async def _scenario(db: AsyncSession) -> None:
+        user, agent_run_id, _resume_id, _job_id = await _setup(db, marker=test_marker)
+        ctx = ToolContext(db=db, current_user=user, agent_run_id=agent_run_id)
+        result = await CreateApplicationTool().invoke({}, ctx)
+        assert result["ok"] is False
+        assert result["error_class"] == "missing_required_field"
+        assert set(result["missing_fields"]) == {"resume_id", "job_posting_id"}
+        assert "list_user_resumes" in result["message_for_llm"]
+
+    _run(_scenario)
+
+
 def test_create_application_tool_is_registered() -> None:
     from app.agent.tools import TOOL_REGISTRY
 

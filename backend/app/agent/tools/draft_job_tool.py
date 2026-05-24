@@ -21,12 +21,18 @@ from app.services.job_draft_service import generate_job_draft
 
 # 已知业务错误明细 → 稳定 error_class,这两个都是用户/输入可补的问题。
 _BUSINESS_DETAIL_TO_ERROR_CLASS: dict[str, str] = {
-    "JD text is empty": "draft_input_empty",
+    "JD text is empty": "missing_required_field",
 }
 
 # 提示文案给 LLM 看,帮它把内部错误转成下一步建议(不要暴露 error_class)。
+# write 类工具的"必填字段缺失"业务错统一指引 LLM 用 respond_directly 向用户追问,
+# 不要瞎填字段重试。
 _BUSINESS_LLM_MESSAGES: dict[str, str] = {
-    "draft_input_empty": "JD 文本和 URL 都为空;请让用户至少提供其中一项。",
+    "missing_required_field": (
+        "缺少必要的 JD 内容。请用 respond_directly 向用户追问:"
+        "希望从 JD 文本起草还是从岗位 URL 起草?把对应内容发过来即可。"
+        "**不要**自己瞎填 text / url 重试。"
+    ),
     "url_fetch_failed": "无法从 URL 抓取岗位正文;请让用户改贴 JD 文本。",
 }
 
@@ -63,7 +69,7 @@ class DraftJobTool(BaseTool):
         ctx: ToolContext,  # noqa: ARG002 — draft 不落库,不需要 db/current_user
     ) -> dict[str, Any]:
         # JobDraftRequest 的 model_validator 会再次校验 text/url 至少一项非空,
-        # 工具层把这一类映射成业务错,让模型继续追问用户。
+        # 工具层把这一类映射成业务错(missing_required_field),让模型继续向用户追问。
         try:
             payload = JobDraftRequest(text=args.text, url=args.url)
         except ValueError as exc:
@@ -71,9 +77,10 @@ class DraftJobTool(BaseTool):
             # 这里出现 ValueError 说明是简单参数错,转业务错即可。
             return {
                 "ok": False,
-                "error_class": "draft_input_empty",
-                "message_for_llm": _BUSINESS_LLM_MESSAGES["draft_input_empty"],
+                "error_class": "missing_required_field",
+                "message_for_llm": _BUSINESS_LLM_MESSAGES["missing_required_field"],
                 "user_facing_detail": str(exc),
+                "missing_fields": ["text_or_url"],
             }
 
         try:

@@ -150,6 +150,47 @@ def test_create_job_tool_with_parsed_json_marks_parsed(
     _run(_scenario)
 
 
+def test_create_job_tool_missing_required_fields_returns_business_error(
+    client: TestClient,
+    test_marker: str,
+) -> None:
+    """缺 jd_text / company_name / job_title → 业务错 missing_required_field,
+    不再抛 ValidationError。
+    """
+    assert client.get("/health/db").status_code == 200
+
+    async def _scenario(db: AsyncSession) -> None:
+        user, agent_run_id = await _setup_environment(db, marker=test_marker)
+        ctx = ToolContext(db=db, current_user=user, agent_run_id=agent_run_id)
+        # 全空调用
+        result = await CreateJobTool().invoke({}, ctx)
+        assert result["ok"] is False
+        assert result["error_class"] == "missing_required_field"
+        assert set(result["missing_fields"]) == {
+            "company_name",
+            "job_title",
+            "jd_text",
+        }
+        # message 必须指引 LLM 用 respond_directly 追问用户。
+        assert "respond_directly" in result["message_for_llm"]
+        # 字段中文名应出现在 message 里,方便 format_response 转自然语言。
+        assert "JD 正文" in result["message_for_llm"]
+
+        # 只缺 jd_text
+        result = await CreateJobTool().invoke(
+            {
+                "company_name": f"{test_marker} Co",
+                "job_title": "AI 应用研发工程师",
+            },
+            ctx,
+        )
+        assert result["ok"] is False
+        assert result["error_class"] == "missing_required_field"
+        assert result["missing_fields"] == ["jd_text"]
+
+    _run(_scenario)
+
+
 def test_create_job_tool_is_registered() -> None:
     from app.agent.tools import TOOL_REGISTRY
 
