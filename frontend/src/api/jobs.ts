@@ -1,5 +1,6 @@
 import { apiClient, LLM_OPERATION_TIMEOUT_MS } from "./client";
 import type { ListParams } from "@/types/common";
+import type { JobDraftRequest, JobDraftResponse } from "@/types/job_draft";
 import type {
   JobPosting,
   JobPostingCreate,
@@ -56,6 +57,19 @@ export async function fetchJobFromUrl(url: string) {
     "/api/v1/jobs/fetch-from-url",
     { url },
     { timeout: FETCH_FROM_URL_TIMEOUT_MS },
+  );
+  return response.data;
+}
+
+/**
+ * AI 草稿模式:把文本或 URL 交给后端,返回岗位草稿(公司名/岗位名/JD/结构化字段)。
+ * 服务端不落库,前端走"预览 → 编辑 → 保存"。LLM 调用走长超时。
+ */
+export async function generateJobDraft(payload: JobDraftRequest) {
+  const response = await apiClient.post<JobDraftResponse>(
+    "/api/v1/jobs/draft-from-input",
+    payload,
+    { timeout: LLM_OPERATION_TIMEOUT_MS },
   );
   return response.data;
 }

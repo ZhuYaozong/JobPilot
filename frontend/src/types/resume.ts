@@ -22,6 +22,7 @@ export interface ResumeCreate {
   content_hash: string;
   source_file_url?: string | null;
   source_type?: string;
+  /** AI 草稿模式带上,普通粘贴/上传不传(走 server default)。 */
   parsed_json?: JsonObject | null;
   parse_status?: string;
 }

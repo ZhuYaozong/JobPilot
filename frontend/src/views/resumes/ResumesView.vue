@@ -265,6 +265,14 @@
       <div class="drawer-tabs">
         <button
           class="drawer-tab"
+          :class="{ 'drawer-tab--active': createMode === 'ai' }"
+          type="button"
+          @click="createMode = 'ai'"
+        >
+          🤖 AI 草稿
+        </button>
+        <button
+          class="drawer-tab"
           :class="{ 'drawer-tab--active': createMode === 'upload' }"
           type="button"
           @click="createMode = 'upload'"
@@ -281,8 +289,64 @@
         </button>
       </div>
 
+      <!-- AI 草稿模式 -->
+      <div v-if="createMode === 'ai'" class="upload-pane">
+        <p class="drawer-hint">
+          粘贴一段简历文本,AI 会自动推断简历标题并抽取结构化字段。
+          生成后可继续编辑标题和原文,确认无误再保存。
+        </p>
+
+        <el-form label-position="top" class="drawer-form" @submit.prevent>
+          <el-form-item label="简历文本" required>
+            <el-input
+              v-model="aiResumeText"
+              type="textarea"
+              :rows="8"
+              placeholder="把候选人简历原文粘贴到这里"
+              :disabled="aiResumePending"
+            />
+          </el-form-item>
+
+          <el-form-item>
+            <el-button
+              type="primary"
+              :loading="aiResumePending"
+              :disabled="!aiResumeText.trim() || aiResumePending"
+              @click="handleGenerateResumeDraft"
+            >
+              <template v-if="aiResumePending">AI 生成中…</template>
+              <template v-else>生成草稿</template>
+            </el-button>
+          </el-form-item>
+        </el-form>
+
+        <div v-if="aiResumeHint" class="url-hint" :class="`url-hint--${aiResumeHintTone}`">
+          {{ aiResumeHint }}
+        </div>
+
+        <el-form
+          v-if="aiResumeDraftReady"
+          label-position="top"
+          class="drawer-form"
+          @submit.prevent
+        >
+          <el-form-item label="简历标题" required>
+            <el-input v-model="createForm.title" placeholder="AI 建议的标题,可改" />
+          </el-form-item>
+
+          <el-form-item label="简历原文" required>
+            <el-input
+              v-model="createForm.raw_text"
+              type="textarea"
+              :rows="10"
+              placeholder="AI 收到的原文,可补充修改"
+            />
+          </el-form-item>
+        </el-form>
+      </div>
+
       <!-- 上传模式 -->
-      <div v-if="createMode === 'upload'" class="upload-pane">
+      <div v-else-if="createMode === 'upload'" class="upload-pane">
         <p class="drawer-hint">
           上传 PDF / DOCX / TXT / Markdown 简历，系统会自动抽取文本并解析关键字段。
         </p>
@@ -451,6 +515,7 @@ import {
   createResume,
   deleteResume,
   exportResumeVersion,
+  generateResumeDraft,
   getResume,
   getResumeVersion,
   listResumeVersions,
@@ -458,6 +523,7 @@ import {
   parseResume,
   uploadResume,
 } from "@/api/resumes";
+import type { JsonObject } from "@/types/common";
 import type { Resume, ResumeCreate, ResumeListItem } from "@/types/resume";
 import type {
   ResumeVersion,
@@ -500,10 +566,17 @@ const renderedVersionMarkdown = computed(() =>
     : "",
 );
 
-// 抽屉支持两种模式：上传文件或粘贴原始文本。默认走上传，因为 7'a 后手动粘贴
-// 主要作为保留的兜底入口；仍然保留它，是为了让高级用户或习惯写 Markdown 的用户
-// 可以手动构造一条简历记录。
-const createMode = ref<"upload" | "paste">("upload");
+// 抽屉支持三种模式:AI 草稿(任务 3 起的推荐入口)、上传文件、粘贴原始文本。
+const createMode = ref<"ai" | "upload" | "paste">("ai");
+
+// AI 草稿模式相关 state
+const aiResumeText = ref("");
+const aiResumePending = ref(false);
+const aiResumeDraftReady = ref(false);
+const aiResumeHint = ref<string>("");
+const aiResumeHintTone = ref<"info" | "ok" | "warn">("info");
+// AI 草稿返回的结构化字段;保存简历时跟着写入,跳过二次解析。
+const aiResumeParsedJson = ref<JsonObject | null>(null);
 
 // 上传态。
 const fileInputRef = ref<HTMLInputElement | null>(null);
@@ -571,13 +644,20 @@ function parseStatusChipClass(status: string): string {
 
 async function buildCreatePayload(): Promise<ResumeCreate> {
   const rawText = createForm.value.raw_text.trim();
-  return {
+  const base: ResumeCreate = {
     title: createForm.value.title.trim(),
     raw_text: rawText,
     content_hash: await sha256Hex(rawText),
     source_file_url: createForm.value.source_file_url.trim() || null,
     source_type: createForm.value.source_type.trim() || "upload",
   };
+  // AI 草稿模式额外带上 parsed_json + parse_status,避免落库后再触发一次 LLM。
+  if (createMode.value === "ai" && aiResumeParsedJson.value) {
+    base.parsed_json = aiResumeParsedJson.value;
+    base.parse_status = "parsed";
+    base.source_type = "manual";
+  }
+  return base;
 }
 
 function resetCreateForm() {
@@ -597,6 +677,14 @@ function resetUploadState() {
   }
 }
 
+function resetAiResumeState() {
+  aiResumeText.value = "";
+  aiResumeDraftReady.value = false;
+  aiResumeHint.value = "";
+  aiResumeHintTone.value = "info";
+  aiResumeParsedJson.value = null;
+}
+
 function openCreateDrawer() {
   createDrawerOpen.value = true;
 }
@@ -604,6 +692,8 @@ function openCreateDrawer() {
 function closeCreateDrawer() {
   createDrawerOpen.value = false;
   resetUploadState();
+  resetAiResumeState();
+  resetCreateForm();
 }
 
 // ---------- 上传辅助方法 --------------------------------------------------
@@ -689,6 +779,41 @@ async function copyRawText() {
     }, 1800);
   } catch {
     ElMessage.error("复制失败，请手动选择文本");
+  }
+}
+
+async function handleGenerateResumeDraft() {
+  const text = aiResumeText.value.trim();
+  if (!text || aiResumePending.value) return;
+
+  aiResumePending.value = true;
+  aiResumeHint.value = "AI 正在生成草稿,通常 5-15 秒…";
+  aiResumeHintTone.value = "info";
+
+  try {
+    const draft = await generateResumeDraft({ text });
+
+    // AI 结果直接覆盖创建表单,用户基于此再编辑。
+    createForm.value = {
+      title: draft.title,
+      raw_text: draft.raw_text,
+      source_file_url: "",
+      source_type: "manual",
+    };
+    aiResumeParsedJson.value = draft.parsed_json;
+    aiResumeDraftReady.value = true;
+    aiResumeHint.value = "AI 已生成草稿,请检查后保存。";
+    aiResumeHintTone.value = "ok";
+  } catch (error) {
+    aiResumeDraftReady.value = false;
+    aiResumeParsedJson.value = null;
+    aiResumeHint.value = getErrorMessage(
+      error,
+      "AI 生成失败,请稍后重试或改用其它入口。",
+    );
+    aiResumeHintTone.value = "warn";
+  } finally {
+    aiResumePending.value = false;
   }
 }
 

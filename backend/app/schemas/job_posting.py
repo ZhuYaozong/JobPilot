@@ -11,6 +11,8 @@ class JobPostingCreate(BaseModel):
     city: str | None = None
     source_url: str | None = None
     status: str = "active"
+    # AI 草稿模式可以一次写入结构化结果,避免落库后再触发一次 LLM 解析。
+    parsed_json: dict[str, Any] | None = None
 
 
 class JobPostingUpdate(BaseModel):

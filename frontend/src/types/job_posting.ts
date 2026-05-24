@@ -22,6 +22,7 @@ export interface JobPostingCreate {
   jd_text: string;
   city?: string | null;
   source_url?: string | null;
+  /** AI 草稿模式带上,普通模式不传。 */
   parsed_json?: JsonObject | null;
   status?: string;
 }
