@@ -104,6 +104,17 @@ EMBEDDING_DIMENSIONS=1536
 
 `EMBEDDING_*` 可以独立于 `LLM_*`。如果不设置 embedding endpoint，`EmbeddingClient` 会尝试复用 LLM endpoint；如果仍缺少必要配置，知识库索引会失败并把错误写入文档状态，用户可修正配置后重新索引。
 
+认证与生产安全配置：
+
+```env
+AUTH_SECRET_KEY=change-this-to-a-long-random-secret
+AUTH_ALGORITHM=HS256
+AUTH_ACCESS_TOKEN_EXPIRE_MINUTES=1440
+AUTH_DEV_MODE=true
+```
+
+`AUTH_DEV_MODE=true` 会允许 `X-User-Name` header 自动创建/切换本地用户，只应在本地开发和测试中使用。生产部署请设置 `APP_ENV=production`、`APP_DEBUG=false`、`AUTH_DEV_MODE=false`，并使用足够长的随机 `AUTH_SECRET_KEY`。
+
 ## Local Development
 
 在仓库根目录启动依赖：
@@ -196,7 +207,7 @@ uv --cache-dir .uv-cache --directory backend run python -m app.eval.cli
 - `GET /api/auth/me`:校验 token 并返回当前用户公开信息。
 - 后续业务请求带 `Authorization: Bearer <token>`,服务端从 token 解析 user_id 加载用户。
 
-JWT secret 当前仍是开发占位(`AUTH_SECRET_KEY` env,默认 `jobpilot-dev-secret-change-in-production`),**上线前必须替换**。
+JWT secret 由 `AUTH_SECRET_KEY` 提供。生产部署必须使用强随机密钥，并确保所有业务请求都通过 `Authorization: Bearer <token>` 认证。
 
 ### Dev 模式(开发与测试路径)
 
@@ -508,7 +519,7 @@ uv --cache-dir .uv-cache --directory backend run alembic current
 - PDF 导出和模板排版(已支持简历版本 / 求职材料的 Markdown / DOCX 导出)。
 - embedding 维度在线切换。
 - 简历版本号并发锁或唯一约束(当前按 `max(version_no)+1` 派生)。
-- 完整 CI/CD 发布流水线。
+- GitHub Actions 已覆盖测试和构建，但还没有部署流水线。
 - AgentRun token_usage 字段尚未真填(schema 已透出,等接入 token 计费时再补)。
 
 这些边界是刻意保留的工程取舍,避免在核心求职 workflow 和 Agent 可控性尚未完全稳定前引入过多平台复杂度。
