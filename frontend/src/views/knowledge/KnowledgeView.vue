@@ -1,5 +1,5 @@
 <template>
-  <div class="knowledge">
+  <div class="knowledge workbench-page">
     <!-- ========== 页面头部 ========== -->
     <header class="page-head">
       <div>

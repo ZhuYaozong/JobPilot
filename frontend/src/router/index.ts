@@ -42,6 +42,7 @@ const router = createRouter({
             title: "岗位管理",
             eyebrow: "收集岗位与 JD",
             description: "保存目标岗位、岗位链接和 JD 原文，给匹配分析与投递跟进建立目标。",
+            workbench: true,
           },
         },
         {
@@ -52,6 +53,7 @@ const router = createRouter({
             title: "简历管理",
             eyebrow: "管理简历与版本",
             description: "维护常用简历、查看 AI 提取信息和版本记录，准备贴岗调整。",
+            workbench: true,
           },
         },
         {
@@ -62,6 +64,7 @@ const router = createRouter({
             title: "岗位与简历匹配度",
             eyebrow: "分析匹配并生成材料",
             description: "选择岗位和简历，查看匹配度、优势短板，并生成求职信或面试准备。",
+            workbench: true,
           },
         },
         {
@@ -103,6 +106,7 @@ const router = createRouter({
             title: "知识库管理",
             eyebrow: "管理资料与知识库",
             description: "整理岗位资料、公司资料、项目素材和面试准备资料，供 AI 助手引用。",
+            workbench: true,
           },
         },
       ],

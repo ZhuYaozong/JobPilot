@@ -1,0 +1,240 @@
+/* ============================================================================
+ * workbench.css：资源管理类页面的共享工作台样式。
+ *
+ * 这些页面共同的问题是列表和详情内容很长。桌面端采用固定工作台高度，
+ * 让左侧列表、右侧详情和长文本块各自滚动；窄屏保留自然文档流，避免
+ * 移动端出现多层滚动。
+ * ========================================================================= */
+
+@media (min-width: 1181px) {
+  .app-main--workbench .app-header {
+    display: none;
+  }
+
+  .app-main--workbench .app-content {
+    padding-top: 28px;
+  }
+
+  .workbench-page {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 16px !important;
+    width: min(100%, 1440px) !important;
+    height: calc(100vh - 76px) !important;
+    min-height: 620px !important;
+    margin: 0 auto !important;
+  }
+
+  .workbench-page .page-head {
+    flex: 0 0 auto !important;
+    align-items: center !important;
+    padding: 16px 18px !important;
+    border: 1px solid rgba(15, 23, 42, 0.08) !important;
+    border-radius: 8px !important;
+    background:
+      linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.92)) !important;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06) !important;
+  }
+
+  .workbench-page .page-head__title {
+    font-size: 26px !important;
+    letter-spacing: 0 !important;
+  }
+
+  .workbench-page .page-head__subtitle {
+    max-width: 760px !important;
+  }
+
+  .workbench-page .page-head__counts {
+    border: 1px solid rgba(15, 23, 42, 0.08) !important;
+    border-radius: 8px !important;
+    background: #ffffff !important;
+  }
+
+  .workbench-page .workspace {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    display: grid !important;
+    grid-template-columns: minmax(300px, 360px) minmax(0, 1fr) !important;
+    align-items: stretch !important;
+    gap: 16px !important;
+  }
+
+  .workbench-page .list-pane,
+  .workbench-page .detail-pane {
+    min-height: 0 !important;
+    height: 100% !important;
+    border-radius: 8px !important;
+    background: rgba(255, 255, 255, 0.96) !important;
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.07) !important;
+  }
+
+  .workbench-page .list-pane {
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  .workbench-page .list-pane__head {
+    flex: 0 0 auto !important;
+    padding: 14px 16px 12px !important;
+    background: #ffffff !important;
+  }
+
+  .workbench-page .list-pane__scroll {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow-y: auto !important;
+    scrollbar-gutter: stable !important;
+  }
+
+  .workbench-page .detail-pane {
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+  }
+
+  .workbench-page .detail,
+  .workbench-page .detail-loading,
+  .workbench-page .detail-empty {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+  }
+
+  .workbench-page .detail {
+    overflow-y: auto !important;
+    scrollbar-gutter: stable !important;
+    padding: 22px 24px 24px !important;
+  }
+
+  .workbench-page .detail-hero,
+  .workbench-page .hero {
+    border-radius: 8px !important;
+    border: 1px solid rgba(15, 23, 42, 0.08) !important;
+    background: linear-gradient(135deg, #ffffff, #f8fbff) !important;
+    padding: 18px !important;
+  }
+
+  .workbench-page .detail-hero {
+    border-bottom: 1px solid rgba(15, 23, 42, 0.08) !important;
+  }
+
+  .workbench-page .detail-hero__title,
+  .workbench-page .hero__title {
+    font-size: 24px !important;
+    letter-spacing: 0 !important;
+  }
+
+  .workbench-page .detail-empty {
+    justify-content: center !important;
+    min-height: 100% !important;
+  }
+
+  .workbench-page .detail-empty__orb {
+    width: 52px !important;
+    height: 52px !important;
+    border-radius: 8px !important;
+    background: #eef7f6 !important;
+    box-shadow: none !important;
+  }
+
+  .workbench-page .block,
+  .workbench-page .parsed-block,
+  .workbench-page .callout,
+  .workbench-page .link-card,
+  .workbench-page .result-card,
+  .workbench-page .material,
+  .workbench-page .doc,
+  .workbench-page .version {
+    border-radius: 8px !important;
+  }
+
+  .workbench-page .block__pre,
+  .workbench-page .parsed-block__pre,
+  .workbench-page .version-viewer__body {
+    max-height: clamp(220px, 34vh, 460px) !important;
+    overflow: auto !important;
+    scrollbar-gutter: stable !important;
+  }
+
+  .workbench-page .docs,
+  .workbench-page .versions,
+  .workbench-page .materials,
+  .workbench-page .result-grid {
+    min-height: 0 !important;
+  }
+
+  .workbench-page .docs,
+  .workbench-page .versions {
+    max-height: clamp(260px, 42vh, 560px) !important;
+    overflow-y: auto !important;
+    padding-right: 4px !important;
+    scrollbar-gutter: stable !important;
+  }
+
+  .workbench-page .result-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .workbench-page .result-card {
+    min-height: 220px !important;
+  }
+
+  .workbench-page .result-card__list {
+    overflow-y: auto !important;
+    max-height: 240px !important;
+    padding-right: 2px !important;
+  }
+
+  .workbench-page .hero__actions {
+    max-width: 220px !important;
+  }
+
+  .workbench-page .primary-btn,
+  .workbench-page .ghost-btn {
+    border-radius: 8px !important;
+  }
+
+  .workbench-page .meta-chip,
+  .workbench-page .badge,
+  .workbench-page .score-pill,
+  .workbench-page .wip-pill {
+    border-radius: 6px !important;
+  }
+
+  .workbench-page .list-item {
+    border-radius: 8px !important;
+  }
+
+  .workbench-page .list-item:hover {
+    transform: none !important;
+  }
+}
+
+.workbench-page .list-pane__scroll::-webkit-scrollbar,
+.workbench-page .detail::-webkit-scrollbar,
+.workbench-page .docs::-webkit-scrollbar,
+.workbench-page .versions::-webkit-scrollbar,
+.workbench-page .result-card__list::-webkit-scrollbar,
+.workbench-page .block__pre::-webkit-scrollbar,
+.workbench-page .parsed-block__pre::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.workbench-page .list-pane__scroll::-webkit-scrollbar-thumb,
+.workbench-page .detail::-webkit-scrollbar-thumb,
+.workbench-page .docs::-webkit-scrollbar-thumb,
+.workbench-page .versions::-webkit-scrollbar-thumb,
+.workbench-page .result-card__list::-webkit-scrollbar-thumb,
+.workbench-page .block__pre::-webkit-scrollbar-thumb,
+.workbench-page .parsed-block__pre::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(100, 116, 139, 0.28);
+}
+
+@media (max-width: 1180px) {
+  .workbench-page {
+    width: min(100%, 960px);
+  }
+}

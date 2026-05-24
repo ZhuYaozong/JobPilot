@@ -1,5 +1,5 @@
 <template>
-  <div class="resumes">
+  <div class="resumes workbench-page">
     <!-- ========== 页面头部 ========== -->
     <header class="page-head">
       <div>
