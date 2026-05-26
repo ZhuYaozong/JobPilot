@@ -108,6 +108,19 @@
     padding: 22px 24px 24px !important;
   }
 
+  .workbench-page .detail > .detail-hero,
+  .workbench-page .detail > .hero,
+  .workbench-page .detail > .block,
+  .workbench-page .detail > .parsed-block,
+  .workbench-page .detail > .callout,
+  .workbench-page .detail > .link-card,
+  .workbench-page .detail > .docs,
+  .workbench-page .detail > .versions,
+  .workbench-page .detail > .materials,
+  .workbench-page .detail > .result-grid {
+    flex: 0 0 auto !important;
+  }
+
   .workbench-page .detail-hero,
   .workbench-page .hero {
     border-radius: 8px !important;
@@ -183,7 +196,6 @@
 
   .workbench-page .result-card__list {
     overflow-y: auto !important;
-    max-height: 240px !important;
     padding-right: 2px !important;
   }
 
