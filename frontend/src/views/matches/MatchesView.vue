@@ -1281,9 +1281,12 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  height: 220px;
+  min-height: 0;
   padding: 16px 18px;
   border: 1px solid transparent;
   border-radius: 12px;
+  overflow: hidden;
 }
 
 .result-card--ok {
@@ -1334,11 +1337,15 @@ onMounted(async () => {
 }
 
 .result-card__list {
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
   margin: 0;
-  padding: 0;
+  padding: 0 2px 0 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
   list-style: none;
 }
 
