@@ -54,6 +54,67 @@ JobPilot 当前覆盖的求职主链路：
 | 知识库 | 知识库 CRUD、文档上传/粘贴、同步切片与 embedding、重新索引、chunk 预览 |
 | RAG 检索 | Agent 工具 `search_knowledge` 使用 pgvector 在当前用户知识库内检索资料 |
 
+## 界面预览
+
+下面截图来自 JobPilot 本地演示环境，覆盖求职工作台、AI 助手、知识库、匹配分析和投递跟进等核心页面。
+
+### AI 助手：从匹配到模拟面试
+
+AI 助手支持在同一会话里选择简历、岗位、投递记录和知识库作为上下文，通过 LangGraph 工具调用完成匹配分析、材料生成、模拟面试和深度追问。
+
+<table>
+  <tr>
+    <td width="50%">
+      <strong>匹配简历与岗位</strong><br />
+      <sub>AI 助手可以读取当前简历和岗位，调用匹配分析工具并给出优势、短板和后续材料建议。</sub>
+      <img src="docs/images/readme/assistant-match.png" alt="AI 助手匹配简历和岗位" />
+    </td>
+    <td width="50%">
+      <strong>进入模拟面试</strong><br />
+      <sub>在模拟面试模式下，助手会结合岗位、简历、匹配结果和知识库逐轮追问。</sub>
+      <img src="docs/images/readme/assistant-interview.png" alt="AI 助手模拟面试" />
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2">
+      <strong>围绕项目与架构继续深挖</strong><br />
+      <sub>用户可以继续追问 Agent、RAG、工具依赖、后端校验等实现细节，适合面试复盘和表达打磨。</sub>
+      <img src="docs/images/readme/assistant-deep-dive.png" alt="AI 助手深度追问" />
+    </td>
+  </tr>
+</table>
+
+### 求职工作台：状态、资料与进度
+
+首页聚合最近岗位、简历、匹配分析和投递状态；知识库沉淀公司资料、项目素材、面试笔记；投递跟进用看板记录每个岗位所处阶段。
+
+<table>
+  <tr>
+    <td width="50%">
+      <strong>首页总览</strong><br />
+      <sub>集中查看目标岗位、已准备简历、匹配分析和最近活动。</sub>
+      <img src="docs/images/readme/dashboard.png" alt="JobPilot 首页总览" />
+    </td>
+    <td width="50%">
+      <strong>知识库管理</strong><br />
+      <sub>上传资料后自动切片并写入向量库，AI 助手可限定在所选知识库内检索。</sub>
+      <img src="docs/images/readme/knowledge.png" alt="JobPilot 知识库管理" />
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <strong>投递跟进看板</strong><br />
+      <sub>按已收藏、已投递、筛选中、笔试/测评、面试中、Offer、已结束等阶段管理投递。</sub>
+      <img src="docs/images/readme/applications.png" alt="JobPilot 投递跟进看板" />
+    </td>
+    <td width="50%">
+      <strong>岗位与简历匹配分析</strong><br />
+      <sub>展示匹配分、优势、短板、缺失关键词和简历修改建议，并可继续生成求职材料。</sub>
+      <img src="docs/images/readme/matches.png" alt="JobPilot 岗位与简历匹配分析" />
+    </td>
+  </tr>
+</table>
+
 ## Screens And Routes
 
 | 路由 | 页面 |
