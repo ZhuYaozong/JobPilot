@@ -15,7 +15,13 @@ import {
   triggerBlobDownload,
 } from "@/utils/download";
 
-export async function listArtifacts(params: ListParams = {}) {
+export interface ArtifactListParams extends ListParams {
+  resume_id?: number;
+  job_posting_id?: number;
+  artifact_type?: string;
+}
+
+export async function listArtifacts(params: ArtifactListParams = {}) {
   const response = await apiClient.get<GeneratedArtifactListItem[]>(
     "/api/v1/artifacts",
     { params },

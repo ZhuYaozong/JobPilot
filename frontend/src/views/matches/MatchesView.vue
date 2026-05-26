@@ -197,10 +197,13 @@
           <!-- 最近生成材料 -->
           <section class="block">
             <header class="block__head">
-              <h3>这次匹配生成的材料</h3>
+              <h3>这组岗位 + 简历的生成材料</h3>
               <span class="block__caption">{{ visibleArtifacts.length }} 份</span>
             </header>
-            <div v-if="visibleArtifacts.length" class="materials">
+            <div v-if="artifactsLoading" class="materials-empty">
+              正在加载关联材料…
+            </div>
+            <div v-else-if="visibleArtifacts.length" class="materials">
               <article
                 v-for="artifact in visibleArtifacts"
                 :key="artifact.id"
@@ -216,7 +219,7 @@
               </article>
             </div>
             <p v-else class="materials-empty">
-              还没有为这组岗位 + 简历生成材料；用上方按钮试试。
+              还没有为这组岗位 + 简历生成材料。可以用上方按钮生成求职信或面试准备。
             </p>
           </section>
         </article>
@@ -507,8 +510,10 @@ async function fetchMatchDetail(matchId: number) {
   detailLoading.value = true;
   try {
     selectedMatch.value = normalizeMatchDetail(await getMatch(matchId));
+    await fetchArtifactsForSelectedMatch();
   } catch (error) {
     selectedMatch.value = null;
+    artifacts.value = [];
     ElMessage.error(getErrorMessage(error, "匹配结果详情加载失败"));
   } finally {
     detailLoading.value = false;
@@ -558,9 +563,22 @@ async function fetchReferences() {
 }
 
 async function fetchArtifacts() {
+  await fetchArtifactsForSelectedMatch();
+}
+
+async function fetchArtifactsForSelectedMatch() {
+  const match = selectedMatch.value;
+  if (!match) {
+    artifacts.value = [];
+    return;
+  }
   artifactsLoading.value = true;
   try {
-    artifacts.value = await listArtifacts({ limit: 50 });
+    artifacts.value = await listArtifacts({
+      resume_id: match.resume_id,
+      job_posting_id: match.job_posting_id,
+      limit: 20,
+    });
   } catch {
     artifacts.value = [];
   } finally {
@@ -697,7 +715,7 @@ function readNumericQuery(key: string): number | undefined {
 }
 
 onMounted(async () => {
-  await Promise.all([fetchReferences(), fetchMatches(), fetchArtifacts()]);
+  await Promise.all([fetchReferences(), fetchMatches()]);
 
   // 消费 ?job=N&resume=N 预填查询参数（由岗位/简历详情页设置）。
   // 用预填选择打开分析抽屉后，再清掉 URL 上的查询参数。
