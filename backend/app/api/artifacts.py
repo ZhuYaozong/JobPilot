@@ -106,11 +106,22 @@ async def list_artifacts(
     current_user: CurrentUserDep,
     limit: ListLimit = 20,
     offset: ListOffset = 0,
+    resume_id: int | None = Query(None, ge=1, description="按简历 ID 过滤。"),
+    job_posting_id: int | None = Query(None, ge=1, description="按岗位 ID 过滤。"),
+    artifact_type: str | None = Query(None, min_length=1, max_length=50),
 ) -> list[GeneratedArtifact]:
     # GeneratedArtifact 列表明确采用 created_at recent-first，优先展示最近生成或写入的材料。
+    filters = [GeneratedArtifact.user_id == current_user.id]
+    if resume_id is not None:
+        filters.append(GeneratedArtifact.resume_id == resume_id)
+    if job_posting_id is not None:
+        filters.append(GeneratedArtifact.job_posting_id == job_posting_id)
+    if artifact_type is not None:
+        filters.append(GeneratedArtifact.artifact_type == artifact_type.strip()[:50])
+
     statement = (
         select(GeneratedArtifact)
-        .where(GeneratedArtifact.user_id == current_user.id)
+        .where(*filters)
         .order_by(GeneratedArtifact.created_at.desc(), GeneratedArtifact.id.desc())
         .limit(limit)
         .offset(offset)

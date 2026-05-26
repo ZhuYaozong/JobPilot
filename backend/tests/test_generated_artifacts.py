@@ -77,6 +77,67 @@ def test_read_generated_artifact_success(
     assert data["content_json"] == {"highlights": ["FastAPI"]}
 
 
+def test_list_generated_artifacts_filters_by_resume_job_and_type(
+    client: TestClient,
+    create_resume: Callable[[], dict],
+    create_job: Callable[[], dict],
+    test_marker: str,
+) -> None:
+    resume = create_resume()
+    job = create_job()
+    other_resume = create_resume()
+
+    matched = client.post(
+        "/api/v1/artifacts",
+        json={
+            "artifact_type": "cover_letter",
+            "resume_id": resume["id"],
+            "job_posting_id": job["id"],
+            "title": f"{test_marker} matched cover letter",
+            "content_text": "Matched artifact.",
+        },
+    )
+    assert matched.status_code == 201
+
+    unmatched = client.post(
+        "/api/v1/artifacts",
+        json={
+            "artifact_type": "cover_letter",
+            "resume_id": other_resume["id"],
+            "job_posting_id": job["id"],
+            "title": f"{test_marker} unmatched cover letter",
+            "content_text": "Different resume artifact.",
+        },
+    )
+    assert unmatched.status_code == 201
+
+    interview_prep = client.post(
+        "/api/v1/artifacts",
+        json={
+            "artifact_type": "interview_prep",
+            "resume_id": resume["id"],
+            "job_posting_id": job["id"],
+            "title": f"{test_marker} matched interview prep",
+            "content_text": "Matched interview prep.",
+        },
+    )
+    assert interview_prep.status_code == 201
+
+    response = client.get(
+        "/api/v1/artifacts",
+        params={
+            "resume_id": resume["id"],
+            "job_posting_id": job["id"],
+            "artifact_type": "cover_letter",
+            "limit": 20,
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert [item["id"] for item in data] == [matched.json()["id"]]
+
+
 def test_delete_generated_artifact_removes_feedback(
     client: TestClient,
     create_resume: Callable[[], dict],
