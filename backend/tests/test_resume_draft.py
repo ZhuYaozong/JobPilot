@@ -96,12 +96,13 @@ def test_draft_resume_invalid_llm_json_returns_502(
     assert response.json()["detail"] == "LLM response is not valid JSON"
 
 
-def test_draft_resume_invalid_llm_schema_returns_502(
+def test_draft_resume_tolerates_missing_title(
     client: TestClient,
     monkeypatch,
 ) -> None:
+    """title 缺失不再 502:草稿是尽力而为,给空标题让用户补。"""
+
     async def fake_generate_text(self, prompt: str) -> str:
-        # title 缺失 → schema 校验失败
         return (
             '{"parsed":{"summary":null,"skills":[],"experiences":[],'
             '"projects":[],"education":[],"target_roles":[],'
@@ -114,10 +115,75 @@ def test_draft_resume_invalid_llm_schema_returns_502(
         "/api/v1/resumes/draft-from-input",
         json={"text": "随便一段简历"},
     )
-    assert response.status_code == 502
-    assert response.json()["detail"] == (
-        "LLM response does not match resume draft schema"
+    assert response.status_code == 200
+    assert response.json()["title"] == ""
+
+
+def test_draft_resume_tolerates_flat_structure(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    """模型把 parsed 拍平到顶层(没有 parsed 包裹)时,仍能正常归一化。"""
+
+    async def fake_generate_text(self, prompt: str) -> str:
+        return """
+        {
+          "title": "李雷 前端开发简历",
+          "summary": "三年前端经验",
+          "skills": ["Vue", "TypeScript"],
+          "experiences": ["某公司 前端 2022-2025"],
+          "projects": [],
+          "education": ["本科"],
+          "target_roles": ["前端开发"],
+          "years_of_experience": "3 年"
+        }
+        """
+
+    monkeypatch.setattr(LLMClient, "generate_text", fake_generate_text)
+
+    response = client.post(
+        "/api/v1/resumes/draft-from-input",
+        json={"text": "李雷,三年前端。"},
     )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["title"] == "李雷 前端开发简历"
+    assert data["parsed_json"]["skills"] == ["Vue", "TypeScript"]
+    assert data["parsed_json"]["years_of_experience"] == "3 年"
+
+
+def test_draft_resume_tolerates_string_list_fields(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    """列表字段被模型写成单个字符串时,自动包成数组。"""
+
+    async def fake_generate_text(self, prompt: str) -> str:
+        return """
+        {
+          "title": "王芳 简历",
+          "parsed": {
+            "summary": null,
+            "skills": "Python",
+            "experiences": "某公司后端",
+            "projects": [],
+            "education": [],
+            "target_roles": [],
+            "years_of_experience": null
+          }
+        }
+        """
+
+    monkeypatch.setattr(LLMClient, "generate_text", fake_generate_text)
+
+    response = client.post(
+        "/api/v1/resumes/draft-from-input",
+        json={"text": "王芳"},
+    )
+    assert response.status_code == 200
+    parsed = response.json()["parsed_json"]
+    assert parsed["skills"] == ["Python"]
+    assert parsed["experiences"] == ["某公司后端"]
 
 
 def test_draft_resume_llm_config_error_returns_500(

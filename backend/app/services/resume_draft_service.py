@@ -8,22 +8,80 @@
 
 from __future__ import annotations
 
+import json
+import logging
 from json import JSONDecodeError
+from typing import Any
 
 from fastapi import HTTPException
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from app.llm.client import LLMClient, LLMClientError, LLMConfigError
 from app.llm.json_utils import load_llm_json
 from app.schemas.resume_draft import ResumeDraftResponse
 from app.schemas.resume_parsing import ResumeParsingResult
 
+logger = logging.getLogger(__name__)
+
+# parsed 块里的字段分类,用于容错归一化。
+_PARSED_LIST_FIELDS = (
+    "skills",
+    "experiences",
+    "projects",
+    "education",
+    "target_roles",
+)
+_PARSED_SCALAR_FIELDS = ("summary", "years_of_experience")
+
 
 class _ResumeDraftLLMOutput(BaseModel):
-    """LLM 直接返回的 JSON 形状,内部用,不暴露给 API。"""
+    """LLM 直接返回的 JSON 形状,内部用,不暴露给 API。
 
-    title: str = Field(..., min_length=1, max_length=255)
-    parsed: ResumeParsingResult
+    草稿是"尽力而为"的:title 缺失时给空串让用户补;parsed 块被模型拍平到顶层时
+    自动收拢;列表字段写成字符串时自动包成数组(见 ``_tolerate_loose_shapes``)。
+    """
+
+    title: str = ""
+    parsed: ResumeParsingResult = Field(default_factory=ResumeParsingResult)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _tolerate_loose_shapes(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+
+        parsed = data.get("parsed")
+        if not isinstance(parsed, dict):
+            parsed = _maybe_json_object(parsed)
+        if not isinstance(parsed, dict):
+            parsed = {
+                key: data[key]
+                for key in (*_PARSED_LIST_FIELDS, *_PARSED_SCALAR_FIELDS)
+                if key in data
+            }
+        else:
+            parsed = dict(parsed)
+
+        for key in _PARSED_LIST_FIELDS:
+            value = parsed.get(key)
+            if value is None:
+                parsed[key] = []
+            elif isinstance(value, str):
+                parsed[key] = [value] if value.strip() else []
+
+        data["parsed"] = parsed
+        return data
+
+
+def _maybe_json_object(value: Any) -> Any:
+    """parsed 偶尔会被模型当成 JSON 字符串再嵌一层,尝试解开。"""
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except (JSONDecodeError, ValueError):
+            return value
+    return value
 
 
 def build_resume_draft_prompt(text: str) -> str:
@@ -85,12 +143,23 @@ async def generate_resume_draft(
 
     try:
         parsed_payload = load_llm_json(raw_result)
-        output = _ResumeDraftLLMOutput.model_validate(parsed_payload)
     except JSONDecodeError as exc:
+        logger.warning(
+            "简历草稿 LLM 返回非合法 JSON,原始响应(截断): %s",
+            raw_result[:800],
+        )
         raise HTTPException(
             status_code=502, detail="LLM response is not valid JSON",
         ) from exc
+
+    try:
+        output = _ResumeDraftLLMOutput.model_validate(parsed_payload)
     except ValidationError as exc:
+        logger.warning(
+            "简历草稿 LLM 结构异常: %s | 解析后载荷(截断): %s",
+            exc.errors(),
+            str(parsed_payload)[:800],
+        )
         raise HTTPException(
             status_code=502,
             detail="LLM response does not match resume draft schema",

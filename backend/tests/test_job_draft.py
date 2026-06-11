@@ -162,6 +162,77 @@ def test_draft_job_url_fetch_failure_returns_422(
     assert "及时响应" in response.json()["detail"]
 
 
+def test_draft_job_tolerates_flat_structure(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    """模型把 parsed 拍平到顶层(没有 parsed 包裹)时,仍能正常归一化。"""
+
+    async def fake_generate_text(self, prompt: str) -> str:
+        return """
+        {
+          "company_name": "字节",
+          "job_title": "后端开发",
+          "city": "深圳",
+          "summary": "后端服务开发",
+          "responsibilities": ["设计微服务"],
+          "required_skills": ["Go", "MySQL"],
+          "preferred_skills": [],
+          "keywords": ["微服务"],
+          "seniority": "高级"
+        }
+        """
+
+    monkeypatch.setattr(LLMClient, "generate_text", fake_generate_text)
+
+    response = client.post(
+        "/api/v1/jobs/draft-from-input",
+        json={"text": "字节招后端开发"},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["company_name"] == "字节"
+    assert data["job_title"] == "后端开发"
+    assert data["parsed_json"]["required_skills"] == ["Go", "MySQL"]
+    assert data["parsed_json"]["seniority"] == "高级"
+
+
+def test_draft_job_tolerates_string_list_fields(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    """列表字段被模型写成单个字符串时,自动包成数组。"""
+
+    async def fake_generate_text(self, prompt: str) -> str:
+        return """
+        {
+          "company_name": "腾讯",
+          "job_title": "测试开发",
+          "city": null,
+          "parsed": {
+            "summary": null,
+            "responsibilities": "编写自动化测试",
+            "required_skills": "Python",
+            "preferred_skills": [],
+            "keywords": [],
+            "seniority": null,
+            "city": null
+          }
+        }
+        """
+
+    monkeypatch.setattr(LLMClient, "generate_text", fake_generate_text)
+
+    response = client.post(
+        "/api/v1/jobs/draft-from-input",
+        json={"text": "腾讯招测试开发"},
+    )
+    assert response.status_code == 200, response.text
+    parsed = response.json()["parsed_json"]
+    assert parsed["responsibilities"] == ["编写自动化测试"]
+    assert parsed["required_skills"] == ["Python"]
+
+
 def test_draft_job_invalid_llm_json_returns_502(
     client: TestClient,
     monkeypatch,
