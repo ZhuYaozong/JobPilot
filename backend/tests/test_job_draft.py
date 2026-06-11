@@ -197,6 +197,43 @@ def test_draft_job_tolerates_flat_structure(
     assert data["parsed_json"]["seniority"] == "高级"
 
 
+def test_draft_job_tolerates_null_company_name(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    """JD 没写公司名时模型返回 company_name=null,不应 502,给空串让用户补。"""
+
+    async def fake_generate_text(self, prompt: str) -> str:
+        return """
+        {
+          "company_name": null,
+          "job_title": "服务端研发实习生",
+          "city": "上海",
+          "parsed": {
+            "summary": null,
+            "responsibilities": ["架构设计与研发"],
+            "required_skills": ["数据结构与算法"],
+            "preferred_skills": [],
+            "keywords": ["服务端", "实习生"],
+            "seniority": "实习生",
+            "city": "上海"
+          }
+        }
+        """
+
+    monkeypatch.setattr(LLMClient, "generate_text", fake_generate_text)
+
+    response = client.post(
+        "/api/v1/jobs/draft-from-input",
+        json={"text": "服务端研发实习生 上海 2027届"},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["company_name"] == ""
+    assert data["job_title"] == "服务端研发实习生"
+    assert data["city"] == "上海"
+
+
 def test_draft_job_tolerates_string_list_fields(
     client: TestClient,
     monkeypatch,

@@ -119,6 +119,29 @@ def test_draft_resume_tolerates_missing_title(
     assert response.json()["title"] == ""
 
 
+def test_draft_resume_tolerates_null_title(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    """模型显式返回 title=null 时不应 502,给空串让用户补。"""
+
+    async def fake_generate_text(self, prompt: str) -> str:
+        return (
+            '{"title":null,"parsed":{"summary":null,"skills":[],'
+            '"experiences":[],"projects":[],"education":[],'
+            '"target_roles":[],"years_of_experience":null}}'
+        )
+
+    monkeypatch.setattr(LLMClient, "generate_text", fake_generate_text)
+
+    response = client.post(
+        "/api/v1/resumes/draft-from-input",
+        json={"text": "随便一段简历"},
+    )
+    assert response.status_code == 200
+    assert response.json()["title"] == ""
+
+
 def test_draft_resume_tolerates_flat_structure(
     client: TestClient,
     monkeypatch,
