@@ -59,6 +59,12 @@ class _JobDraftLLMOutput(BaseModel):
             return data
         data = dict(data)
 
+        # JD 没写公司/岗位时,模型会返回 null。这两个字段在响应里是必填 str,
+        # 把 null(或缺失)归一为空串,让前端把空字段留给用户补全,而不是 502。
+        for key in ("company_name", "job_title"):
+            if data.get(key) is None:
+                data[key] = ""
+
         parsed = data.get("parsed")
         # 模型可能把 parsed 块拍平到顶层,或干脆漏掉 parsed。
         if not isinstance(parsed, dict):

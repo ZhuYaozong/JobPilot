@@ -51,6 +51,10 @@ class _ResumeDraftLLMOutput(BaseModel):
             return data
         data = dict(data)
 
+        # 模型给 title 返回 null(或缺失)时归一为空串,让前端留空给用户补,而不是 502。
+        if data.get("title") is None:
+            data["title"] = ""
+
         parsed = data.get("parsed")
         if not isinstance(parsed, dict):
             parsed = _maybe_json_object(parsed)
