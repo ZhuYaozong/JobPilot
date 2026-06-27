@@ -377,70 +377,7 @@ Stop and remove local data volumes:
 docker compose down -v
 ```
 
-## Current Status
 
-截至 2026-05-24,5 项主任务全部完成并合入 main:
-
-- ✅ 任务 1 多用户认证(PR #29 / #30)
-- ✅ 任务 2 简历版本可视化 + 导出(PR #31)
-- ✅ 任务 3 AI 添加简历 / 岗位(PR #33)
-- ✅ 任务 3.5 Agent 草稿 / 创建工具(PR #35)
-- ✅ 任务 4 Agent 可观测(PR #38)
-- ✅ 任务 5 Agent 工具批量补齐(PR #36)
-
-主线累计能力:
-
-- 基础数据层、用户作用域、recent-first list 规则
-- Tool Adapter、LangGraph 三节点工作流、多工具 ReAct 循环
-- 产品化 AI Assistant、Conversation / Message / AgentRun / ToolCallLog
-- SSE 流式 Assistant，修复长任务 30s 超时问题
-- 简历文件上传：PDF / DOCX / TXT / MD
-- 岗位 URL 抓取：trafilatura 抽取 + 前端预览确认
-- RAG 数据层：KnowledgeBase / KnowledgeDocument / KnowledgeChunk
-- 自研文本切片 + OpenAI-compatible embedding + pgvector 索引状态机
-- `search_knowledge` tool 与 Agent 集成
-- Assistant 可选择知识库，文档 chunks 可预览
-- 交互式模拟面试：基于 `search_knowledge` + `interview_prep`
-- 定制简历生成：针对岗位生成简历变体
-- 8'a Agent 行为 eval 框架 + 6 个 baseline case
-- 8'b LLM-as-judge 评分断言
-- 多用户认证：JWT 注册 / 登录 / me + bcrypt 密码哈希；dev 模式 `X-User-Name` 仍可用
-- 侧边栏多会话切换：dev 用户 + 多个 JWT 会话并存，支持切换 / 登录 / 注册 / 退出
-- 简历版本前端可视化：版本卡片展示改动摘要，查看 / 复制 / 导出 Markdown 与 DOCX
-- 通用导出端点：`/api/v1/resume-versions/{id}/export` 与 `/api/v1/artifacts/{id}/export`
-- AI 草稿入口：`POST /api/v1/jobs/draft-from-input`（文本 / URL）与 `POST /api/v1/resumes/draft-from-input`（仅文本），不落库，前端预览编辑后再保存
-- 创建 schema 接受可选 `parsed_json`：AI 草稿保存时一次落库，跳过二次 LLM 解析
-- AI 助手内置草稿 / 创建工具：`draft_job` / `draft_resume` / `create_job` / `create_resume`，让 Assistant 在对话里完成"贴文本 → 起草 → 用户确认 → 落库"完整链路
-- Agent 端到端闭环工具集（共 20 个）：`read_*` / `parse_*` 让 Assistant 拿到简历 / 岗位完整结构并按需触发结构化抽取；`create_application` / `update_application_stage` 让 Assistant 在对话里完成投递跟进；`list_generated_artifacts` 避免重复生成；`add_knowledge_text` 把对话内容沉淀进知识库（仅在用户明确要求保存时触发）
-- Agent 可观测：切换历史会话也能看到工具调用 trace，点击每条 trace 弹出完整 arguments / result / error_detail；AgentRun 整体失败时消息下方有红色 banner 显示 error_class 与详情
-- Write 工具自然追问：`create_*` / `draft_*` / `add_*` / `update_*` 的必填字段缺失会返回 `missing_required_field` 业务错并指引 Agent 用 `respond_directly` 向用户追问,而不是抛 ValidationError 走 repair loop
-
-最近一次合入前验证：
-
-```text
-backend pytest: passed
-frontend npm run build: passed
-```
-
-## Known Boundaries
-
-JobPilot 仍然是开发阶段项目，以下能力没有被包装成已完成：
-
-- 注册 / 登录 / JWT 已就绪，但没有团队空间或企业级权限模型；生产部署必须关闭 dev auth 并替换 `AUTH_SECRET_KEY`。
-- 知识库索引当前是请求内同步执行，还没有生产级异步队列。
-- 仅支持 Markdown / DOCX 导出，没有 PDF 导出与模板排版系统。
-- 没有生产级通知、日历提醒或邮件投递集成。
-- GitHub Actions 已覆盖测试和构建，但还没有部署流水线。
-- 没有并发安全的简历版本唯一约束；定制简历版本号当前按 `max(version_no)+1` 生成。
-
-## Roadmap
-
-- 将知识库索引从同步请求演进为后台任务。
-- 后续添加岗位搜索工具时引入 MCP。
-- 支持求职材料导出 PDF。
-- 为定制简历版本增加并发锁或唯一约束。
-- 扩展 Agent 质量评估和反馈分析。
-- 跨会话的 Agent 行为聚合视图(单会话 trace 已可见)。
 
 ## License
 
