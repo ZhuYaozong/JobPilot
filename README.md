@@ -11,7 +11,7 @@ JobPilot 是面向求职者的 AI Copilot。它把岗位收集、简历管理、
 下面展示从 Vue WebUI 发起请求，经 FastAPI、AssistantService、LangGraph 工作流与工具调用，到 SSE 响应和 PostgreSQL / pgvector 持久化的核心链路。
 
 <p align="center">
-  <img src="docs/images/readme/jobpilot-core-flow.svg" alt="JobPilot Core Flow 核心流程图" width="100%" />
+  <img src="docs/images/readme/jobpilot-core-flow.png" alt="JobPilot Core Flow 核心流程图" width="100%" />
 </p>
 
 ```text
