@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1916" height="821" viewBox="0 0 1916 821" role="img" aria-labelledby="title desc">
+  <title id="title">JobPilot Core Flow 核心流</title>
+  <desc id="desc">JobPilot 从 Vue WebUI、FastAPI、AssistantService、LangGraph 工作流到 LLM、工具、事件流与 PostgreSQL 的核心调用链路。</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#02152d"/>
+      <stop offset="0.55" stop-color="#020f24"/>
+      <stop offset="1" stop-color="#010a18"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#10233b" stop-opacity="0.92"/>
+      <stop offset="1" stop-color="#09182b" stop-opacity="0.88"/>
+    </linearGradient>
+    <linearGradient id="focus" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#08234c" stop-opacity="0.98"/>
+      <stop offset="1" stop-color="#05162f" stop-opacity="0.96"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8.5" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#dcecff"/>
+    </marker>
+    <style>
+      .box { fill:url(#panel); stroke:#aab7c8; stroke-width:1.6; }
+      .focus { fill:url(#focus); stroke:#55aaff; stroke-width:2; filter:url(#glow); }
+      .title { fill:#f7f9ff; font:700 44px Arial,'Microsoft YaHei',sans-serif; }
+      .head { fill:#f4f7ff; font:600 23px Arial,'Microsoft YaHei',sans-serif; text-anchor:middle; }
+      .body { fill:#f4f7ff; font:20px Arial,'Microsoft YaHei',sans-serif; text-anchor:middle; }
+      .small { fill:#f4f7ff; font:18px Arial,'Microsoft YaHei',sans-serif; text-anchor:middle; }
+      .line { fill:none; stroke:#dcecff; stroke-width:2; marker-end:url(#arrow); }
+      .dash { fill:none; stroke:#bcd9ff; stroke-width:2; stroke-dasharray:6 8; marker-end:url(#arrow); }
+      .thin { fill:none; stroke:#2f6e9f; stroke-width:1; }
+    </style>
+  </defs>
+
+  <rect width="1916" height="821" fill="url(#bg)"/>
+  <text x="38" y="66" class="title">JobPilot Core Flow 核心流</text>
+  <line x1="38" y1="88" x2="536" y2="88" stroke="#34b4ff" stroke-width="2"/>
+  <line x1="536" y1="88" x2="1875" y2="88" class="thin"/>
+
+  <rect x="38" y="192" rx="14" ry="14" width="235" height="136" class="box"/>
+  <text x="155.5" y="244" class="head">Channel</text>
+  <text x="155.5" y="286" class="body">Vue WebUI / Browser</text>
+
+  <rect x="334" y="192" rx="14" ry="14" width="240" height="136" class="box"/>
+  <text x="454" y="244" class="head">FastAPI API</text>
+  <text x="454" y="286" class="body">REST / SSE endpoints</text>
+
+  <rect x="625" y="192" rx="14" ry="14" width="244" height="136" class="box"/>
+  <text x="747" y="236" class="head">AssistantService</text>
+  <text x="747" y="274" class="small">payload, current_user,</text>
+  <text x="747" y="304" class="small">emit_event</text>
+
+  <rect x="936" y="177" rx="15" ry="15" width="261" height="170" class="focus"/>
+  <text x="1066.5" y="233" class="head">LangGraph Workflow</text>
+  <text x="1066.5" y="276" class="small">initial_state, session,</text>
+  <text x="1066.5" y="307" class="small">workspace, context</text>
+
+  <rect x="1255" y="190" rx="14" ry="14" width="244" height="156" class="box"/>
+  <text x="1377" y="232" class="head">Workflow Runner</text>
+  <text x="1377" y="270" class="small">decide → call_tool →</text>
+  <text x="1377" y="300" class="small">format_response →</text>
+  <text x="1377" y="330" class="small">maybe_summarize</text>
+
+  <rect x="1578" y="132" rx="14" ry="14" width="264" height="101" class="box"/>
+  <text x="1710" y="174" class="head">LLM Backend</text>
+  <text x="1710" y="207" class="small">LLM API / structured output</text>
+
+  <rect x="1578" y="274" rx="14" ry="14" width="264" height="184" class="box"/>
+  <text x="1710" y="315" class="head">Tools</text>
+  <text x="1710" y="349" class="small">resume_parse, job_parse,</text>
+  <text x="1710" y="379" class="small">analyze_match,</text>
+  <text x="1710" y="409" class="small">generate_cover_letter,</text>
+  <text x="1710" y="439" class="small">kb_retrieve</text>
+
+  <rect x="1219" y="454" rx="14" ry="14" width="286" height="105" class="box"/>
+  <text x="1362" y="497" class="head">Event Stream / Response</text>
+  <text x="1362" y="535" class="small">ToolCallTrace, final DTO</text>
+
+  <rect x="800" y="578" rx="14" ry="14" width="386" height="180" class="box"/>
+  <ellipse cx="856" cy="624" rx="32" ry="11" fill="none" stroke="#bcd9ff" stroke-width="1.5"/>
+  <path d="M824 624v54c0 6 14 11 32 11s32-5 32-11v-54" fill="none" stroke="#bcd9ff" stroke-width="1.5"/>
+  <path d="M824 642c0 6 14 11 32 11s32-5 32-11M824 660c0 6 14 11 32 11s32-5 32-11" fill="none" stroke="#bcd9ff" stroke-width="1.3"/>
+  <text x="1012" y="622" class="head">PostgreSQL / pgvector</text>
+  <text x="1012" y="661" class="small">sessions, messages,</text>
+  <text x="1012" y="691" class="small">summaries, resumes, jobs,</text>
+  <text x="1012" y="721" class="small">knowledge base, ToolCallLog</text>
+
+  <path d="M273 260 H325" class="line"/>
+  <path d="M574 260 H616" class="line"/>
+  <path d="M869 260 H927" class="line"/>
+  <path d="M1197 260 H1246" class="line"/>
+
+  <path d="M1499 242 H1523 Q1532 242 1532 228 V190 Q1532 180 1543 180 H1568" class="line"/>
+  <path d="M1578 214 H1555 Q1543 214 1543 227 V239 Q1543 252 1531 252 H1499" class="line"/>
+
+  <path d="M1499 286 H1524 Q1535 286 1535 298 V342 Q1535 354 1548 354 H1568" class="line"/>
+  <path d="M1578 386 H1552 Q1540 386 1540 373 V360 Q1540 348 1528 348 H1499" class="line"/>
+
+  <path d="M1134 347 V385 Q1134 407 1156 407 H1332 Q1347 407 1347 444" class="line"/>
+  <path d="M1067 347 V565" class="dash"/>
+  <text x="1090" y="511" fill="#f4f7ff" font-family="Arial,'Microsoft YaHei',sans-serif" font-size="18">reads / writes</text>
+
+  <path d="M1219 507 H155 Q153 507 153 475 V338" class="line"/>
+</svg>
