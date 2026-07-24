@@ -23,6 +23,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.tool_adapter import ToolSystemError
+from app.agent.tool_catalog import build_request_tool_catalog
 from app.agent.workflow import WorkflowDecideError, build_workflow
 from app.llm.client import LLMClient
 from app.models.agent_run import AgentRun
@@ -107,11 +108,13 @@ async def run_assistant_turn(
     )
     message_count_before_user = await _count_messages(db, conversation_id) - 1
 
+    tool_catalog = await build_request_tool_catalog()
     workflow = build_workflow(
         db=db,
         current_user=current_user,
         agent_run_id=agent_run_id,
         llm_client=llm_client,
+        tool_catalog=tool_catalog,
     )
 
     initial_state: dict[str, Any] = {
@@ -317,12 +320,14 @@ async def run_assistant_turn_stream(
     async def emit_event(event_type: str, data: dict[str, Any]) -> None:
         await event_queue.put({"event": event_type, "data": data})
 
+    tool_catalog = await build_request_tool_catalog()
     workflow = build_workflow(
         db=db,
         current_user=current_user,
         agent_run_id=agent_run_id,
         llm_client=llm_client,
         emit_event=emit_event,
+        tool_catalog=tool_catalog,
     )
 
     initial_state: dict[str, Any] = {

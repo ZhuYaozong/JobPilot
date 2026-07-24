@@ -48,6 +48,8 @@ class ToolCallLogRead(BaseModel):
     id: int
     tool_name: str
     status: str
+    source: str
+    client_id: str | None
     arguments_json: dict[str, Any]
     result_json: dict[str, Any] | None
     error_class: str | None

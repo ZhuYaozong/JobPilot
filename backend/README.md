@@ -270,6 +270,7 @@ X-User-Name: demo
 | `POST` | `/api/auth/register` | 用户名 + email + 密码注册,bcrypt 哈希,返回 JWT |
 | `POST` | `/api/auth/login` | 用户名 + 密码登录,返回 JWT |
 | `GET` | `/api/auth/me` | 校验 token 并返回当前用户公开信息 |
+| `POST` | `/api/auth/mcp-token` | 为当前登录用户签发短期、只读、绑定 MCP audience 的 token |
 
 注意:auth router 的 prefix 是 `/api/auth`,**不带 `/v1`**;其它业务 API 仍走 `/api/v1`。
 
@@ -441,6 +442,36 @@ X-User-Name: demo
 | `add_knowledge_text` | knowledge | Yes | 把文本存入指定知识库(**仅在用户明确要求保存时调用**,decide prompt 与 tool description 双重防御) |
 
 SSE endpoint 会发送阶段、工具开始、工具完成、消息、错误和完成事件,前端据此展示"正在思考""正在调用工具"等运行状态。完整工具调用详情(arguments_json / result_json / error_detail)通过 `GET /api/v1/conversations/{cid}/agent-runs` 端点提供给前端可观测面板。
+
+### MCP Client 与统一 ToolCatalog
+
+Assistant 通过 `app.agent.tool_catalog.ToolCatalog` 合并两类工具：
+
+- 本地工具：继续从 `TOOL_REGISTRY` 加载，直接复用业务 Service。
+- 外部 MCP 工具：从 `MCP_SERVERS_JSON` 配置的 Streamable HTTP Server 动态发现，
+  仅加入 `allowed_tools` 白名单，并使用 `mcp__server__tool` 技术名。
+
+单个外部 Server 发现失败时会降级为本地工具目录，不会阻断 Assistant。远程工具调用会
+使用现有 `ToolCallLog` 审计，并记录命名空间工具名、耗时和稳定错误分类。外部返回先做
+结构化映射和限长，再进入 ReAct 工具历史。
+
+### JobPilot MCP Server
+
+`app.mcp_server.app:app` 是独立、只读的 Streamable HTTP ASGI 服务，当前暴露：
+
+- Tools：`list_saved_jobs`、`list_resumes`、`list_applications`、`list_artifacts`、
+  `read_resume`、`read_job_posting`、`search_knowledge`。
+- Resources：`jobpilot://resumes/{resume_id}`、`jobpilot://jobs/{job_id}`。
+
+运行：
+
+```powershell
+uv run uvicorn app.mcp_server.app:app --host 127.0.0.1 --port 8001
+```
+
+用户先携带普通 JobPilot JWT 调用 `POST /api/auth/mcp-token`，换取一小时有效、
+绑定 MCP audience 且只有 `jobpilot:read` scope 的 token。普通 API token 不能直接访问
+MCP Server。生产公网接入完整 OAuth 客户端发现前，本服务定位为私有/自托管集成。
 
 ### Write 工具必填字段约定
 

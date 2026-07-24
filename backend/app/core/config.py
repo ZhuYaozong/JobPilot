@@ -32,6 +32,22 @@ class Settings(BaseSettings):
     auth_access_token_expire_minutes: int = 1440  # 24 小时
     auth_dev_mode: bool = True
 
+    # MCP Client 配置。服务器清单使用 JSON，避免在代码里保存 URL 或凭证；
+    # 每个服务器的 token 只保存对应环境变量名，真实 token 不进入配置对象和日志。
+    mcp_enabled: bool = False
+    mcp_servers_json: str = "[]"
+    mcp_discovery_timeout_seconds: float = 5.0
+    mcp_call_timeout_seconds: float = 15.0
+    mcp_discovery_cache_seconds: int = 60
+    mcp_max_result_chars: int = 20_000
+
+    # 独立 JobPilot MCP Server 配置。默认只监听本机并复用 JobPilot JWT。
+    mcp_server_host: str = "127.0.0.1"
+    mcp_server_port: int = 8001
+    mcp_server_public_url: str = "http://127.0.0.1:8001/mcp"
+    mcp_server_issuer_url: str = "http://127.0.0.1:8000"
+    mcp_token_expire_minutes: int = 60
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

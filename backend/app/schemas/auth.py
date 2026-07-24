@@ -35,3 +35,13 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserPublic
+
+
+class MCPTokenResponse(BaseModel):
+    """供私有 MCP Client 配置使用的短期、资源绑定 token。"""
+
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+    scopes: list[str]
+    resource: str

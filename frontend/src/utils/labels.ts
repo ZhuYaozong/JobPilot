@@ -140,5 +140,13 @@ const TOOL_DISPLAY: Record<string, ToolDisplay> = {
 };
 
 export function formatToolName(name: string): ToolDisplay {
+  if (name.startsWith("mcp__")) {
+    const [, serverName = "external", ...toolParts] = name.split("__");
+    const toolName = humanizeToken(toolParts.join("__") || "tool");
+    return {
+      label: `外部工具 · ${humanizeToken(serverName)} · ${toolName}`,
+      icon: "🌐",
+    };
+  }
   return TOOL_DISPLAY[name] ?? { label: name, icon: "🔧" };
 }

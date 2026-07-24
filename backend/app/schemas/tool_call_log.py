@@ -5,9 +5,11 @@ from pydantic import BaseModel, ConfigDict
 
 
 class ToolCallLogCreate(BaseModel):
-    agent_run_id: int
+    agent_run_id: int | None = None
     tool_name: str
     arguments_json: dict[str, Any]
+    source: str = "assistant"
+    client_id: str | None = None
 
 
 class ToolCallLogUpdate(BaseModel):
@@ -21,9 +23,11 @@ class ToolCallLogUpdate(BaseModel):
 
 class ToolCallLogListItem(BaseModel):
     id: int
-    agent_run_id: int
+    agent_run_id: int | None
     tool_name: str
     status: str
+    source: str
+    client_id: str | None
     started_at: datetime
     finished_at: datetime | None
     latency_ms: int | None
