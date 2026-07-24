@@ -54,7 +54,9 @@ JobPilot/
 - 求职工作台：岗位、简历、匹配、材料、投递、AI 助手、知识库七个核心入口。
 - 真实 AI 工作流：解析 JD / 简历，生成匹配分析、求职信、面试准备和定制简历。
 - Agent Runtime：基于 LangGraph 1.x 的多节点工作流，支持工具调用、运行记录和 SSE 流式返回。
+- MCP 双向集成：Assistant 可通过 Streamable HTTP 动态发现并调用白名单外部工具；同时提供独立、只读的 JobPilot MCP Server。
 - RAG 知识库：支持资料上传、手工文本、切片、embedding、pgvector 检索和 chunk 预览。
+- AI 实验数据闭环：独立 `datasets` 工程生产 LoRA SFT、RAG 文档和带证据评测集，并比较 Base、Base+RAG、LoRA、LoRA+RAG。
 - 交互式模拟面试：基于当前岗位、简历、匹配结果、interview_prep 和 search_knowledge 逐轮提问。
 - 定制简历版本：针对岗位生成 `ai_tailored` 简历版本，保留版本号、来源类型和变更摘要，前端可查看 / 复制 / 导出 Markdown 与 DOCX。
 - 多用户认证：JWT 注册 / 登录 / me 与 dev 模式（`X-User-Name`）并存；侧边栏支持多会话切换、登录其他、注册新用户、退出登录。
@@ -204,6 +206,75 @@ AI 助手支持在同一会话里选择简历、岗位、投递记录和知识�
 - 自研文本切片器
 - pgvector semantic search
 - SSE streaming assistant response
+- MCP Python SDK 1.x（Streamable HTTP Client / Server）
+- LoRA / RAG 数据生产、JSON Schema 校验、近似去重和离线模型组合实验
+
+## Dataset And Experiment Lab
+
+仓库根目录的 `datasets/` 是独立 Python 3.12 数据工程，服务于 JobPilot 的
+LoRA 微调、RAG 增强和 Agent 实验闭环。它支持 OpenAI-compatible API、本地
+Qwen、外部 Markdown/TXT/PDF/DOCX 导入、checkpoint 恢复和质量报告。
+
+默认生产目标为：
+
+- LoRA SFT：train 3000、val 300、test 300；
+- LoRA evaluation：500 条与 SFT 三个 split 跨集合去重的独立问题；
+- RAG：八个领域约 50 篇 Markdown 文档；
+- RAG evaluation：200 条包含源文档和原文证据的问题；
+- 实验矩阵：Base、Base+RAG、LoRA、LoRA+RAG。
+
+仓库当前包含一份通过正式流水线生成的数据快照：
+
+| 数据集 | 数量 | 质量状态 |
+| --- | ---: | --- |
+| LoRA SFT train / val / test | 3000 / 300 / 300 | Schema、Pydantic、去重通过 |
+| LoRA 独立评测 | 500 | 与 SFT 跨集合泄漏检查通过 |
+| RAG Markdown 文档 | 50 | 章节、长度、重复检查通过 |
+| RAG 独立评测 | 200 | 证据原文一致性检查通过 |
+
+正式数据不包含生成服务的 API Key。模型响应、checkpoint、运行日志和本地质量报告由
+`.gitignore` 排除；如需重新生成，可使用同一配置和 `--resume` 安全续跑。
+
+```powershell
+uv sync --project datasets --extra dev
+uv run --project datasets jobpilot-datasets plan --config datasets\config.yaml
+uv run --project datasets python datasets\scripts\check_quality.py `
+  --config datasets\config.yaml
+```
+
+完整配置、生成、外部文档导入和实验说明见
+[`datasets/README.md`](datasets/README.md)。
+
+## MCP Integration
+
+JobPilot 采用“内部业务工具保持本地调用，外部能力通过 MCP 接入”的双向架构：
+
+- **MCP Client**：Assistant 每轮工作流前发现管理员配置的外部工具，并将它们以
+  `mcp__<server_id>__<tool_name>` 命名空间加入统一 ToolCatalog。适合接入岗位搜索、
+  公司调研等能力。
+- **JobPilot MCP Server**：独立 ASGI 服务，只读暴露岗位、简历、投递、材料和知识库。
+  它使用短期、audience 绑定、`jobpilot:read` scope 的专用 JWT，不接受普通网页 API token。
+- 外部 MCP 结果被视为不可信数据，统一执行白名单、参数 JSON Schema 校验、结果限长、
+  超时、错误映射和敏感信息隔离。
+- 外部岗位搜索结果不会自动落库；仍然必须经过 `draft_job → 用户确认 → create_job`。
+
+远程 Server 配置示例：
+
+```env
+MCP_ENABLED=true
+JOB_SEARCH_MCP_TOKEN=replace-with-remote-token
+MCP_SERVERS_JSON=[{"id":"jobs","url":"https://jobs.example.com/mcp","category":"job_search","allowed_tools":["search_jobs","get_job_detail"],"auth_token_env":"JOB_SEARCH_MCP_TOKEN"}]
+```
+
+启动只读 JobPilot MCP Server：
+
+```powershell
+uv --cache-dir .uv-cache --directory backend run uvicorn app.mcp_server.app:app --host 127.0.0.1 --port 8001
+```
+
+已登录用户先通过 `POST /api/auth/mcp-token` 获取一小时有效的 MCP 专用 bearer token，
+再把 `http://127.0.0.1:8001/mcp` 和该 token 配置到支持 Streamable HTTP 的 MCP Client。
+公网部署必须把 API 与 MCP URL 都改为 HTTPS，并关闭 `AUTH_DEV_MODE`。
 
 ## Quick Start
 
@@ -305,6 +376,7 @@ http://localhost:5173
 | Domain | Endpoints |
 | --- | --- |
 | Auth | `/api/auth/register`, `/api/auth/login`, `/api/auth/me` |
+| MCP Auth | `/api/auth/mcp-token` |
 | Resumes | `/api/v1/resumes`, `/api/v1/resumes/upload`, `/api/v1/resumes/draft-from-input`, `/api/v1/resumes/{id}/parse` |
 | Resume Versions | `/api/v1/resume-versions`, `/api/v1/resume-versions/generate-tailored`, `/api/v1/resume-versions/{id}/export` |
 | Jobs | `/api/v1/jobs`, `/api/v1/jobs/fetch-from-url`, `/api/v1/jobs/draft-from-input`, `/api/v1/jobs/{id}/parse` |

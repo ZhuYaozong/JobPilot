@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jobpilot.local/schemas/experiment-report.schema.json",
+  "title": "JobPilot Experiment Report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["created_at", "evaluation_count", "variants"],
+  "properties": {
+    "created_at": {"type": "string"},
+    "evaluation_count": {"type": "integer", "minimum": 0},
+    "variants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "case_count", "success_rate", "answer_metrics"],
+        "properties": {
+          "name": {"type": "string"},
+          "case_count": {"type": "integer", "minimum": 0},
+          "success_rate": {"type": "number", "minimum": 0, "maximum": 1},
+          "retrieval_metrics": {"type": ["object", "null"]},
+          "answer_metrics": {"type": "object"},
+          "judge_metrics": {"type": ["object", "null"]},
+          "latency_ms_average": {"type": "number", "minimum": 0}
+        }
+      }
+    }
+  }
+}

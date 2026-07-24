@@ -1,0 +1,297 @@
+version: 1
+seed: 20260723
+
+paths:
+  output_root: .
+  lora_dir: lora
+  rag_documents_dir: rag/documents
+  evaluation_dir: evaluation
+  reports_dir: reports
+  work_dir: .work
+  prompts_dir: prompts
+  schemas_dir: schemas
+
+providers:
+  generator:
+    kind: openai_compatible
+    base_url: ${DATASET_LLM_BASE_URL:-}
+    api_key: ${DATASET_LLM_API_KEY:-}
+    model: ${DATASET_GENERATOR_MODEL:-}
+    temperature: 0.7
+    max_tokens: 6000
+    timeout_seconds: 180
+    max_retries: 4
+    concurrency: 4
+    send_seed: true
+    json_mode: true
+
+  base:
+    kind: openai_compatible
+    base_url: ${BASE_MODEL_BASE_URL:-${DATASET_LLM_BASE_URL:-}}
+    api_key: ${BASE_MODEL_API_KEY:-${DATASET_LLM_API_KEY:-}}
+    model: ${BASE_MODEL_NAME:-}
+    temperature: 0
+    max_tokens: 1200
+    timeout_seconds: 180
+    max_retries: 3
+    concurrency: 4
+    send_seed: true
+
+  lora:
+    kind: openai_compatible
+    base_url: ${LORA_MODEL_BASE_URL:-}
+    api_key: ${LORA_MODEL_API_KEY:-}
+    model: ${LORA_MODEL_NAME:-}
+    temperature: 0
+    max_tokens: 1200
+    timeout_seconds: 180
+    max_retries: 3
+    concurrency: 4
+    send_seed: true
+
+  # 将 experiments.variants[*].provider 或 generation.provider 指向此配置，
+  # 即可通过 transformers 直接加载本地 Qwen。model 建议填写本地模型目录。
+  qwen_local_example:
+    kind: qwen_local
+    model: ${QWEN_MODEL_PATH:-}
+    device: auto
+    dtype: auto
+    trust_remote_code: false
+    temperature: 0.7
+    max_tokens: 4096
+    concurrency: 1
+
+generation:
+  provider: generator
+  batch_size: 6
+  max_attempts_per_item: 5
+  response_max_chars: 100000
+
+lora:
+  splits:
+    train: 3000
+    val: 300
+    test: 300
+  task_types:
+    - 简历优化
+    - JD匹配
+    - 面试问答
+    - 项目深挖
+    - Agent/RAG技术问题
+    - 系统设计
+  answer_min_chars: 100
+  answer_max_chars: 300
+  instruction_min_chars: 8
+  instruction_max_chars: 180
+  difficulty_levels:
+    - 初级
+    - 中级
+    - 高级
+  scenarios:
+    - 方案设计
+    - 故障排查
+    - 性能优化
+    - 技术选型
+    - 项目复盘
+    - 追问与反驳
+    - 安全与可靠性
+    - 成本与交付
+  topic_catalog:
+    简历优化:
+      - 项目经历量化
+      - 技术栈表达
+      - STAR结构
+      - 岗位关键词覆盖
+      - 工作成果可信度
+      - 简历机器筛选
+      - 跨行业经历迁移
+      - AI项目职责边界
+    JD匹配:
+      - 硬技能差距分析
+      - 业务场景匹配
+      - 加分项识别
+      - 经验年限折算
+      - 技术关键词归一化
+      - 岗位风险判断
+      - 匹配分解释
+      - 求职策略制定
+    面试问答:
+      - RAG项目介绍
+      - Agent工具调用
+      - 模型幻觉治理
+      - 推理成本优化
+      - 线上故障复盘
+      - 数据质量保障
+      - 跨团队协作
+      - 技术方案取舍
+    项目深挖:
+      - 架构演进
+      - 指标设计
+      - 数据闭环
+      - 灰度发布
+      - 可观测性
+      - 性能瓶颈
+      - 安全边界
+      - 失败案例
+    Agent/RAG技术问题:
+      - 检索与重排
+      - Chunk切分
+      - Tool Calling
+      - LangGraph状态管理
+      - MCP能力边界
+      - Agent记忆
+      - Prompt注入防护
+      - RAG评测
+    系统设计:
+      - 多租户知识库
+      - 高并发推理网关
+      - Agent任务队列
+      - 模型路由
+      - 离线评测平台
+      - 数据权限
+      - 降级与容灾
+      - 成本治理
+
+rag_documents:
+  total: 50
+  batch_size: 1
+  min_chars: 1000
+  max_chars: 3000
+  domains:
+    - LLM基础
+    - Transformer
+    - RAG
+    - Agent
+    - LangGraph
+    - MCP
+    - LoRA/SFT
+    - AI工程实践
+  topic_catalog:
+    LLM基础:
+      - Token与分词
+      - 上下文窗口
+      - Prompt设计
+      - 采样参数
+      - 幻觉与不确定性
+      - 模型能力评测
+      - 指令遵循与对齐
+    Transformer:
+      - 自注意力机制
+      - 多头注意力
+      - 位置编码
+      - 前馈网络与残差连接
+      - 训练与推理差异
+      - KV Cache
+      - 长上下文优化
+    RAG:
+      - 文档解析与清洗
+      - Chunk切分策略
+      - Embedding选型
+      - 混合检索
+      - Rerank重排
+      - Query改写
+      - RAG评测与调优
+    Agent:
+      - ReAct循环
+      - 工具契约
+      - 规划与执行
+      - 短期与长期记忆
+      - Human-in-the-loop
+      - Agent安全
+      - 可观测性与回放
+    LangGraph:
+      - StateGraph建模
+      - 条件边与路由
+      - Checkpoint持久化
+      - 中断与恢复
+      - 子图与模块化
+      - 并行节点
+      - 错误处理
+    MCP:
+      - 协议角色与边界
+      - Tools设计
+      - Resources设计
+      - Prompts能力
+      - Transport选择
+      - 鉴权与授权
+      - 不可信结果治理
+    LoRA/SFT:
+      - 低秩适配原理
+      - 训练数据构造
+      - 超参数选择
+      - QLoRA量化训练
+      - 过拟合诊断
+      - 模型合并与部署
+      - 微调评测
+    AI工程实践:
+      - Prompt版本管理
+      - 离线与在线评测
+      - LLM调用重试
+      - 成本与延迟治理
+      - 数据反馈闭环
+      - 灰度发布
+      - 安全与合规
+
+rag_evaluation:
+  total: 200
+  batch_size: 4
+  answer_min_chars: 40
+  answer_max_chars: 300
+  excerpt_min_chars: 15
+  excerpt_max_chars: 300
+  max_source_chars_per_batch: 12000
+  include_generated_documents: true
+  include_external_documents: true
+
+lora_evaluation:
+  total: 500
+  batch_size: 6
+  scenarios:
+    - 边界条件分析
+    - 反事实追问
+    - 方案迁移
+    - 线上事故复盘
+    - 约束变化
+    - 方案审查
+    - 指标反推
+    - 安全红队
+
+deduplication:
+  fuzzy_threshold: 92.0
+  simhash_max_distance: 8
+  ngram_size: 3
+
+quality:
+  minimum_engineering_signal_groups: 2
+  fail_on_warning: false
+
+external_documents:
+  allowed_extensions:
+    - .md
+    - .txt
+    - .pdf
+    - .docx
+  minimum_chars: 100
+
+experiments:
+  evaluation_file: evaluation/rag_test.jsonl
+  retriever:
+    kind: bm25
+    top_k: 5
+    chunk_size: 600
+    chunk_overlap: 100
+  concurrency: 4
+  judge_provider:
+  variants:
+    - name: Base
+      provider: base
+      use_rag: false
+    - name: Base+RAG
+      provider: base
+      use_rag: true
+    - name: LoRA
+      provider: lora
+      use_rag: false
+    - name: LoRA+RAG
+      provider: lora
+      use_rag: true
