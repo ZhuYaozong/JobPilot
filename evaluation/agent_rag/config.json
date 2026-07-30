@@ -1,0 +1,17 @@
+{
+  "dataset_root": "../../datasets",
+  "evaluation_path": "../../datasets/evaluation/rag_test.jsonl",
+  "documents_dir": "../../datasets/rag/documents",
+  "output_dir": "./results",
+  "expected_count": 200,
+  "expected_document_count": 50,
+  "dataset_sha256": "12bb4fad54ab71d1e0b367fd122eaa99983a847f46b1cc6a7f51ac0074e8a067",
+  "models": [
+    "jobpilot-base",
+    "jobpilot-lora-v1"
+  ],
+  "timeout_seconds": 120,
+  "concurrency": 2,
+  "human_review_size": 40,
+  "seed": 42
+}
