@@ -53,7 +53,9 @@ providers:
     kind: openai_compatible
     base_url: ${EMBEDDING_BASE_URL:-${DATASET_LLM_BASE_URL:-}}
     api_key: ${EMBEDDING_API_KEY:-${DATASET_LLM_API_KEY:-}}
-    model: ${EMBEDDING_MODEL_NAME:-}
+    model: ${EMBEDDING_MODEL_NAME:-BAAI/bge-m3}
+    dimensions: 1024
+    send_dimensions: false
     timeout_seconds: 60
     max_retries: 2
 
@@ -61,7 +63,7 @@ providers:
     kind: openai_compatible
     base_url: ${RERANKER_BASE_URL:-}
     api_key: ${RERANKER_API_KEY:-}
-    model: ${RERANKER_MODEL_NAME:-}
+    model: ${RERANKER_MODEL_NAME:-BAAI/bge-reranker-v2-m3}
     timeout_seconds: 30
     max_retries: 2
 

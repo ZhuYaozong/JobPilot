@@ -286,6 +286,46 @@ def test_reindex_idempotent_on_ready_document(
     assert after["chunk_count"] == initial_count
 
 
+def test_reindex_failure_preserves_previous_chunks(
+    client: TestClient, monkeypatch, test_marker: str,
+) -> None:
+    """模型切换失败时保留旧 chunks，确保 BM25 降级仍有文本可检索。"""
+    _install_fake_embedder(monkeypatch)
+    kb_id = client.post(
+        "/api/v1/knowledge/bases",
+        json={"name": f"{test_marker} safe reindex"},
+    ).json()["id"]
+    body = f"{test_marker} old searchable content for BM25 fallback.".encode("utf-8")
+    created = client.post(
+        f"/api/v1/knowledge/bases/{kb_id}/documents/upload",
+        files={"file": (f"{test_marker}.txt", body, "text/plain")},
+    ).json()
+    doc_id = created["id"]
+    initial_count = created["chunk_count"]
+
+    _install_failing_embedder(monkeypatch, EmbeddingClientError("BGE unavailable"))
+    response = client.post(f"/api/v1/knowledge/documents/{doc_id}/reindex")
+
+    assert response.status_code == 200
+    result = response.json()
+    assert result["status"] == "ready"
+    assert result["chunk_count"] == initial_count
+    assert result["error_detail"].startswith("reindex_failed:")
+
+    async def _count(db: AsyncSession) -> int:
+        return len(
+            (
+                await db.execute(
+                    select(KnowledgeChunk).where(
+                        KnowledgeChunk.document_id == doc_id,
+                    ),
+                )
+            ).scalars().all(),
+        )
+
+    assert _run(_count) == initial_count
+
+
 # ---------- 清理不变量 -------------------------------------------
 
 

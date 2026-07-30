@@ -96,13 +96,14 @@ LLM_MODEL_NAME=your-chat-model
 Embedding 配置：
 
 ```env
-EMBEDDING_BASE_URL=https://api.example.com/v1
+EMBEDDING_BASE_URL=http://127.0.0.1:8003/v1
 EMBEDDING_API_KEY=your-api-key
-EMBEDDING_MODEL_NAME=your-embedding-model
-EMBEDDING_DIMENSIONS=1536
+EMBEDDING_MODEL_NAME=BAAI/bge-m3
+EMBEDDING_DIMENSIONS=1024
+EMBEDDING_SEND_DIMENSIONS=false
 ```
 
-`EMBEDDING_*` 可以独立于 `LLM_*`。如果不设置 embedding endpoint，`EmbeddingClient` 会尝试复用 LLM endpoint；如果仍缺少必要配置，知识库索引会失败并把错误写入文档状态，用户可修正配置后重新索引。
+`EMBEDDING_*` 可以独立于 `LLM_*`。如果不设置 embedding endpoint，`EmbeddingClient` 会尝试复用 LLM endpoint；如果仍缺少必要配置，知识库索引会失败并把错误写入文档状态，用户可修正配置后重新索引。BGE-M3 的 dense embedding 是 1024 维；`EMBEDDING_SEND_DIMENSIONS=false` 表示请求不发送 OpenAI 扩展字段，但响应仍必须通过 1024 维校验。
 
 RAG 检索配置：
 
@@ -118,9 +119,9 @@ RAG_BM25_WEIGHT=1.0
 
 # 可选模型重排，使用 POST /rerank 协议
 RAG_RERANKER_ENABLED=false
-RERANKER_BASE_URL=
+RERANKER_BASE_URL=http://127.0.0.1:8004/v1
 RERANKER_API_KEY=
-RERANKER_MODEL_NAME=
+RERANKER_MODEL_NAME=BAAI/bge-reranker-v2-m3
 RERANKER_TIMEOUT_SECONDS=15
 ```
 
@@ -134,6 +135,45 @@ RERANKER_TIMEOUT_SECONDS=15
 | Hybrid + Rerank | `hybrid` | `true` |
 
 Hybrid 使用加权 RRF 融合两路排名。生产环境中向量服务不可用时默认退化到 BM25，Reranker 不可用时默认保留融合结果；可分别通过 `RAG_HYBRID_VECTOR_FAIL_OPEN=false`、`RAG_RERANKER_FAIL_OPEN=false` 改为严格失败。回滚时只需恢复 `RAG_STRATEGY=vector`、`RAG_RERANKER_ENABLED=false`，不涉及数据库迁移。
+
+`bge-reranker-v2-m3` 对 query 与 passage 成对打相关性分数，不写入 pgvector，因此它没有需要配置的“向量维度”。1024 维只属于 BGE-M3 的 dense embedding 和 `knowledge_chunks.embedding`。
+
+## BGE-M3 维度迁移
+
+旧部署的 `knowledge_chunks.embedding` 是 `vector(1536)`。迁移 `e8f3a1c9d204` 会执行以下受控操作：
+
+- 只接受当前列为 `vector(1536)` 或已迁移的 `vector(1024)`，未知维度直接失败；
+- 删除并重建 cosine HNSW 索引；
+- 清空不能跨模型复用的旧向量，但保留 `knowledge_documents`、chunk 文本、ACL 和元数据；
+- 迁移后 BM25 可继续检索旧 chunk，向量召回随批量重建逐步恢复。
+
+仅合并或部署代码不会自动执行该迁移，也不会访问 BGE-M3 / Reranker 服务。模型端点、数据库备份和维护窗口未准备好时，应保留旧运行配置和数据库版本；不要提前执行 `alembic upgrade head`。
+
+生产执行前必须备份数据库，并暂停文档写入。推荐先把运行实例临时切到 `RAG_STRATEGY=bm25`、关闭 Reranker，然后按以下顺序操作：
+
+```powershell
+# 1. 将 backend/.env 切到 BGE-M3 配置（见上文），再执行 schema 迁移
+uv --cache-dir .uv-cache --directory backend run alembic upgrade head
+
+# 2. 先验证数据库列、Embedding 端点和待处理数量，不写数据
+uv --cache-dir .uv-cache --directory backend run python scripts/reindex_knowledge_embeddings.py --dry-run
+
+# 3. 可按用户或数量灰度；失败时退出码非 0，旧 chunks 会保留供 BM25 使用
+uv --cache-dir .uv-cache --directory backend run python scripts/reindex_knowledge_embeddings.py --username test --limit 10
+
+# 4. 全量重建
+uv --cache-dir .uv-cache --directory backend run python scripts/reindex_knowledge_embeddings.py
+```
+
+脚本启动写入前会同时检查 `EMBEDDING_DIMENSIONS=1024`、数据库为 `vector(1024)`，并实际调用一次 embedding 端点确认返回 1024 维。处理过程按文档顺序执行，`--batch-size` 只控制游标分页大小，不会并发打满模型服务。全量成功后可切换：
+
+```env
+RAG_STRATEGY=hybrid
+RAG_RERANKER_ENABLED=true
+RERANKER_MODEL_NAME=BAAI/bge-reranker-v2-m3
+```
+
+快速业务回退不需要改 schema：设置 `RAG_STRATEGY=bm25`、`RAG_RERANKER_ENABLED=false` 即可。若必须回到旧 1536 维模型，先备份，然后执行 `alembic downgrade d4a7c9e2b610` 并恢复旧模型配置；降级同样会清空现有 1024 维向量，必须用旧模型重新索引。Alembic 降级只能恢复列类型，不能恢复已清空的历史向量。
 
 认证与生产安全配置：
 
@@ -581,7 +621,7 @@ uv --cache-dir .uv-cache --directory backend run alembic current
 - 生产级异步任务队列(知识库索引仍在 HTTP 请求内同步执行)。
 - 邮件、日历、通知或真实投递集成。
 - PDF 导出和模板排版(已支持简历版本 / 求职材料的 Markdown / DOCX 导出)。
-- embedding 维度在线切换。
+- embedding 维度仍不能在线双写切换；当前提供的是需要维护窗口的可回滚 schema 迁移与安全重建脚本。
 - 超大用户知识库的分布式 BM25 索引（当前 BM25 在已做 ACL 过滤的用户 chunks 上计算）。
 - 简历版本号并发锁或唯一约束(当前按 `max(version_no)+1` 派生)。
 - GitHub Actions 已覆盖测试和构建，但还没有部署流水线。

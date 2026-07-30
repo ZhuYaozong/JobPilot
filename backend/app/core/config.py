@@ -22,9 +22,12 @@ class Settings(BaseSettings):
     embedding_base_url: str | None = None
     embedding_api_key: str | None = None
     embedding_model_name: str | None = None
-    # 1536 对应 OpenAI text-embedding-3-small；换模型时需要同步修改。
-    # 数据库向量列是固定维度，改这里必须配套 migration，每个部署环境内要保持稳定。
-    embedding_dimensions: int = 1536
+    # BGE-M3 的 dense embedding 固定为 1024 维。数据库向量列也是固定维度，
+    # 换模型时必须配套 migration，并在每个部署环境内保持配置稳定。
+    embedding_dimensions: int = Field(default=1024, ge=1)
+    # 部分 OpenAI-compatible 服务支持 dimensions，原生 BGE 服务通常不接受该字段。
+    # 无论是否发送，EmbeddingClient 都会校验服务实际返回的向量维度。
+    embedding_send_dimensions: bool = False
 
     # RAG 默认保持原向量检索行为；切换环境变量即可启用 BM25 或混合召回。
     rag_strategy: Literal["vector", "bm25", "hybrid"] = "vector"

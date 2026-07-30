@@ -99,7 +99,7 @@ JobPilot 当前覆盖的求职主链路：
 | AI 助手 | Conversation / Message 持久化，LangGraph 工具调用，SSE 流式进度与回复 |
 | 模拟面试 | 在 `mock_interview` 模式下结合岗位、简历、匹配结果、面试准备和知识库逐轮提问 |
 | 知识库 | 知识库 CRUD、文档上传/粘贴、同步切片与 embedding、重新索引、chunk 预览 |
-| RAG 检索 | Agent 工具 `search_knowledge` 使用 pgvector 在当前用户知识库内检索资料 |
+| RAG 检索 | Agent 工具 `search_knowledge` 按配置使用 BM25、pgvector 或 Hybrid，并可接 Reranker |
 
 ## 界面预览
 
@@ -316,10 +316,11 @@ LLM_BASE_URL=https://api.example.com/v1
 LLM_API_KEY=your-api-key
 LLM_MODEL_NAME=your-chat-model
 
-EMBEDDING_BASE_URL=https://api.example.com/v1
+EMBEDDING_BASE_URL=http://127.0.0.1:8003/v1
 EMBEDDING_API_KEY=your-api-key
-EMBEDDING_MODEL_NAME=your-embedding-model
-EMBEDDING_DIMENSIONS=1536
+EMBEDDING_MODEL_NAME=BAAI/bge-m3
+EMBEDDING_DIMENSIONS=1024
+EMBEDDING_SEND_DIMENSIONS=false
 
 # 默认 vector；也可切换为 bm25 / hybrid
 RAG_STRATEGY=vector
@@ -329,9 +330,13 @@ AUTH_SECRET_KEY=change-this-to-a-long-random-secret
 AUTH_DEV_MODE=true
 ```
 
-Embedding 配置可以独立指定；如果未设置 `EMBEDDING_*`，客户端会在运行时尝试复用对应的 `LLM_*` 配置。不同 embedding 维度需要数据库迁移配合，默认维度为 1536。
+Embedding 配置可以独立指定；如果未设置 endpoint，客户端会在运行时尝试复用对应的 `LLM_*` 配置。当前 schema 与 BGE-M3 dense embedding 统一为 1024 维。`EMBEDDING_SEND_DIMENSIONS=false` 适配固定输出维度、但不接受 OpenAI `dimensions` 参数的自建服务；客户端仍会严格校验返回值必须为 1024 维。
 
 RAG 检索已支持 `vector`、`bm25` 和基于加权 RRF 的 `hybrid`。可选 Reranker 使用独立 `/rerank` 端点；完整参数和四种切换示例见 `backend/README.md`。默认仍为 Vector RAG 且关闭重排，便于兼容和快速回滚。
+
+从旧 1536 维索引升级时，先阅读 [backend/README.md](backend/README.md) 的“BGE-M3 维度迁移”章节。迁移会保留文档和 chunk 文本、清空不可复用的旧向量，再由批量脚本安全重建；在向量尚未补齐时可临时使用 `RAG_STRATEGY=bm25`。
+
+合并本次代码不会自动修改现有数据库或调用模型服务。BGE-M3 服务、数据库备份和维护窗口准备完成前，可以继续运行旧版本配置；正式切换时再按迁移章节执行 Alembic 和向量重建脚本。
 
 `POSTGRES_PASSWORD=123456` 和 `AUTH_DEV_MODE=true` 只面向本地开发。对外部署前请至少设置 `APP_ENV=production`、`APP_DEBUG=false`、`AUTH_DEV_MODE=false`，并替换 `AUTH_SECRET_KEY`、数据库密码和所有模型 API key。
 

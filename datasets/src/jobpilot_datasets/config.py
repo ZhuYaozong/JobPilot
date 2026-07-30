@@ -48,6 +48,9 @@ class ProviderConfig(StrictConfigModel):
     send_seed: bool = True
     json_mode: bool = False
     extra_body: dict[str, Any] = Field(default_factory=dict)
+    # Embedding Provider 专用字段；BGE-M3 固定输出 1024 维，通常无需把维度发给服务。
+    dimensions: int | None = Field(default=None, ge=1, exclude=True)
+    send_dimensions: bool = Field(default=False, exclude=True)
 
     # qwen_local 专用字段；OpenAI-compatible Provider 会忽略。
     device: str = "auto"

@@ -34,11 +34,18 @@ class OpenAIEmbeddingProvider:
         headers = {"Content-Type": "application/json"}
         if self.config.api_key:
             headers["Authorization"] = f"Bearer {self.config.api_key}"
+        payload: dict[str, object] = {
+            "model": self.config.model,
+            "input": texts,
+        }
+        # 原生 BGE 服务通常不支持 dimensions；按配置选择是否发送。
+        if self.config.send_dimensions and self.config.dimensions is not None:
+            payload["dimensions"] = self.config.dimensions
         try:
             response = await self._client.post(
                 f"{self.config.base_url.rstrip('/')}/embeddings",
                 headers=headers,
-                json={"model": self.config.model, "input": texts},
+                json=payload,
             )
             response.raise_for_status()
             body = response.json()
@@ -47,6 +54,14 @@ class OpenAIEmbeddingProvider:
             vectors = [item["embedding"] for item in ordered]
             if len(vectors) != len(texts) or any(not vector for vector in vectors):
                 raise ValueError("embedding 数量或内容异常")
+            if self.config.dimensions is not None and any(
+                len(vector) != self.config.dimensions for vector in vectors
+            ):
+                actual = [len(vector) for vector in vectors]
+                raise ValueError(
+                    f"embedding 维度异常: actual={actual}, "
+                    f"expected={self.config.dimensions}",
+                )
             return [[float(value) for value in vector] for vector in vectors]
         except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
             raise ProviderRequestError(f"Embedding 请求失败: {exc}") from exc

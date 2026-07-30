@@ -272,10 +272,12 @@ uv run --project datasets python datasets\scripts\check_quality.py `
 $env:BASE_MODEL_BASE_URL='http://127.0.0.1:8001/v1'
 $env:BASE_MODEL_NAME='base-model'
 $env:EMBEDDING_BASE_URL='http://127.0.0.1:8003/v1'
-$env:EMBEDDING_MODEL_NAME='embedding-model'
+$env:EMBEDDING_MODEL_NAME='BAAI/bge-m3'
 $env:RERANKER_BASE_URL='http://127.0.0.1:8004/v1'
-$env:RERANKER_MODEL_NAME='reranker-model'
+$env:RERANKER_MODEL_NAME='BAAI/bge-reranker-v2-m3'
 ```
+
+`config.yaml` 已把实验 Embedding 固定校验为 1024 维，并设置 `send_dimensions: false`，适配 BGE-M3 常见的 OpenAI-compatible 部署。若服务实现了可变维度扩展，可显式改为 `send_dimensions: true`；返回维度无论如何都会被校验。Reranker 输出的是 query-passage 相关性分数，不使用 pgvector 维度。
 
 运行：
 
