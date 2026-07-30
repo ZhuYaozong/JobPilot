@@ -305,7 +305,7 @@ Hybrid + Rerank 是最终质量优先配置，BM25 是延迟优先降级基线�
 `vector_weight=1`、`bm25_weight=1`、`rrf_k=60`、`candidate_multiplier=3`
 获得最高验证综合分。生产参数因此保持不变，避免把调参集上的偶然提升当成泛化收益。
 
-### RAG 端到端双模型评测
+### RAG 直接生成双模型评测（非 Agent）
 
 2026-07-30 在同一份 200 条 RAG 黄金问题上完成 Base + RAG 与 LoRA + RAG 的配对
 评测，共 400 个 case、0 错误；两组逐题使用完全相同的 Hybrid + Rerank 检索上下文：
@@ -324,10 +324,44 @@ Answer Score 配对差值的 5000 次 Bootstrap 95% CI 为 `[-0.0869, -0.0409]`�
 优势。LoRA 常在正确答案后继续追加训练数据风格的监控指标、错误码与数值，题目/参考答案
 之外数字声明率为 85%，Base 为 24%。该数字只用于风险筛查，不能直接等同于事实错误。
 
+这组实验直接执行“检索 → 拼接上下文 → 模型生成”，不经过 LangGraph 的工具选择，
+因此只用于隔离回答模型差异，不能称为 Base Agent + RAG 或 LoRA Agent + RAG。
+
 无 RAG 的 Base/LoRA 结果来自 500 条 LoRA/Agent 测试集，而本轮来自 200 条 RAG 测试集，
 两者不能直接相减为“RAG 净增益”。当前工程决策是：求职领域 Agent 继续保留 LoRA 的独立
 价值；知识问答链路默认使用 Base + Hybrid + Rerank，后续需要用检索上下文约束型 SFT 数据
 修正 LoRA 的模板化扩写。40 条确定性盲评材料已在本地报告中生成，尚待人工评审。
+
+### LangGraph Agent + Hybrid RAG 配对评测
+
+2026-07-30 进一步让同一份200条黄金问题真正经过
+`AssistantService → LangGraph → search_knowledge → Hybrid + Rerank → 最终回答`。
+两个Agent只开放 `search_knowledge`，每条使用独立会话和同一个只读评测知识库；
+Vector与Reranker的fail-open在评测进程中关闭，保证成功检索没有静默降级：
+
+| 指标 | Base Agent + RAG | LoRA Agent + RAG |
+| --- | ---: | ---: |
+| 工作流成功率 | 92.50% | 100.00% |
+| 完整单次RAG路由通过率 | 62.00% | 36.50% |
+| 选择检索工具率 | 74.00% | 43.00% |
+| 无检索直答率 | 26.00% | 57.00% |
+| 多次检索率 | 6.50% | 6.50% |
+| 选择检索后的Source Hit | 99.32% | 96.51% |
+| 选择检索后的MRR | 0.9327 | 0.8953 |
+| 两模型工作流都成功时Answer Score | 0.4215 | 0.2839 |
+| 平均端到端延迟 | 5.161秒 | 4.379秒 |
+
+185个两模型工作流都成功的配对样本中，LoRA胜/平/Base胜为59/1/125，Answer Score
+差值（LoRA - Base）的Bootstrap 95% CI为 `[-0.1734, -0.1032]`。进一步只看两模型
+都完成一次正确RAG路由的56条，Base/LoRA Answer Score为0.5156/0.4116，差值95% CI
+仍为 `[-0.1588, -0.0508]`。
+
+结论不是“RAG检索质量差”：一旦Agent选择检索，两组正确来源命中率都超过96%。主要
+瓶颈在Agent路由和生成端——LoRA更容易依赖参数记忆直接回答，Base则有15条未转义换行
+导致严格决策JSON解析失败。当前知识问答Agent优先使用Base + Hybrid + Rerank；LoRA保留
+用于求职领域生成任务，后续需要补充“选中知识库必须检索”和严格JSON协议的SFT样本。
+复现命令、失败重试边界与完整指标见
+[`evaluation/agent_rag/README.md`](evaluation/agent_rag/README.md)。
 
 ## MCP Integration
 
@@ -532,6 +566,9 @@ Base / LoRA 的纯 Agent 控制变量实验使用请求级工具隔离，不需�
 
 500 条独立领域问题经完整 LangGraph 的配对评测见
 [evaluation/agent/README.md](evaluation/agent/README.md)。
+
+200 条知识问题经真实 LangGraph + Hybrid RAG + Rerank 的双模型配对评测见
+[evaluation/agent_rag/README.md](evaluation/agent_rag/README.md)。
 
 Frontend build:
 

@@ -212,6 +212,9 @@ def test_search_knowledge_returns_nearest_chunks_and_logs_success(
 def test_search_knowledge_excludes_other_users_chunks(
     monkeypatch, test_marker: str,
 ) -> None:
+    # 本用例只验证user_id权限边界；固定Vector模式，避免真实Reranker和历史测试数据
+    # 改变Top-K排序后把本用户样本挤出，造成与权限断言无关的偶发失败。
+    _use_strict_vector_mode(monkeypatch)
     axis = _marker_axis(test_marker)
     _install_query_embedder(monkeypatch, _vec(axis))
 
