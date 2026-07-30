@@ -48,6 +48,28 @@ def test_bm25_and_metrics_find_source_document() -> None:
     assert answer_scores.faithfulness > 0.5
 
 
+def test_excerpt_recall_ignores_matching_words_from_wrong_source() -> None:
+    results = BM25Retriever(
+        [
+            DocumentChunk(
+                chunk_id="wrong#0",
+                source_document="wrong.md",
+                text="监控指标包括失败率、P95 延迟和错误分类。",
+            ),
+        ],
+    ).search("监控指标有哪些", top_k=1)
+
+    scores = retrieval_metrics(
+        results,
+        source_document="gold.md",
+        supporting_excerpt="监控指标包括失败率和 P95 延迟。",
+    )
+
+    assert scores.recall_at_k == 0
+    assert scores.reciprocal_rank == 0
+    assert scores.excerpt_recall == 0
+
+
 @pytest.mark.asyncio
 async def test_vector_and_hybrid_follow_common_retriever_interface() -> None:
     chunks = [

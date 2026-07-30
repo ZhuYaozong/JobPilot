@@ -71,7 +71,12 @@ def retrieval_metrics(
     ]
     hit = 1.0 if source_ranks else 0.0
     reciprocal_rank = 1 / min(source_ranks) if source_ranks else 0.0
-    retrieved_text = "\n".join(result.chunk.text for result in results)
+    # 证据覆盖只能由标注源文档贡献，避免其他文档的通用词制造虚假高分。
+    retrieved_text = "\n".join(
+        result.chunk.text
+        for result in results
+        if result.chunk.source_document == source_document
+    )
     excerpt_recall = _recall(
         tokenize(supporting_excerpt),
         tokenize(retrieved_text),

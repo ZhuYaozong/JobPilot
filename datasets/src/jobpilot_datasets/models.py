@@ -175,13 +175,15 @@ class VariantSummary(StrictModel):
     case_count: int
     success_rate: float
     retrieval_metrics: dict[str, float] | None
-    answer_metrics: dict[str, float]
+    answer_metrics: dict[str, float] | None
     judge_metrics: dict[str, float] | None
     latency_ms_average: float
+    latency_ms_p95: float
 
 
 class ExperimentReport(StrictModel):
     created_at: str
+    mode: Literal["end_to_end", "retrieval_only"]
     evaluation_count: int
     variants: list[VariantSummary]
 

@@ -282,6 +282,29 @@ LoRA 明显提升领域回答相似度、输出收敛速度和 Agent 决策 JSON
 [`evaluation/llm/README.md`](evaluation/llm/README.md) 与
 [`evaluation/agent/README.md`](evaluation/agent/README.md)。
 
+### RAG 检索层评测
+
+2026-07-30 使用 `datasets/rag/documents` 的 50 篇文档和
+`datasets/evaluation/rag_test.jsonl` 的 200 条黄金问题完成了纯检索对照；全程不调用
+生成模型：
+
+| 策略 | Recall@5 | MRR | 证据召回 | 平均延迟 | P95 延迟 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Vector | 0.9850 | 0.9231 | 0.9278 | 556.7 ms | 593 ms |
+| BM25 | 0.9950 | 0.9514 | 0.9729 | 3.1 ms | 5 ms |
+| Hybrid | 0.9950 | 0.9506 | 0.9743 | 539.4 ms | 597 ms |
+| Hybrid + Rerank | 0.9950 | 0.9642 | 0.9809 | 1074.6 ms | 1171 ms |
+
+Hybrid + Rerank 是当前质量优先候选，BM25 是延迟优先基线；等权 Hybrid 没有比 BM25
+获得稳定收益，因此不会仅凭本次离线实验自动修改生产 `RAG_STRATEGY`。四种策略共同漏召回
+的唯一问题缺少主题限定，属于评测集歧义，当前保留原始样本并在报告中披露。完整复现命令
+和指标边界见 [`datasets/README.md`](datasets/README.md#hybrid-rag-对照实验)。
+
+进一步使用每篇文档 1 条问题组成 50 条调参集、剩余 150 条作为隔离验证集，扫描了
+14 组 Hybrid 权重、RRF 和候选倍数。调参集第一名没有在验证集上胜过原始配置；最终仍由
+`vector_weight=1`、`bm25_weight=1`、`rrf_k=60`、`candidate_multiplier=3`
+获得最高验证综合分。生产参数因此保持不变，避免把调参集上的偶然提升当成泛化收益。
+
 ## MCP Integration
 
 JobPilot 采用“内部业务工具保持本地调用，外部能力通过 MCP 接入”的双向架构：

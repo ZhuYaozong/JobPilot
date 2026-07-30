@@ -11,6 +11,7 @@ from pathlib import Path
 
 from jobpilot_datasets.config import AppConfig, load_config
 from jobpilot_datasets.evaluation.runner import ExperimentRunner
+from jobpilot_datasets.evaluation.sweep import RetrievalSweepRunner
 from jobpilot_datasets.pipeline import DatasetPipeline, StageResult
 from jobpilot_datasets.planning import (
     build_lora_evaluation_plan,
@@ -96,6 +97,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_config_argument(experiment_parser)
     experiment_parser.add_argument("--limit", type=int)
+    experiment_parser.add_argument(
+        "--retrieval-only",
+        action="store_true",
+        help="只评估检索与重排，不创建或调用回答模型和 Judge",
+    )
+
+    sweep_parser = subparsers.add_parser(
+        "retrieval-sweep",
+        help="使用隔离调参集和验证集扫描 Hybrid + Rerank 参数",
+    )
+    _add_config_argument(sweep_parser)
     return parser
 
 
@@ -138,12 +150,33 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 0 if report.passed else 1
         if args.command == "experiment":
+            if args.limit is not None and args.limit <= 0:
+                raise ValueError("--limit 必须大于 0")
             report = asyncio.run(
-                ExperimentRunner(config).run(limit=args.limit),
+                ExperimentRunner(config).run(
+                    limit=args.limit,
+                    retrieval_only=args.retrieval_only,
+                ),
             )
             print(
                 json.dumps(
                     report.model_dump(mode="json"),
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+            )
+            return 0
+        if args.command == "retrieval-sweep":
+            report = asyncio.run(RetrievalSweepRunner(config).run())
+            print(
+                json.dumps(
+                    {
+                        "winner": report["winner"],
+                        "baseline_validation": report["baseline_validation"],
+                        "winner_delta_vs_baseline": report[
+                            "winner_delta_vs_baseline"
+                        ],
+                    },
                     ensure_ascii=False,
                     indent=2,
                 ),

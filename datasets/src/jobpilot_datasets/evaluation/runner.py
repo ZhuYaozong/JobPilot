@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -50,7 +51,7 @@ from jobpilot_datasets.parsing import parse_json_output
 from jobpilot_datasets.prompting import PromptRepository
 from jobpilot_datasets.providers.base import GenerationProvider, GenerationRequest
 from jobpilot_datasets.providers.factory import create_provider
-from jobpilot_datasets.text_utils import stable_seed
+from jobpilot_datasets.text_utils import ensure_within, stable_seed
 
 
 class ExperimentRunner:
@@ -61,6 +62,7 @@ class ExperimentRunner:
         provider_overrides: dict[str, GenerationProvider] | None = None,
         embedding_provider_override: EmbeddingProvider | None = None,
         reranker_provider_override: RerankingProvider | None = None,
+        report_subdir: str | Path = "experiments",
     ) -> None:
         self.config = config
         self.output_root = config.resolve_path(Path("."))
@@ -71,41 +73,92 @@ class ExperimentRunner:
         self.providers: dict[str, GenerationProvider] = {}
         self.embedding_provider = embedding_provider_override
         self.reranker_provider = reranker_provider_override
+        self.report_subdir = Path(report_subdir)
+        if self.report_subdir.is_absolute() or ".." in self.report_subdir.parts:
+            raise ValueError("实验报告子目录必须位于 reports_dir 内")
         self._task_semaphore = asyncio.Semaphore(config.experiments.concurrency)
 
-    async def run(self, *, limit: int | None = None) -> ExperimentReport:
-        cases = self._load_cases()
-        if limit is not None:
-            cases = cases[:limit]
-        if not cases:
+    async def run(
+        self,
+        *,
+        limit: int | None = None,
+        case_indices: list[int] | None = None,
+        retrieval_only: bool = False,
+    ) -> ExperimentReport:
+        all_cases = self._load_cases()
+        if not all_cases:
             raise ValueError("RAG 评测集为空")
+        if limit is not None and case_indices is not None:
+            raise ValueError("limit 与 case_indices 不能同时使用")
+
+        indexed_cases = list(enumerate(all_cases))
+        if case_indices is not None:
+            if len(case_indices) != len(set(case_indices)):
+                raise ValueError("case_indices 不能重复")
+            invalid = [
+                index
+                for index in case_indices
+                if index < 0 or index >= len(all_cases)
+            ]
+            if invalid:
+                raise ValueError(f"case_indices 越界: {invalid}")
+            indexed_cases = [
+                (index, all_cases[index]) for index in case_indices
+            ]
+        elif limit is not None:
+            indexed_cases = indexed_cases[:limit]
+        if not indexed_cases:
+            raise ValueError("RAG 评测子集为空")
+        cases = [case for _, case in indexed_cases]
+
+        if retrieval_only:
+            invalid_variants = [
+                variant.name
+                for variant in self.config.experiments.variants
+                if variant.resolved_strategy(
+                    self.config.experiments.retriever.kind,
+                )
+                == "none"
+            ]
+            if invalid_variants:
+                raise ValueError(
+                    "retrieval-only 不支持无检索 Variant: "
+                    f"{invalid_variants}",
+                )
 
         retriever_config = self.config.experiments.retriever
         chunks = load_chunks(
             self.output_root,
-            [case.source_document for case in cases],
+            [case.source_document for case in all_cases],
             chunk_size=retriever_config.chunk_size,
             chunk_overlap=retriever_config.chunk_overlap,
         )
         retrievers = self._build_retrievers(chunks)
         self._build_reranker()
-        provider_names = {
-            variant.provider for variant in self.config.experiments.variants
-        }
-        if self.config.experiments.judge_provider:
-            provider_names.add(self.config.experiments.judge_provider)
-        self.providers = {
-            name: self.provider_overrides.get(name)
-            or create_provider(self.config, name)
-            for name in provider_names
-        }
+        if not retrieval_only:
+            provider_names = {
+                variant.provider for variant in self.config.experiments.variants
+            }
+            if self.config.experiments.judge_provider:
+                provider_names.add(self.config.experiments.judge_provider)
+            self.providers = {
+                name: self.provider_overrides.get(name)
+                or create_provider(self.config, name)
+                for name in provider_names
+            }
 
         try:
             tasks = [
                 asyncio.create_task(
-                    self._run_case(index, case, variant, retrievers),
+                    self._run_case(
+                        index,
+                        case,
+                        variant,
+                        retrievers,
+                        retrieval_only=retrieval_only,
+                    ),
                 )
-                for index, case in enumerate(cases)
+                for index, case in indexed_cases
                 for variant in self.config.experiments.variants
             ]
             results = await asyncio.gather(*tasks)
@@ -121,7 +174,11 @@ class ExperimentRunner:
                 return_exceptions=True,
             )
 
-        report = self._build_report(cases, results)
+        report = self._build_report(
+            cases,
+            results,
+            retrieval_only=retrieval_only,
+        )
         self._write_reports(report, results)
         return report
 
@@ -131,14 +188,16 @@ class ExperimentRunner:
         case: RagEvalItem,
         variant: ExperimentVariantConfig,
         retrievers: dict[str, Retriever],
+        *,
+        retrieval_only: bool,
     ) -> ExperimentCaseResult:
         async with self._task_semaphore:
             started = time.perf_counter()
             retrieval_results: list[SearchResult] = []
+            strategy = variant.resolved_strategy(
+                self.config.experiments.retriever.kind,
+            )
             try:
-                strategy = variant.resolved_strategy(
-                    self.config.experiments.retriever.kind,
-                )
                 if strategy != "none":
                     candidate_k = min(
                         100,
@@ -161,6 +220,33 @@ class ExperimentRunner:
                         retrieval_results = retrieval_results[
                             :self.config.experiments.retriever.top_k
                         ]
+                retrieval_scores = (
+                    retrieval_metrics(
+                        retrieval_results,
+                        source_document=case.source_document,
+                        supporting_excerpt=case.supporting_excerpt,
+                    )
+                    if strategy != "none"
+                    else None
+                )
+                if retrieval_only:
+                    return ExperimentCaseResult(
+                        case_index=index,
+                        variant=variant.name,
+                        retrieval_strategy=strategy,
+                        reranker_enabled=variant.reranker_enabled,
+                        question=case.question,
+                        reference_answer=case.answer,
+                        source_document=case.source_document,
+                        retrieved_sources=[
+                            result.chunk.source_document
+                            for result in retrieval_results
+                        ],
+                        retrieval_metrics=retrieval_scores,
+                        latency_ms=int(
+                            (time.perf_counter() - started) * 1000,
+                        ),
+                    )
                 context_block = self._context_block(retrieval_results)
                 answer = await self.providers[variant.provider].generate(
                     GenerationRequest(
@@ -184,15 +270,6 @@ class ExperimentRunner:
                     case.answer,
                     answer,
                     case.supporting_excerpt,
-                )
-                retrieval_scores = (
-                    retrieval_metrics(
-                        retrieval_results,
-                        source_document=case.source_document,
-                        supporting_excerpt=case.supporting_excerpt,
-                    )
-                    if strategy != "none"
-                    else None
                 )
                 judge_scores = await self._judge(case, answer, variant, index)
                 return ExperimentCaseResult(
@@ -334,6 +411,8 @@ class ExperimentRunner:
         self,
         cases: list[RagEvalItem],
         results: list[ExperimentCaseResult],
+        *,
+        retrieval_only: bool,
     ) -> ExperimentReport:
         summaries: list[VariantSummary] = []
         for variant in self.config.experiments.variants:
@@ -357,6 +436,9 @@ class ExperimentRunner:
                 result.judge_scores
                 for result in successful
                 if result.judge_scores is not None
+            ]
+            latency_values = [
+                result.latency_ms for result in variant_results
             ]
             summaries.append(
                 VariantSummary(
@@ -408,13 +490,7 @@ class ExperimentRunner:
                             ),
                         }
                         if answer_values
-                        else {
-                            "answer_score": 0.0,
-                            "faithfulness": 0.0,
-                            "token_f1": 0.0,
-                            "rouge_l": 0.0,
-                            "source_support": 0.0,
-                        }
+                        else None
                     ),
                     judge_metrics=(
                         {
@@ -435,26 +511,46 @@ class ExperimentRunner:
                         else None
                     ),
                     latency_ms_average=(
-                        mean(item.latency_ms for item in variant_results)
-                        if variant_results
+                        mean(latency_values)
+                        if latency_values
                         else 0
+                    ),
+                    latency_ms_p95=self._nearest_rank_percentile(
+                        latency_values,
+                        0.95,
                     ),
                 ),
             )
         return ExperimentReport(
             created_at=datetime.now(UTC).isoformat(),
+            mode=("retrieval_only" if retrieval_only else "end_to_end"),
             evaluation_count=len(cases),
             variants=summaries,
         )
+
+    @staticmethod
+    def _nearest_rank_percentile(
+        values: list[int],
+        percentile: float,
+    ) -> float:
+        """用 nearest-rank 计算延迟分位数，避免引入额外统计依赖。"""
+        if not values:
+            return 0.0
+        ordered = sorted(values)
+        rank = max(1, math.ceil(percentile * len(ordered)))
+        return float(ordered[rank - 1])
 
     def _write_reports(
         self,
         report: ExperimentReport,
         results: list[ExperimentCaseResult],
     ) -> None:
-        reports_dir = (
-            self.config.resolve_path(self.config.paths.reports_dir)
-            / "experiments"
+        reports_root = self.config.resolve_path(
+            self.config.paths.reports_dir,
+        )
+        reports_dir = ensure_within(
+            reports_root / self.report_subdir,
+            reports_root,
         )
         payload = report.model_dump(mode="json")
         schema_path = (
@@ -474,44 +570,76 @@ class ExperimentRunner:
             "# JobPilot 模型实验报告",
             "",
             f"- 生成时间：{report.created_at}",
+            f"- 评测模式：{report.mode}",
             f"- 评测问题数：{report.evaluation_count}",
             f"- 检索 top-k：{self.config.experiments.retriever.top_k}",
             "",
             "## 汇总",
             "",
-            "| Variant | Strategy | Rerank | 成功率 | Recall@K | MRR | Answer Score | Faithfulness | 证据召回 | 平均延迟(ms) |",
-            "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
         ]
+        if report.mode == "retrieval_only":
+            lines.extend(
+                [
+                    "| Variant | Strategy | Rerank | 成功率 | Recall@K | Hit@K | MRR | 证据召回 | 平均延迟(ms) | P95延迟(ms) |",
+                    "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+                ],
+            )
+        else:
+            lines.extend(
+                [
+                    "| Variant | Strategy | Rerank | 成功率 | Recall@K | MRR | Answer Score | Faithfulness | 证据召回 | 平均延迟(ms) | P95延迟(ms) |",
+                    "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+                ],
+            )
         for summary in report.variants:
             retrieval = summary.retrieval_metrics or {}
             answer = summary.answer_metrics
-            lines.append(
-                "| {name} | {strategy} | {rerank} | {success:.2%} | {recall_k} | {mrr} | "
-                "{answer_score:.4f} | {faithfulness:.4f} | {recall} | {latency:.1f} |".format(
-                    name=summary.name,
-                    strategy=summary.retrieval_strategy,
-                    rerank="是" if summary.reranker_enabled else "否",
-                    success=summary.success_rate,
-                    recall_k=(
-                        f"{retrieval['recall_at_k']:.4f}"
-                        if "recall_at_k" in retrieval
-                        else "-"
-                    ),
-                    mrr=(
-                        f"{retrieval['mrr']:.4f}"
-                        if "mrr" in retrieval
-                        else "-"
-                    ),
-                    recall=(
-                        f"{retrieval['excerpt_recall']:.4f}"
-                        if "excerpt_recall" in retrieval
-                        else "-"
-                    ),
-                    answer_score=answer["answer_score"],
-                    faithfulness=answer["faithfulness"],
-                    latency=summary.latency_ms_average,
+            common_values = {
+                "name": summary.name,
+                "strategy": summary.retrieval_strategy,
+                "rerank": "是" if summary.reranker_enabled else "否",
+                "success": summary.success_rate,
+                "recall_k": (
+                    f"{retrieval['recall_at_k']:.4f}"
+                    if "recall_at_k" in retrieval
+                    else "-"
                 ),
-            )
+                "hit_k": (
+                    f"{retrieval['hit_at_k']:.4f}"
+                    if "hit_at_k" in retrieval
+                    else "-"
+                ),
+                "mrr": (
+                    f"{retrieval['mrr']:.4f}"
+                    if "mrr" in retrieval
+                    else "-"
+                ),
+                "recall": (
+                    f"{retrieval['excerpt_recall']:.4f}"
+                    if "excerpt_recall" in retrieval
+                    else "-"
+                ),
+                "latency": summary.latency_ms_average,
+                "latency_p95": summary.latency_ms_p95,
+            }
+            if report.mode == "retrieval_only":
+                lines.append(
+                    "| {name} | {strategy} | {rerank} | {success:.2%} | {recall_k} | {hit_k} | {mrr} | "
+                    "{recall} | {latency:.1f} | {latency_p95:.1f} |".format(
+                        **common_values,
+                    ),
+                )
+            else:
+                if answer is None:
+                    raise ValueError("端到端实验缺少回答指标")
+                lines.append(
+                    "| {name} | {strategy} | {rerank} | {success:.2%} | {recall_k} | {mrr} | "
+                    "{answer_score:.4f} | {faithfulness:.4f} | {recall} | {latency:.1f} | {latency_p95:.1f} |".format(
+                        **common_values,
+                        answer_score=answer["answer_score"],
+                        faithfulness=answer["faithfulness"],
+                    ),
+                )
 
         if any(summary.judge_metrics for summary in report.variants):
             lines.extend(
@@ -541,10 +669,11 @@ class ExperimentRunner:
                 "- Recall@K：前 K 个检索片段覆盖标注相关源文档的比例。",
                 "- MRR：正确源文档首次出现排名的倒数。",
                 "- 证据召回：supporting_excerpt 的检索覆盖度。",
-                "- Answer Score：Token F1 与 ROUGE-L 的均值。",
-                "- Faithfulness：候选回答内容在标注证据中的覆盖程度。",
+                "- Retrieval-only 模式不会创建回答模型，回答与 Judge 指标为 null。",
+                "- 端到端模式的 Answer Score 是 Token F1 与 ROUGE-L 的均值。",
+                "- 端到端模式的 Faithfulness 是回答在标注证据中的覆盖程度。",
                 "- JSON 明细继续保留 Hit@K、Token F1、ROUGE-L 和 source_support。",
-                "- 若配置 judge_provider，会额外输出 0～5 分的模型裁判指标。",
+                "- 仅端到端模式会在配置 judge_provider 后输出模型裁判指标。",
             ],
         )
         atomic_write_text(

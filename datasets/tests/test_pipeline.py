@@ -73,8 +73,17 @@ async def test_full_pipeline_resume_quality_and_experiment(test_config) -> None:
         "Hybrid + Rerank",
     ]
     assert all(item.case_count == 2 for item in experiment.variants)
-    assert all("answer_score" in item.answer_metrics for item in experiment.variants)
-    assert all("faithfulness" in item.answer_metrics for item in experiment.variants)
+    assert experiment.mode == "end_to_end"
+    assert all(
+        item.answer_metrics is not None
+        and "answer_score" in item.answer_metrics
+        for item in experiment.variants
+    )
+    assert all(
+        item.answer_metrics is not None
+        and "faithfulness" in item.answer_metrics
+        for item in experiment.variants
+    )
     assert all(
         item.retrieval_metrics is not None
         and "recall_at_k" in item.retrieval_metrics
@@ -87,3 +96,19 @@ async def test_full_pipeline_resume_quality_and_experiment(test_config) -> None:
         / "experiment_report.md"
     )
     assert report_path.exists()
+
+    unused_provider = DeterministicProvider()
+    retrieval_experiment = await ExperimentRunner(
+        test_config,
+        provider_overrides={"base": unused_provider},
+        embedding_provider_override=DeterministicEmbeddingProvider(),
+        reranker_provider_override=PassthroughReranker(),
+    ).run(limit=2, retrieval_only=True)
+    assert retrieval_experiment.mode == "retrieval_only"
+    assert all(
+        item.answer_metrics is None
+        and item.judge_metrics is None
+        and item.latency_ms_p95 >= 0
+        for item in retrieval_experiment.variants
+    )
+    assert unused_provider.requests == []

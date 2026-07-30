@@ -45,6 +45,7 @@ logs/
 datasets/.work/
 datasets/.venv/
 datasets/.pytest_cache/
+datasets/reports/.pytest-*/
 datasets/reports/**/*.json
 datasets/reports/**/*.jsonl
 datasets/reports/**/*.md
