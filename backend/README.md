@@ -16,7 +16,7 @@
 - write 类工具必填字段缺失统一走 `missing_required_field` 业务错,引导 LLM 自然追问而不是抛 ValidationError。
 - SSE 流式 Assistant。
 - KnowledgeBase / KnowledgeDocument / KnowledgeChunk 数据层。
-- 自研文本切片、OpenAI-compatible embedding client、pgvector 检索。
+- 自研文本切片、OpenAI-compatible embedding client、BM25 / pgvector 混合检索与可选 Reranker。
 - 用户作用域隔离(JWT 用户与 dev 用户共享同一份作用域规则)。
 
 ## Technology
@@ -103,6 +103,37 @@ EMBEDDING_DIMENSIONS=1536
 ```
 
 `EMBEDDING_*` 可以独立于 `LLM_*`。如果不设置 embedding endpoint，`EmbeddingClient` 会尝试复用 LLM endpoint；如果仍缺少必要配置，知识库索引会失败并把错误写入文档状态，用户可修正配置后重新索引。
+
+RAG 检索配置：
+
+```env
+# vector / bm25 / hybrid；默认 vector 保持升级前行为
+RAG_STRATEGY=vector
+RAG_CANDIDATE_MULTIPLIER=3
+RAG_BM25_K1=1.5
+RAG_BM25_B=0.75
+RAG_HYBRID_RRF_K=60
+RAG_VECTOR_WEIGHT=1.0
+RAG_BM25_WEIGHT=1.0
+
+# 可选模型重排，使用 POST /rerank 协议
+RAG_RERANKER_ENABLED=false
+RERANKER_BASE_URL=
+RERANKER_API_KEY=
+RERANKER_MODEL_NAME=
+RERANKER_TIMEOUT_SECONDS=15
+```
+
+常用组合：
+
+| 策略 | `RAG_STRATEGY` | `RAG_RERANKER_ENABLED` |
+| --- | --- | --- |
+| Vector RAG（兼容默认） | `vector` | `false` |
+| BM25 RAG | `bm25` | `false` |
+| Hybrid RAG | `hybrid` | `false` |
+| Hybrid + Rerank | `hybrid` | `true` |
+
+Hybrid 使用加权 RRF 融合两路排名。生产环境中向量服务不可用时默认退化到 BM25，Reranker 不可用时默认保留融合结果；可分别通过 `RAG_HYBRID_VECTOR_FAIL_OPEN=false`、`RAG_RERANKER_FAIL_OPEN=false` 改为严格失败。回滚时只需恢复 `RAG_STRATEGY=vector`、`RAG_RERANKER_ENABLED=false`，不涉及数据库迁移。
 
 认证与生产安全配置：
 
@@ -426,7 +457,7 @@ X-User-Name: demo
 | `list_generated_artifacts` | list | No | 列已生成的求职信/面试材料等(紧凑列表,不返正文) |
 | `read_resume` | read | No | 按 id 读取简历完整结构(parsed_json + raw_text) |
 | `read_job_posting` | read | No | 按 id 读取岗位完整结构(parsed_json + jd_text) |
-| `search_knowledge` | retrieval | No | 语义检索知识库 |
+| `search_knowledge` | retrieval | No | 按配置执行 Vector / BM25 / Hybrid 检索 |
 | `parse_resume` | parse | Yes | 触发简历 LLM 解析,把 parse_status 升级为 parsed |
 | `parse_job_posting` | parse | Yes | 触发岗位 LLM 解析,填 parsed_json |
 | `analyze_match` | action | Yes | 创建匹配分析 |
@@ -505,7 +536,9 @@ OpenAI-compatible embeddings
 ↓
 写入 knowledge_chunks.embedding
 ↓
-search_knowledge 使用 pgvector 检索
+RetrievalService 按配置执行 Vector / BM25 / Hybrid 召回
+↓
+可选 Reranker 重排并构造兼容 Context
 ```
 
 支持的文件来源：
@@ -549,6 +582,7 @@ uv --cache-dir .uv-cache --directory backend run alembic current
 - 邮件、日历、通知或真实投递集成。
 - PDF 导出和模板排版(已支持简历版本 / 求职材料的 Markdown / DOCX 导出)。
 - embedding 维度在线切换。
+- 超大用户知识库的分布式 BM25 索引（当前 BM25 在已做 ACL 过滤的用户 chunks 上计算）。
 - 简历版本号并发锁或唯一约束(当前按 `max(version_no)+1` 派生)。
 - GitHub Actions 已覆盖测试和构建，但还没有部署流水线。
 - AgentRun token_usage 字段尚未真填(schema 已透出,等接入 token 计费时再补)。

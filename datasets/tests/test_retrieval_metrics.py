@@ -1,3 +1,6 @@
+import pytest
+
+from conftest import DeterministicEmbeddingProvider
 from jobpilot_datasets.evaluation.metrics import (
     answer_metrics,
     retrieval_metrics,
@@ -5,6 +8,8 @@ from jobpilot_datasets.evaluation.metrics import (
 from jobpilot_datasets.evaluation.retrieval import (
     BM25Retriever,
     DocumentChunk,
+    HybridRetriever,
+    VectorRetriever,
 )
 
 
@@ -28,6 +33,7 @@ def test_bm25_and_metrics_find_source_document() -> None:
         supporting_excerpt="RAG 检索需要设置 top k",
     )
     assert scores.hit_at_k == 1
+    assert scores.recall_at_k == 1
     assert scores.reciprocal_rank == 1
     assert scores.excerpt_recall > 0.5
 
@@ -38,3 +44,23 @@ def test_bm25_and_metrics_find_source_document() -> None:
     )
     assert answer_scores.token_f1 > 0.5
     assert answer_scores.rouge_l > 0.5
+    assert answer_scores.answer_score > 0.5
+    assert answer_scores.faithfulness > 0.5
+
+
+@pytest.mark.asyncio
+async def test_vector_and_hybrid_follow_common_retriever_interface() -> None:
+    chunks = [
+        DocumentChunk("a#0", "a", "Python RAG 混合检索"),
+        DocumentChunk("b#0", "b", "前端样式与颜色"),
+    ]
+    vector = VectorRetriever(chunks, DeterministicEmbeddingProvider())
+    bm25 = BM25Retriever(chunks)
+    hybrid = HybridRetriever(vector, bm25, rrf_k=10)
+
+    vector_results = await vector.retrieve("RAG 检索", top_k=2)
+    hybrid_results = await hybrid.retrieve("RAG 检索", top_k=2)
+
+    assert vector_results[0].retrieval_source == "vector"
+    assert hybrid_results[0].retrieval_source == "hybrid"
+    assert hybrid_results[0].chunk.chunk_id == "a#0"

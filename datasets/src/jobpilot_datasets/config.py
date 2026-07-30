@@ -153,10 +153,17 @@ class ExternalDocumentsConfig(StrictConfigModel):
 
 
 class RetrieverConfig(StrictConfigModel):
-    kind: Literal["bm25"] = "bm25"
+    # kind 作为旧配置的默认策略保留；新配置优先由 variant.retrieval_strategy 指定。
+    kind: Literal["vector", "bm25", "hybrid"] = "bm25"
     top_k: int = Field(default=5, ge=1, le=100)
     chunk_size: int = Field(default=600, ge=100)
     chunk_overlap: int = Field(default=100, ge=0)
+    candidate_multiplier: int = Field(default=3, ge=1, le=20)
+    bm25_k1: float = Field(default=1.5, gt=0)
+    bm25_b: float = Field(default=0.75, ge=0, le=1)
+    hybrid_rrf_k: int = Field(default=60, ge=1)
+    vector_weight: float = Field(default=1.0, gt=0)
+    bm25_weight: float = Field(default=1.0, gt=0)
 
     @model_validator(mode="after")
     def validate_overlap(self) -> "RetrieverConfig":
@@ -169,6 +176,14 @@ class ExperimentVariantConfig(StrictConfigModel):
     name: str
     provider: str
     use_rag: bool = False
+    retrieval_strategy: Literal["none", "vector", "bm25", "hybrid"] | None = None
+    reranker_enabled: bool = False
+
+    def resolved_strategy(self, default: str) -> str:
+        """兼容旧 use_rag：旧配置仍按全局 retriever.kind 执行。"""
+        if self.retrieval_strategy is not None:
+            return self.retrieval_strategy
+        return default if self.use_rag else "none"
 
 
 class ExperimentsConfig(StrictConfigModel):
@@ -176,6 +191,8 @@ class ExperimentsConfig(StrictConfigModel):
     retriever: RetrieverConfig = Field(default_factory=RetrieverConfig)
     concurrency: int = Field(default=4, ge=1, le=64)
     judge_provider: str | None = None
+    embedding_provider: str | None = None
+    reranker_provider: str | None = None
     variants: list[ExperimentVariantConfig]
 
     @model_validator(mode="after")
@@ -210,6 +227,10 @@ class AppConfig(StrictConfigModel):
         references.update(item.provider for item in self.experiments.variants)
         if self.experiments.judge_provider:
             references.add(self.experiments.judge_provider)
+        if self.experiments.embedding_provider:
+            references.add(self.experiments.embedding_provider)
+        if self.experiments.reranker_provider:
+            references.add(self.experiments.reranker_provider)
         missing = references - set(self.providers)
         if missing:
             raise ValueError(f"配置引用了不存在的 Provider: {sorted(missing)}")

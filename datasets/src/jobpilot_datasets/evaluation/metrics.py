@@ -77,6 +77,7 @@ def retrieval_metrics(
         tokenize(retrieved_text),
     )
     return RetrievalMetrics(
+        recall_at_k=hit,
         hit_at_k=hit,
         reciprocal_rank=reciprocal_rank,
         excerpt_recall=excerpt_recall,
@@ -91,8 +92,13 @@ def answer_metrics(
     reference_tokens = tokenize(reference_answer)
     candidate_tokens = tokenize(candidate_answer)
     excerpt_tokens = tokenize(supporting_excerpt)
+    token_f1 = _multiset_f1(reference_tokens, candidate_tokens)
+    rouge_l = _rouge_l(reference_tokens, candidate_tokens)
+    source_support = _recall(candidate_tokens, excerpt_tokens)
     return AnswerMetrics(
-        token_f1=_multiset_f1(reference_tokens, candidate_tokens),
-        rouge_l=_rouge_l(reference_tokens, candidate_tokens),
-        source_support=_recall(candidate_tokens, excerpt_tokens),
+        answer_score=(token_f1 + rouge_l) / 2,
+        faithfulness=source_support,
+        token_f1=token_f1,
+        rouge_l=rouge_l,
+        source_support=source_support,
     )

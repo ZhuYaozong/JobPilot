@@ -416,3 +416,52 @@ def test_search_knowledge_embedding_config_error_is_business_error(
         assert log.error_class == "embedding_config_missing"
 
     _run(_scenario)
+
+
+def test_search_knowledge_can_switch_to_bm25_without_embedding(
+    monkeypatch, test_marker: str,
+) -> None:
+    """切换 BM25 后 Agent 工具契约和用户隔离保持不变。"""
+    monkeypatch.setattr(settings, "rag_strategy", "bm25")
+
+    async def _scenario(db: AsyncSession) -> None:
+        user, agent_run_id = await _setup_agent_run(db, test_marker)
+        other = await _other_user(db)
+        kb, own_doc = await _seed_kb(
+            db, user_id=user.id, marker=test_marker, suffix="bm25-own",
+        )
+        _, other_doc = await _seed_kb(
+            db, user_id=other.id, marker=test_marker, suffix="bm25-other",
+        )
+        own = await _seed_chunk(
+            db,
+            doc=own_doc,
+            content=f"{test_marker} 稀有检索词 混合召回方案",
+            embedding=None,
+        )
+        await _seed_chunk(
+            db,
+            doc=other_doc,
+            content=f"{test_marker} 稀有检索词 稀有检索词",
+            embedding=None,
+        )
+        await db.commit()
+        own_id = own.id
+        kb_id = kb.id
+
+        result = await SearchKnowledgeTool().invoke(
+            {
+                "query": f"{test_marker} 稀有检索词",
+                "knowledge_base_id": kb_id,
+                "top_k": 1,
+            },
+            ToolContext(db=db, current_user=user, agent_run_id=agent_run_id),
+        )
+
+        assert result["ok"] is True
+        assert result["data"]["hits"][0]["chunk_id"] == own_id
+        assert set(result["data"]["hits"][0]) >= {
+            "distance", "relevance", "content", "document_title",
+        }
+
+    _run(_scenario)

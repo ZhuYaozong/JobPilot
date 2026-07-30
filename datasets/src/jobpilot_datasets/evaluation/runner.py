@@ -1,4 +1,4 @@
-"""执行 Base、Base+RAG、LoRA、LoRA+RAG 对照实验。"""
+"""执行可配置的生成模型与 RAG 策略对照实验。"""
 
 from __future__ import annotations
 
@@ -17,10 +17,21 @@ from jobpilot_datasets.evaluation.metrics import (
     answer_metrics,
     retrieval_metrics,
 )
+from jobpilot_datasets.evaluation.embedding import (
+    EmbeddingProvider,
+    OpenAIEmbeddingProvider,
+)
 from jobpilot_datasets.evaluation.retrieval import (
     BM25Retriever,
+    HybridRetriever,
+    Retriever,
     SearchResult,
+    VectorRetriever,
     load_chunks,
+)
+from jobpilot_datasets.evaluation.reranker import (
+    HttpRerankingProvider,
+    RerankingProvider,
 )
 from jobpilot_datasets.io_utils import (
     atomic_write_json,
@@ -48,6 +59,8 @@ class ExperimentRunner:
         config: AppConfig,
         *,
         provider_overrides: dict[str, GenerationProvider] | None = None,
+        embedding_provider_override: EmbeddingProvider | None = None,
+        reranker_provider_override: RerankingProvider | None = None,
     ) -> None:
         self.config = config
         self.output_root = config.resolve_path(Path("."))
@@ -56,6 +69,8 @@ class ExperimentRunner:
         )
         self.provider_overrides = provider_overrides or {}
         self.providers: dict[str, GenerationProvider] = {}
+        self.embedding_provider = embedding_provider_override
+        self.reranker_provider = reranker_provider_override
         self._task_semaphore = asyncio.Semaphore(config.experiments.concurrency)
 
     async def run(self, *, limit: int | None = None) -> ExperimentReport:
@@ -72,7 +87,8 @@ class ExperimentRunner:
             chunk_size=retriever_config.chunk_size,
             chunk_overlap=retriever_config.chunk_overlap,
         )
-        retriever = BM25Retriever(chunks)
+        retrievers = self._build_retrievers(chunks)
+        self._build_reranker()
         provider_names = {
             variant.provider for variant in self.config.experiments.variants
         }
@@ -87,7 +103,7 @@ class ExperimentRunner:
         try:
             tasks = [
                 asyncio.create_task(
-                    self._run_case(index, case, variant, retriever),
+                    self._run_case(index, case, variant, retrievers),
                 )
                 for index, case in enumerate(cases)
                 for variant in self.config.experiments.variants
@@ -97,6 +113,11 @@ class ExperimentRunner:
             unique_providers = {id(provider): provider for provider in self.providers.values()}
             await asyncio.gather(
                 *(provider.close() for provider in unique_providers.values()),
+                return_exceptions=True,
+            )
+            extra_providers = [self.embedding_provider, self.reranker_provider]
+            await asyncio.gather(
+                *(provider.close() for provider in extra_providers if provider),
                 return_exceptions=True,
             )
 
@@ -109,17 +130,37 @@ class ExperimentRunner:
         index: int,
         case: RagEvalItem,
         variant: ExperimentVariantConfig,
-        retriever: BM25Retriever,
+        retrievers: dict[str, Retriever],
     ) -> ExperimentCaseResult:
         async with self._task_semaphore:
             started = time.perf_counter()
             retrieval_results: list[SearchResult] = []
             try:
-                if variant.use_rag:
-                    retrieval_results = retriever.search(
-                        case.question,
-                        top_k=self.config.experiments.retriever.top_k,
+                strategy = variant.resolved_strategy(
+                    self.config.experiments.retriever.kind,
+                )
+                if strategy != "none":
+                    candidate_k = min(
+                        100,
+                        self.config.experiments.retriever.top_k
+                        * self.config.experiments.retriever.candidate_multiplier,
                     )
+                    retrieval_results = await retrievers[strategy].retrieve(
+                        case.question,
+                        top_k=candidate_k,
+                    )
+                    if variant.reranker_enabled:
+                        if self.reranker_provider is None:
+                            raise ValueError("实验启用了 reranker，但没有配置 Provider")
+                        retrieval_results = await self.reranker_provider.rerank(
+                            case.question,
+                            retrieval_results,
+                            top_k=self.config.experiments.retriever.top_k,
+                        )
+                    else:
+                        retrieval_results = retrieval_results[
+                            :self.config.experiments.retriever.top_k
+                        ]
                 context_block = self._context_block(retrieval_results)
                 answer = await self.providers[variant.provider].generate(
                     GenerationRequest(
@@ -150,13 +191,15 @@ class ExperimentRunner:
                         source_document=case.source_document,
                         supporting_excerpt=case.supporting_excerpt,
                     )
-                    if variant.use_rag
+                    if strategy != "none"
                     else None
                 )
                 judge_scores = await self._judge(case, answer, variant, index)
                 return ExperimentCaseResult(
                     case_index=index,
                     variant=variant.name,
+                    retrieval_strategy=strategy,
+                    reranker_enabled=variant.reranker_enabled,
                     question=case.question,
                     reference_answer=case.answer,
                     source_document=case.source_document,
@@ -174,6 +217,8 @@ class ExperimentRunner:
                 return ExperimentCaseResult(
                     case_index=index,
                     variant=variant.name,
+                    retrieval_strategy=strategy,
+                    reranker_enabled=variant.reranker_enabled,
                     question=case.question,
                     reference_answer=case.answer,
                     source_document=case.source_document,
@@ -184,6 +229,53 @@ class ExperimentRunner:
                     latency_ms=int((time.perf_counter() - started) * 1000),
                     error=f"{type(exc).__name__}: {exc}",
                 )
+
+    def _build_retrievers(
+        self,
+        chunks: list,
+    ) -> dict[str, Retriever]:
+        """按实验矩阵按需创建召回器，旧 BM25 配置不要求 embedding。"""
+        config = self.config.experiments.retriever
+        bm25 = BM25Retriever(chunks, k1=config.bm25_k1, b=config.bm25_b)
+        strategies = {
+            variant.resolved_strategy(config.kind)
+            for variant in self.config.experiments.variants
+        }
+        retrievers: dict[str, Retriever] = {"bm25": bm25}
+        if strategies & {"vector", "hybrid"}:
+            if self.embedding_provider is None:
+                provider_name = self.config.experiments.embedding_provider
+                if not provider_name:
+                    raise ValueError("Vector/Hybrid 实验需要 experiments.embedding_provider")
+                self.embedding_provider = OpenAIEmbeddingProvider(
+                    self.config.providers[provider_name],
+                )
+            vector = VectorRetriever(chunks, self.embedding_provider)
+            retrievers["vector"] = vector
+            retrievers["hybrid"] = HybridRetriever(
+                vector,
+                bm25,
+                rrf_k=config.hybrid_rrf_k,
+                vector_weight=config.vector_weight,
+                bm25_weight=config.bm25_weight,
+            )
+        return retrievers
+
+    def _build_reranker(self) -> None:
+        """仅在实验矩阵需要时创建远端 Reranker。"""
+        if not any(
+            variant.reranker_enabled
+            for variant in self.config.experiments.variants
+        ):
+            return
+        if self.reranker_provider is not None:
+            return
+        provider_name = self.config.experiments.reranker_provider
+        if not provider_name:
+            raise ValueError("Rerank 实验需要 experiments.reranker_provider")
+        self.reranker_provider = HttpRerankingProvider(
+            self.config.providers[provider_name],
+        )
 
     async def _judge(
         self,
@@ -269,6 +361,10 @@ class ExperimentRunner:
             summaries.append(
                 VariantSummary(
                     name=variant.name,
+                    retrieval_strategy=variant.resolved_strategy(
+                        self.config.experiments.retriever.kind,
+                    ),
+                    reranker_enabled=variant.reranker_enabled,
                     case_count=len(variant_results),
                     success_rate=(
                         len(successful) / len(variant_results)
@@ -277,6 +373,9 @@ class ExperimentRunner:
                     ),
                     retrieval_metrics=(
                         {
+                            "recall_at_k": mean(
+                                item.recall_at_k for item in retrieval_values
+                            ),
                             "hit_at_k": mean(
                                 item.hit_at_k for item in retrieval_values
                             ),
@@ -292,6 +391,12 @@ class ExperimentRunner:
                     ),
                     answer_metrics=(
                         {
+                            "answer_score": mean(
+                                item.answer_score for item in answer_values
+                            ),
+                            "faithfulness": mean(
+                                item.faithfulness for item in answer_values
+                            ),
                             "token_f1": mean(
                                 item.token_f1 for item in answer_values
                             ),
@@ -304,6 +409,8 @@ class ExperimentRunner:
                         }
                         if answer_values
                         else {
+                            "answer_score": 0.0,
+                            "faithfulness": 0.0,
                             "token_f1": 0.0,
                             "rouge_l": 0.0,
                             "source_support": 0.0,
@@ -372,20 +479,22 @@ class ExperimentRunner:
             "",
             "## 汇总",
             "",
-            "| Variant | 成功率 | Hit@K | MRR | 证据召回 | Token F1 | ROUGE-L | 证据支持 | 平均延迟(ms) |",
-            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+            "| Variant | Strategy | Rerank | 成功率 | Recall@K | MRR | Answer Score | Faithfulness | 证据召回 | 平均延迟(ms) |",
+            "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
         ]
         for summary in report.variants:
             retrieval = summary.retrieval_metrics or {}
             answer = summary.answer_metrics
             lines.append(
-                "| {name} | {success:.2%} | {hit} | {mrr} | {recall} | "
-                "{f1:.4f} | {rouge:.4f} | {support:.4f} | {latency:.1f} |".format(
+                "| {name} | {strategy} | {rerank} | {success:.2%} | {recall_k} | {mrr} | "
+                "{answer_score:.4f} | {faithfulness:.4f} | {recall} | {latency:.1f} |".format(
                     name=summary.name,
+                    strategy=summary.retrieval_strategy,
+                    rerank="是" if summary.reranker_enabled else "否",
                     success=summary.success_rate,
-                    hit=(
-                        f"{retrieval['hit_at_k']:.4f}"
-                        if "hit_at_k" in retrieval
+                    recall_k=(
+                        f"{retrieval['recall_at_k']:.4f}"
+                        if "recall_at_k" in retrieval
                         else "-"
                     ),
                     mrr=(
@@ -398,9 +507,8 @@ class ExperimentRunner:
                         if "excerpt_recall" in retrieval
                         else "-"
                     ),
-                    f1=answer["token_f1"],
-                    rouge=answer["rouge_l"],
-                    support=answer["source_support"],
+                    answer_score=answer["answer_score"],
+                    faithfulness=answer["faithfulness"],
                     latency=summary.latency_ms_average,
                 ),
             )
@@ -430,11 +538,12 @@ class ExperimentRunner:
                 "",
                 "## 指标说明",
                 "",
-                "- Hit@K：前 K 个检索片段是否包含标注源文档。",
+                "- Recall@K：前 K 个检索片段覆盖标注相关源文档的比例。",
                 "- MRR：正确源文档首次出现排名的倒数。",
                 "- 证据召回：supporting_excerpt 的检索覆盖度。",
-                "- Token F1 / ROUGE-L：候选回答与参考答案的确定性文本指标。",
-                "- 证据支持：候选回答内容在标注证据中的覆盖程度，仅作基线指标。",
+                "- Answer Score：Token F1 与 ROUGE-L 的均值。",
+                "- Faithfulness：候选回答内容在标注证据中的覆盖程度。",
+                "- JSON 明细继续保留 Hit@K、Token F1、ROUGE-L 和 source_support。",
                 "- 若配置 judge_provider，会额外输出 0～5 分的模型裁判指标。",
             ],
         )

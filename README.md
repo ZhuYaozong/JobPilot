@@ -2,7 +2,7 @@
 
 JobPilot 是面向求职者的 AI Copilot。它把岗位收集、简历管理、匹配分析、求职材料生成、模拟面试、知识库检索和投递跟进放进同一条工作流，帮助用户从看到一个岗位一路推进到定制材料、准备面试和持续跟进。
 
-当前项目已经完成核心 MVP 闭环，并进入 Agent + RAG 产品化阶段：后端有真实的 FastAPI API、LangGraph 工作流、OpenAI-compatible LLM / Embedding client、PostgreSQL + pgvector 检索层；前端有 Vue 3 + Element Plus 的求职工作台、SSE 流式 AI 助手、知识库管理和多类材料生成入口。
+当前项目已经完成核心 MVP 闭环，并进入 Agent + RAG 产品化阶段：后端有真实的 FastAPI API、LangGraph 工作流、OpenAI-compatible LLM / Embedding client、BM25 + pgvector 混合检索层；前端有 Vue 3 + Element Plus 的求职工作台、SSE 流式 AI 助手、知识库管理和多类材料生成入口。
 
 ## Architecture
 
@@ -55,8 +55,8 @@ JobPilot/
 - 真实 AI 工作流：解析 JD / 简历，生成匹配分析、求职信、面试准备和定制简历。
 - Agent Runtime：基于 LangGraph 1.x 的多节点工作流，支持工具调用、运行记录和 SSE 流式返回。
 - MCP 双向集成：Assistant 可通过 Streamable HTTP 动态发现并调用白名单外部工具；同时提供独立、只读的 JobPilot MCP Server。
-- RAG 知识库：支持资料上传、手工文本、切片、embedding、pgvector 检索和 chunk 预览。
-- AI 实验数据闭环：独立 `datasets` 工程生产 LoRA SFT、RAG 文档和带证据评测集，并比较 Base、Base+RAG、LoRA、LoRA+RAG。
+- RAG 知识库：支持资料上传、手工文本、切片、Vector / BM25 / Hybrid 检索、可选 Reranker 和 chunk 预览。
+- AI 实验数据闭环：独立 `datasets` 工程生产 LoRA SFT、RAG 文档和带证据评测集，并比较 Vector、BM25、Hybrid、Hybrid + Rerank。
 - 交互式模拟面试：基于当前岗位、简历、匹配结果、interview_prep 和 search_knowledge 逐轮提问。
 - 定制简历版本：针对岗位生成 `ai_tailored` 简历版本，保留版本号、来源类型和变更摘要，前端可查看 / 复制 / 导出 Markdown 与 DOCX。
 - 多用户认证：JWT 注册 / 登录 / me 与 dev 模式（`X-User-Name`）并存；侧边栏支持多会话切换、登录其他、注册新用户、退出登录。
@@ -221,7 +221,7 @@ Qwen、外部 Markdown/TXT/PDF/DOCX 导入、checkpoint 恢复和质量报告。
 - LoRA evaluation：500 条与 SFT 三个 split 跨集合去重的独立问题；
 - RAG：八个领域约 50 篇 Markdown 文档；
 - RAG evaluation：200 条包含源文档和原文证据的问题；
-- 实验矩阵：Base、Base+RAG、LoRA、LoRA+RAG。
+- RAG 实验矩阵：Vector、BM25、Hybrid、Hybrid + Rerank；各 variant 可独立选择 Base 或 LoRA 回答模型。
 
 仓库当前包含一份通过正式流水线生成的数据快照：
 
@@ -321,11 +321,17 @@ EMBEDDING_API_KEY=your-api-key
 EMBEDDING_MODEL_NAME=your-embedding-model
 EMBEDDING_DIMENSIONS=1536
 
+# 默认 vector；也可切换为 bm25 / hybrid
+RAG_STRATEGY=vector
+RAG_RERANKER_ENABLED=false
+
 AUTH_SECRET_KEY=change-this-to-a-long-random-secret
 AUTH_DEV_MODE=true
 ```
 
 Embedding 配置可以独立指定；如果未设置 `EMBEDDING_*`，客户端会在运行时尝试复用对应的 `LLM_*` 配置。不同 embedding 维度需要数据库迁移配合，默认维度为 1536。
+
+RAG 检索已支持 `vector`、`bm25` 和基于加权 RRF 的 `hybrid`。可选 Reranker 使用独立 `/rerank` 端点；完整参数和四种切换示例见 `backend/README.md`。默认仍为 Vector RAG 且关闭重排，便于兼容和快速回滚。
 
 `POSTGRES_PASSWORD=123456` 和 `AUTH_DEV_MODE=true` 只面向本地开发。对外部署前请至少设置 `APP_ENV=production`、`APP_DEBUG=false`、`AUTH_DEV_MODE=false`，并替换 `AUTH_SECRET_KEY`、数据库密码和所有模型 API key。
 
@@ -399,7 +405,7 @@ http://localhost:5173
 | `analyze_match` | 基于岗位和简历生成匹配分析 |
 | `generate_cover_letter` | 基于简历、岗位和匹配结果生成求职信 |
 | `generate_interview_prep` | 生成中文面试准备提纲 |
-| `search_knowledge` | 在当前用户知识库中做语义检索 |
+| `search_knowledge` | 在当前用户知识库中执行可配置 RAG 检索 |
 | `generate_tailored_resume` | 生成针对岗位的定制简历版本 |
 | `draft_job` | 把用户在对话里贴的 JD 文本或岗位 URL 起草为岗位草稿（不落库） |
 | `draft_resume` | 把用户在对话里贴的简历文本起草为简历草稿（不落库） |

@@ -1,5 +1,7 @@
 from functools import lru_cache
+from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,6 +25,25 @@ class Settings(BaseSettings):
     # 1536 对应 OpenAI text-embedding-3-small；换模型时需要同步修改。
     # 数据库向量列是固定维度，改这里必须配套 migration，每个部署环境内要保持稳定。
     embedding_dimensions: int = 1536
+
+    # RAG 默认保持原向量检索行为；切换环境变量即可启用 BM25 或混合召回。
+    rag_strategy: Literal["vector", "bm25", "hybrid"] = "vector"
+    rag_candidate_multiplier: int = Field(default=3, ge=1, le=20)
+    rag_bm25_k1: float = Field(default=1.5, gt=0)
+    rag_bm25_b: float = Field(default=0.75, ge=0, le=1)
+    rag_hybrid_rrf_k: int = Field(default=60, ge=1)
+    rag_vector_weight: float = Field(default=1.0, gt=0)
+    rag_bm25_weight: float = Field(default=1.0, gt=0)
+    # Hybrid 下 embedding 不可用时允许退化到 BM25，纯 vector 模式仍保留旧错误语义。
+    rag_hybrid_vector_fail_open: bool = True
+
+    # Reranker 使用通用 POST /rerank 协议；默认关闭，失败时默认保留召回排序。
+    rag_reranker_enabled: bool = False
+    rag_reranker_fail_open: bool = True
+    reranker_base_url: str | None = None
+    reranker_api_key: str | None = None
+    reranker_model_name: str | None = None
+    reranker_timeout_seconds: float = Field(default=15.0, gt=0)
 
     # 认证配置
     # auth_dev_mode=True 时同时接受 X-User-Name header（向后兼容开发模式）；

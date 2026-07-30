@@ -128,12 +128,16 @@ class DocumentManifestItem(StrictModel):
 
 
 class RetrievalMetrics(StrictModel):
+    recall_at_k: float = Field(ge=0, le=1)
+    # 保留旧字段，单相关文档评测集中与 Recall@K 等价。
     hit_at_k: float = Field(ge=0, le=1)
     reciprocal_rank: float = Field(ge=0, le=1)
     excerpt_recall: float = Field(ge=0, le=1)
 
 
 class AnswerMetrics(StrictModel):
+    answer_score: float = Field(ge=0, le=1)
+    faithfulness: float = Field(ge=0, le=1)
     token_f1: float = Field(ge=0, le=1)
     rouge_l: float = Field(ge=0, le=1)
     source_support: float = Field(ge=0, le=1)
@@ -150,6 +154,8 @@ class JudgeScores(StrictModel):
 class ExperimentCaseResult(StrictModel):
     case_index: int
     variant: str
+    retrieval_strategy: str = "none"
+    reranker_enabled: bool = False
     question: str
     reference_answer: str
     source_document: str
@@ -164,6 +170,8 @@ class ExperimentCaseResult(StrictModel):
 
 class VariantSummary(StrictModel):
     name: str
+    retrieval_strategy: str
+    reranker_enabled: bool
     case_count: int
     success_rate: float
     retrieval_metrics: dict[str, float] | None

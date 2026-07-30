@@ -4,7 +4,7 @@
 
 - LoRA/SFT：生产简历优化、JD 匹配、面试问答、项目深挖、Agent/RAG 技术和系统设计数据。
 - RAG：生成或导入领域文档，并生产带原文证据的独立评测集。
-- 模型实验：统一比较 Base、Base+RAG、LoRA、LoRA+RAG。
+- 模型实验：统一比较 Vector、BM25、Hybrid 与 Hybrid + Rerank；回答模型仍可独立切换 Base / LoRA。
 - Agent：训练数据和知识库为 Agent 提供能力基础；工具选择、状态流转和业务副作用继续由 `backend/app/eval` 做行为回归。
 
 本工程不会在安装或导入模块时自动调用模型；正式数据只会由显式生成命令写入输出目录。
@@ -264,15 +264,17 @@ uv run --project datasets python datasets\scripts\check_quality.py `
 
 报告写入 `reports/quality_report.json` 和 `reports/quality_report.md`。严格检查未通过时脚本返回非零退出码，适合接入 CI。
 
-## Base / RAG / LoRA 对照实验
+## Hybrid RAG 对照实验
 
-先配置 Base 和 LoRA 的模型端点：
+先配置回答模型、Embedding 和 Reranker 端点：
 
 ```powershell
 $env:BASE_MODEL_BASE_URL='http://127.0.0.1:8001/v1'
 $env:BASE_MODEL_NAME='base-model'
-$env:LORA_MODEL_BASE_URL='http://127.0.0.1:8002/v1'
-$env:LORA_MODEL_NAME='lora-model'
+$env:EMBEDDING_BASE_URL='http://127.0.0.1:8003/v1'
+$env:EMBEDDING_MODEL_NAME='embedding-model'
+$env:RERANKER_BASE_URL='http://127.0.0.1:8004/v1'
+$env:RERANKER_MODEL_NAME='reranker-model'
 ```
 
 运行：
@@ -292,26 +294,26 @@ uv run --project datasets python datasets\scripts\run_experiments.py `
 
 默认实验矩阵：
 
-| Variant | 回答模型 | 是否注入检索上下文 |
+| Variant | 召回方式 | Rerank |
 | --- | --- | --- |
-| Base | Base | 否 |
-| Base+RAG | Base | 是 |
-| LoRA | LoRA | 否 |
-| LoRA+RAG | LoRA | 是 |
+| Vector RAG | 向量 | 否 |
+| BM25 RAG | BM25 | 否 |
+| Hybrid RAG | Vector + BM25 + RRF | 否 |
+| Hybrid + Rerank | Vector + BM25 + RRF | 是 |
 
-默认检索器是完全本地、可复现的 BM25 基线。它用于验证闭环和建立检索下限，后续可按相同接口增加 pgvector、Milvus、Elasticsearch 或混合检索实现。
+每个 `experiments.variants` 条目可独立设置 `retrieval_strategy: none | vector | bm25 | hybrid` 和 `reranker_enabled`。旧配置中的 `use_rag` 仍兼容：为 `true` 时使用 `experiments.retriever.kind`，为 `false` 时不注入上下文。回答模型仍由 variant 的 `provider` 独立选择，因此也可以继续组织 Base / LoRA 对照。
 
 检索指标：
 
-- Hit@K：前 K 个结果是否包含标注源文档；
+- Recall@K：前 K 个结果覆盖标注相关源文档的比例；
 - MRR：正确源文档首次出现排名的倒数；
 - Evidence Recall：`supporting_excerpt` 被检索片段覆盖的比例。
 
 回答指标：
 
-- Token F1；
-- ROUGE-L；
-- Source Support；
+- Answer Score：Token F1 与 ROUGE-L 的均值；
+- Faithfulness：候选回答内容被标注证据覆盖的比例；
+- JSON 明细同时保留 Token F1、ROUGE-L 和 Source Support；
 - 可选 LLM-as-judge：正确性、相关性、可溯源性、工程质量。
 
 若启用 Judge，在 `experiments.judge_provider` 中填写 Provider 名称。确定性文本指标适合持续回归，Judge 适合补充语义判断，二者不应互相替代。

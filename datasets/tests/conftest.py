@@ -11,6 +11,7 @@ import pytest
 
 from jobpilot_datasets.config import AppConfig, load_config
 from jobpilot_datasets.providers.base import GenerationRequest
+from jobpilot_datasets.evaluation.retrieval import SearchResult
 
 
 DATASETS_ROOT = Path(__file__).resolve().parents[1]
@@ -146,3 +147,35 @@ class DeterministicProvider:
 
     async def close(self) -> None:
         self.closed = True
+
+
+class DeterministicEmbeddingProvider:
+    """按字符桶生成确定性向量，供 Vector/Hybrid 实验回归。"""
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        vectors: list[list[float]] = []
+        for text in texts:
+            vector = [0.0] * 16
+            for character in text.lower():
+                vector[ord(character) % len(vector)] += 1.0
+            vectors.append(vector)
+        return vectors
+
+    async def close(self) -> None:
+        return None
+
+
+class PassthroughReranker:
+    """保持候选顺序的确定性 Reranker。"""
+
+    async def rerank(
+        self,
+        query: str,
+        results: list[SearchResult],
+        *,
+        top_k: int,
+    ) -> list[SearchResult]:
+        return results[:top_k]
+
+    async def close(self) -> None:
+        return None

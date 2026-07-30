@@ -49,6 +49,22 @@ providers:
     concurrency: 4
     send_seed: true
 
+  embedding:
+    kind: openai_compatible
+    base_url: ${EMBEDDING_BASE_URL:-${DATASET_LLM_BASE_URL:-}}
+    api_key: ${EMBEDDING_API_KEY:-${DATASET_LLM_API_KEY:-}}
+    model: ${EMBEDDING_MODEL_NAME:-}
+    timeout_seconds: 60
+    max_retries: 2
+
+  reranker:
+    kind: openai_compatible
+    base_url: ${RERANKER_BASE_URL:-}
+    api_key: ${RERANKER_API_KEY:-}
+    model: ${RERANKER_MODEL_NAME:-}
+    timeout_seconds: 30
+    max_retries: 2
+
   # 将 experiments.variants[*].provider 或 generation.provider 指向此配置，
   # 即可通过 transformers 直接加载本地 Qwen。model 建议填写本地模型目录。
   qwen_local_example:
@@ -280,18 +296,31 @@ experiments:
     top_k: 5
     chunk_size: 600
     chunk_overlap: 100
+    candidate_multiplier: 3
+    bm25_k1: 1.5
+    bm25_b: 0.75
+    hybrid_rrf_k: 60
+    vector_weight: 1.0
+    bm25_weight: 1.0
   concurrency: 4
   judge_provider:
+  embedding_provider: embedding
+  reranker_provider: reranker
   variants:
-    - name: Base
-      provider: base
-      use_rag: false
-    - name: Base+RAG
+    - name: Vector RAG
       provider: base
       use_rag: true
-    - name: LoRA
-      provider: lora
-      use_rag: false
-    - name: LoRA+RAG
-      provider: lora
+      retrieval_strategy: vector
+    - name: BM25 RAG
+      provider: base
       use_rag: true
+      retrieval_strategy: bm25
+    - name: Hybrid RAG
+      provider: base
+      use_rag: true
+      retrieval_strategy: hybrid
+    - name: Hybrid + Rerank
+      provider: base
+      use_rag: true
+      retrieval_strategy: hybrid
+      reranker_enabled: true

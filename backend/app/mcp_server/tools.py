@@ -88,7 +88,7 @@ async def search_knowledge(
     knowledge_base_id: int | None = None,
     top_k: int = 5,
 ) -> dict[str, Any]:
-    """在当前用户知识库中做语义检索。"""
+    """按当前 RAG 策略检索用户知识库。"""
     return await invoke_read_tool(
         SearchKnowledgeTool,
         {

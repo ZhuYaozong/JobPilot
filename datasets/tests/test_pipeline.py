@@ -2,7 +2,11 @@ from pathlib import Path
 
 import pytest
 
-from conftest import DeterministicProvider
+from conftest import (
+    DeterministicEmbeddingProvider,
+    DeterministicProvider,
+    PassthroughReranker,
+)
 from jobpilot_datasets.evaluation.runner import ExperimentRunner
 from jobpilot_datasets.pipeline import DatasetPipeline
 from jobpilot_datasets.quality import QualityInspector
@@ -54,24 +58,29 @@ async def test_full_pipeline_resume_quality_and_experiment(test_config) -> None:
     base_provider = DeterministicProvider(
         "服务应设置有限重试、监控错误率并在失败时降级和回滚。",
     )
-    lora_provider = DeterministicProvider(
-        "先校验请求并设置超时与指数退避重试，持续失败则降级；同时记录"
-        "P95延迟、错误分类和请求标识，以支持告警、回放和灰度回滚。",
-    )
     experiment = await ExperimentRunner(
         test_config,
         provider_overrides={
             "base": base_provider,
-            "lora": lora_provider,
         },
+        embedding_provider_override=DeterministicEmbeddingProvider(),
+        reranker_provider_override=PassthroughReranker(),
     ).run(limit=2)
     assert [item.name for item in experiment.variants] == [
-        "Base",
-        "Base+RAG",
-        "LoRA",
-        "LoRA+RAG",
+        "Vector RAG",
+        "BM25 RAG",
+        "Hybrid RAG",
+        "Hybrid + Rerank",
     ]
     assert all(item.case_count == 2 for item in experiment.variants)
+    assert all("answer_score" in item.answer_metrics for item in experiment.variants)
+    assert all("faithfulness" in item.answer_metrics for item in experiment.variants)
+    assert all(
+        item.retrieval_metrics is not None
+        and "recall_at_k" in item.retrieval_metrics
+        and "mrr" in item.retrieval_metrics
+        for item in experiment.variants
+    )
     report_path = (
         test_config.resolve_path(test_config.paths.reports_dir)
         / "experiments"
