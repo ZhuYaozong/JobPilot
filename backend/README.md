@@ -16,7 +16,7 @@
 - write 类工具必填字段缺失统一走 `missing_required_field` 业务错,引导 LLM 自然追问而不是抛 ValidationError。
 - SSE 流式 Assistant。
 - KnowledgeBase / KnowledgeDocument / KnowledgeChunk 数据层。
-- 自研文本切片、OpenAI-compatible embedding client、pgvector 检索。
+- 自研文本切片、OpenAI-compatible embedding client、BM25 / pgvector 混合检索与可选 Reranker。
 - 用户作用域隔离(JWT 用户与 dev 用户共享同一份作用域规则)。
 
 ## Technology
@@ -96,13 +96,90 @@ LLM_MODEL_NAME=your-chat-model
 Embedding 配置：
 
 ```env
-EMBEDDING_BASE_URL=https://api.example.com/v1
-EMBEDDING_API_KEY=your-api-key
-EMBEDDING_MODEL_NAME=your-embedding-model
-EMBEDDING_DIMENSIONS=1536
+EMBEDDING_BASE_URL=http://127.0.0.1:7997/v1
+EMBEDDING_API_KEY=local-no-auth
+EMBEDDING_MODEL_NAME=BAAI/bge-m3
+EMBEDDING_DIMENSIONS=1024
+EMBEDDING_SEND_DIMENSIONS=false
 ```
 
-`EMBEDDING_*` 可以独立于 `LLM_*`。如果不设置 embedding endpoint，`EmbeddingClient` 会尝试复用 LLM endpoint；如果仍缺少必要配置，知识库索引会失败并把错误写入文档状态，用户可修正配置后重新索引。
+`EMBEDDING_*` 可以独立于 `LLM_*`。如果不设置 embedding endpoint，`EmbeddingClient` 会尝试复用 LLM endpoint；如果仍缺少必要配置，知识库索引会失败并把错误写入文档状态，用户可修正配置后重新索引。BGE-M3 的 dense embedding 是 1024 维；`EMBEDDING_SEND_DIMENSIONS=false` 表示请求不发送 OpenAI 扩展字段，但响应仍必须通过 1024 维校验。
+
+RAG 检索配置：
+
+```env
+# vector / bm25 / hybrid；默认使用隔离验证集选出的 hybrid
+RAG_STRATEGY=hybrid
+RAG_CANDIDATE_MULTIPLIER=3
+RAG_BM25_K1=1.5
+RAG_BM25_B=0.75
+RAG_HYBRID_RRF_K=60
+RAG_VECTOR_WEIGHT=1.0
+RAG_BM25_WEIGHT=1.0
+
+# 默认模型重排，使用 POST /rerank 协议
+RAG_RERANKER_ENABLED=true
+RERANKER_BASE_URL=http://127.0.0.1:7997/v1
+RERANKER_API_KEY=
+RERANKER_MODEL_NAME=BAAI/bge-reranker-v2-m3
+RERANKER_TIMEOUT_SECONDS=15
+```
+
+常用组合：
+
+| 策略 | `RAG_STRATEGY` | `RAG_RERANKER_ENABLED` |
+| --- | --- | --- |
+| Vector RAG（诊断/回退） | `vector` | `false` |
+| BM25 RAG | `bm25` | `false` |
+| Hybrid RAG | `hybrid` | `false` |
+| Hybrid + Rerank（质量优先默认） | `hybrid` | `true` |
+
+Hybrid 使用加权 RRF 融合两路排名。生产默认采用等权 Hybrid + Rerank：`RRF k=60`、候选倍数 3。向量服务不可用时默认退化到 BM25，Reranker 不可用时默认保留融合结果；可分别通过 `RAG_HYBRID_VECTOR_FAIL_OPEN=false`、`RAG_RERANKER_FAIL_OPEN=false` 改为严格失败。快速回退建议使用 `RAG_STRATEGY=bm25`、`RAG_RERANKER_ENABLED=false`，不涉及数据库迁移。
+
+`bge-reranker-v2-m3` 对 query 与 passage 成对打相关性分数，不写入 pgvector，因此它没有需要配置的“向量维度”。1024 维只属于 BGE-M3 的 dense embedding 和 `knowledge_chunks.embedding`。
+
+## BGE-M3 维度迁移
+
+旧部署的 `knowledge_chunks.embedding` 是 `vector(1536)`。迁移 `e8f3a1c9d204` 会执行以下受控操作：
+
+- 只接受当前列为 `vector(1536)` 或已迁移的 `vector(1024)`，未知维度直接失败；
+- 删除并重建 cosine HNSW 索引；
+- 清空不能跨模型复用的旧向量，但保留 `knowledge_documents`、chunk 文本、ACL 和元数据；
+- 迁移后 BM25 可继续检索旧 chunk，向量召回随批量重建逐步恢复。
+
+仅合并或部署代码不会自动执行该迁移，也不会访问 BGE-M3 / Reranker 服务。模型端点、数据库备份和维护窗口未准备好时，应保留旧运行配置和数据库版本；不要提前执行 `alembic upgrade head`。
+
+生产执行前必须备份数据库，并暂停文档写入。推荐先把运行实例临时切到 `RAG_STRATEGY=bm25`、关闭 Reranker，然后按以下顺序操作：
+
+```powershell
+# 1. 数据库仍是 vector(1536) 时，只读预测迁移后的重建规模
+uv --cache-dir .uv-cache --directory backend run python scripts/reindex_knowledge_embeddings.py --pre-migration-audit
+
+# 2. 将 backend/.env 切到 BGE-M3 配置（见上文），再执行 schema 迁移
+uv --cache-dir .uv-cache --directory backend run alembic upgrade head
+
+# 3. 验证数据库列、Embedding 端点和真实待处理数量，不写数据
+uv --cache-dir .uv-cache --directory backend run python scripts/reindex_knowledge_embeddings.py --dry-run
+
+# 4. 可按用户或数量灰度；失败时退出码非 0，旧 chunks 会保留供 BM25 使用
+uv --cache-dir .uv-cache --directory backend run python scripts/reindex_knowledge_embeddings.py --username test --limit 10
+
+# 5. 全量重建
+uv --cache-dir .uv-cache --directory backend run python scripts/reindex_knowledge_embeddings.py
+
+# 中断时可从控制台最后输出的 last_document_id 之后继续
+uv --cache-dir .uv-cache --directory backend run python scripts/reindex_knowledge_embeddings.py --after-id 123
+```
+
+脚本默认只处理此前为 `ready` 的文档，避免把历史 `failed/pending/parsing` 数据混入迁移结果；只有显式传入 `--include-non-ready` 才扩展范围。启动写入前会同时检查 `EMBEDDING_DIMENSIONS=1024`、数据库为 `vector(1024)`，并实际调用一次 embedding 端点确认返回 1024 维。处理过程按文档顺序执行，`--batch-size` 只控制游标分页大小，不会并发打满模型服务。全量结束后应再次从 0 执行 `--dry-run`，确认 `candidates=0`。完整的备份、灰度、断点续跑和回退步骤见 [BGE-M3 迁移运行手册](../docs/rag/bge-m3-migration-runbook.md)。全量成功后可切换：
+
+```env
+RAG_STRATEGY=hybrid
+RAG_RERANKER_ENABLED=true
+RERANKER_MODEL_NAME=BAAI/bge-reranker-v2-m3
+```
+
+快速业务回退不需要改 schema：设置 `RAG_STRATEGY=bm25`、`RAG_RERANKER_ENABLED=false` 即可。若必须回到旧 1536 维模型，先备份，然后执行 `alembic downgrade d4a7c9e2b610` 并恢复旧模型配置；降级同样会清空现有 1024 维向量，必须用旧模型重新索引。Alembic 降级只能恢复列类型，不能恢复已清空的历史向量。
 
 认证与生产安全配置：
 
@@ -186,6 +263,8 @@ uv --cache-dir .uv-cache --directory backend run python -m app.eval.cli
 
 - `--filter NAME`：正则匹配 case 名，只跑命中的（如 `--filter search`）。
 - `--live`：用真 `LLMClient` + `EmbeddingClient`，需要 `LLM_*` / `EMBEDDING_*` 环境变量已配置。
+- `--model NAME`：仅在当前 eval 进程覆盖聊天模型名，Agent 与工具内部的 LLM 调用保持一致。
+- `--exclude-tool NAME`：从本次 Agent prompt 和执行目录排除工具，可重复指定。
 - `--report-dir PATH`：自定义报告输出根目录（默认 `./eval-reports/`，每次跑会生成时间戳子目录）。
 
 每次跑会输出：
@@ -195,6 +274,35 @@ uv --cache-dir .uv-cache --directory backend run python -m app.eval.cli
 - `eval-reports/<timestamp>/case-<name>.json`：每 case 的完整 trace（工具调用、参数、结果、最终回复）。
 
 新增 case 时只需在 `app/eval/datasets/` 下加 yaml，runner 会自动加载；参考 `v1.yaml` 的 fake_responses 关键词分发约定。框架本身的回归测试在 `tests/test_eval_runner.py`，跟 pytest 一起跑。
+
+### Base / LoRA 无 RAG Agent 对比
+
+第一阶段使用 `app/eval/datasets_live/agent_no_rag_v1.yaml`。这里的“关闭 RAG”是
+请求级隔离：评测 Agent 看不到也无法执行 `search_knowledge`，不需要停止 embedding、
+reranker 或其他 RAG 服务。每个 case 会创建独立测试用户，避免以前的种子数据被列表
+工具读到。两个模型必须使用同一数据集和同一排除配置：
+
+```powershell
+uv --cache-dir .uv-cache --directory backend run python -m app.eval.cli --live --dataset app/eval/datasets_live/agent_no_rag_v1.yaml --model jobpilot-base --exclude-tool search_knowledge --report-dir eval-reports/agent-no-rag/base
+
+uv --cache-dir .uv-cache --directory backend run python -m app.eval.cli --live --dataset app/eval/datasets_live/agent_no_rag_v1.yaml --model jobpilot-lora-v1 --exclude-tool search_knowledge --report-dir eval-reports/agent-no-rag/lora
+
+uv --cache-dir .uv-cache --directory backend run python -m app.eval.compare --base-dir eval-reports/agent-no-rag/base --lora-dir eval-reports/agent-no-rag/lora --output-dir eval-reports/agent-no-rag/comparison
+```
+
+对比报告同时给出 case 通过率、Agent 成功率、工具路由、工具参数、最终回复、
+平均耗时和 RAG 工具泄漏次数。真实对比集只用确定性断言，不让被测模型给自己评分。
+
+独立 500 条领域数据的完整 Agent 配对实验见
+[`evaluation/agent/README.md`](../evaluation/agent/README.md)。该实验支持六类均衡预检、
+逐条落盘和断点续跑，并对比单轮直调与 LangGraph Agent 包装后的指标变化。
+
+2026-07-30 的 500 条运行结果表明：LoRA 工作流成功率为 99.6%，高于 Base 的
+78.8%，但 LoRA 错误工具调用率为 11.2%、重复工具调用率为 7.6%；Base 的主要
+失败类别是 `decide_repair_failed`（106 条）。这说明当前请求级 RAG 隔离已经有效，
+下一步优化重点应是 Base 决策 JSON 的解析鲁棒性和 LoRA 对“泛化咨询”与“操作已保存
+资源”的意图区分。结果文件默认被 `.gitignore` 排除，README 只记录可复核的汇总，
+不把自动指标当作最终上线结论。
 
 ## User Scope
 
@@ -270,6 +378,7 @@ X-User-Name: demo
 | `POST` | `/api/auth/register` | 用户名 + email + 密码注册,bcrypt 哈希,返回 JWT |
 | `POST` | `/api/auth/login` | 用户名 + 密码登录,返回 JWT |
 | `GET` | `/api/auth/me` | 校验 token 并返回当前用户公开信息 |
+| `POST` | `/api/auth/mcp-token` | 为当前登录用户签发短期、只读、绑定 MCP audience 的 token |
 
 注意:auth router 的 prefix 是 `/api/auth`,**不带 `/v1`**;其它业务 API 仍走 `/api/v1`。
 
@@ -425,7 +534,7 @@ X-User-Name: demo
 | `list_generated_artifacts` | list | No | 列已生成的求职信/面试材料等(紧凑列表,不返正文) |
 | `read_resume` | read | No | 按 id 读取简历完整结构(parsed_json + raw_text) |
 | `read_job_posting` | read | No | 按 id 读取岗位完整结构(parsed_json + jd_text) |
-| `search_knowledge` | retrieval | No | 语义检索知识库 |
+| `search_knowledge` | retrieval | No | 按配置执行 Vector / BM25 / Hybrid 检索 |
 | `parse_resume` | parse | Yes | 触发简历 LLM 解析,把 parse_status 升级为 parsed |
 | `parse_job_posting` | parse | Yes | 触发岗位 LLM 解析,填 parsed_json |
 | `analyze_match` | action | Yes | 创建匹配分析 |
@@ -441,6 +550,36 @@ X-User-Name: demo
 | `add_knowledge_text` | knowledge | Yes | 把文本存入指定知识库(**仅在用户明确要求保存时调用**,decide prompt 与 tool description 双重防御) |
 
 SSE endpoint 会发送阶段、工具开始、工具完成、消息、错误和完成事件,前端据此展示"正在思考""正在调用工具"等运行状态。完整工具调用详情(arguments_json / result_json / error_detail)通过 `GET /api/v1/conversations/{cid}/agent-runs` 端点提供给前端可观测面板。
+
+### MCP Client 与统一 ToolCatalog
+
+Assistant 通过 `app.agent.tool_catalog.ToolCatalog` 合并两类工具：
+
+- 本地工具：继续从 `TOOL_REGISTRY` 加载，直接复用业务 Service。
+- 外部 MCP 工具：从 `MCP_SERVERS_JSON` 配置的 Streamable HTTP Server 动态发现，
+  仅加入 `allowed_tools` 白名单，并使用 `mcp__server__tool` 技术名。
+
+单个外部 Server 发现失败时会降级为本地工具目录，不会阻断 Assistant。远程工具调用会
+使用现有 `ToolCallLog` 审计，并记录命名空间工具名、耗时和稳定错误分类。外部返回先做
+结构化映射和限长，再进入 ReAct 工具历史。
+
+### JobPilot MCP Server
+
+`app.mcp_server.app:app` 是独立、只读的 Streamable HTTP ASGI 服务，当前暴露：
+
+- Tools：`list_saved_jobs`、`list_resumes`、`list_applications`、`list_artifacts`、
+  `read_resume`、`read_job_posting`、`search_knowledge`。
+- Resources：`jobpilot://resumes/{resume_id}`、`jobpilot://jobs/{job_id}`。
+
+运行：
+
+```powershell
+uv run uvicorn app.mcp_server.app:app --host 127.0.0.1 --port 8001
+```
+
+用户先携带普通 JobPilot JWT 调用 `POST /api/auth/mcp-token`，换取一小时有效、
+绑定 MCP audience 且只有 `jobpilot:read` scope 的 token。普通 API token 不能直接访问
+MCP Server。生产公网接入完整 OAuth 客户端发现前，本服务定位为私有/自托管集成。
 
 ### Write 工具必填字段约定
 
@@ -474,7 +613,9 @@ OpenAI-compatible embeddings
 ↓
 写入 knowledge_chunks.embedding
 ↓
-search_knowledge 使用 pgvector 检索
+RetrievalService 按配置执行 Vector / BM25 / Hybrid 召回
+↓
+可选 Reranker 重排并构造兼容 Context
 ```
 
 支持的文件来源：
@@ -517,7 +658,8 @@ uv --cache-dir .uv-cache --directory backend run alembic current
 - 生产级异步任务队列(知识库索引仍在 HTTP 请求内同步执行)。
 - 邮件、日历、通知或真实投递集成。
 - PDF 导出和模板排版(已支持简历版本 / 求职材料的 Markdown / DOCX 导出)。
-- embedding 维度在线切换。
+- embedding 维度仍不能在线双写切换；当前提供的是需要维护窗口的可回滚 schema 迁移与安全重建脚本。
+- 超大用户知识库的分布式 BM25 索引（当前 BM25 在已做 ACL 过滤的用户 chunks 上计算）。
 - 简历版本号并发锁或唯一约束(当前按 `max(version_no)+1` 派生)。
 - GitHub Actions 已覆盖测试和构建，但还没有部署流水线。
 - AgentRun token_usage 字段尚未真填(schema 已透出,等接入 token 计费时再补)。

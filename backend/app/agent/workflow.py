@@ -41,7 +41,7 @@ from app.agent.prompts import (
     build_summarize_prompt,
 )
 from app.agent.tool_adapter import ToolContext, ToolValidationError
-from app.agent.tools import TOOL_REGISTRY
+from app.agent.tool_catalog import ToolCatalog
 from app.llm.client import LLMClient, LLMClientError, LLMConfigError
 from app.llm.json_utils import load_llm_json
 from app.models.user import User
@@ -128,6 +128,7 @@ def build_workflow(
     agent_run_id: int,
     llm_client: LLMClient | None = None,
     emit_event: EventEmitter | None = None,
+    tool_catalog: ToolCatalog | None = None,
 ):
     """为单次请求编译一个新的 LangGraph workflow。
 
@@ -137,6 +138,7 @@ def build_workflow(
     """
 
     client = llm_client or LLMClient()
+    catalog = tool_catalog or ToolCatalog.local_only()
 
     async def emit(event_type: str, data: dict[str, Any]) -> None:
         if emit_event is None:
@@ -172,6 +174,7 @@ def build_workflow(
                 existing_summary=existing_summary,
                 tool_call_history=tool_history,
                 iterations_remaining=iterations_remaining,
+                tool_catalog=catalog,
             )
         else:
             prompt = build_decide_repair_prompt(
@@ -182,6 +185,7 @@ def build_workflow(
                 error_description=state.get("decide_last_error") or "unknown error",
                 tool_call_history=tool_history,
                 iterations_remaining=iterations_remaining,
+                tool_catalog=catalog,
             )
 
         try:
@@ -205,7 +209,7 @@ def build_workflow(
             return _decide_failure(attempts, raw, error)
 
         if envelope.action == "call_tool":
-            if envelope.tool not in TOOL_REGISTRY:
+            if not envelope.tool or not catalog.has(envelope.tool):
                 # 工具名不在注册表中通常是模型幻觉，也走 repair 路径。
                 error = f"tool {envelope.tool!r} is not registered"
                 return _decide_failure(attempts, raw, error)
@@ -233,7 +237,6 @@ def build_workflow(
             "tool_call_started",
             {"tool_name": tool_name, "iteration": iteration},
         )
-        tool_cls = TOOL_REGISTRY[tool_name]
         ctx = ToolContext(
             db=db,
             current_user=current_user,
@@ -245,7 +248,7 @@ def build_workflow(
             # UI 选中的知识库是强约束，不能只依赖 LLM 自觉传参或不传错参。
             args["knowledge_base_id"] = selected_knowledge_base_id
         try:
-            result = await tool_cls().invoke(args, ctx)
+            result = await catalog.invoke(tool_name, args, ctx)
         except ToolValidationError:
             # 参数 schema 错误通常是模型可修复错误；这里造一条 ok=false 的工具观察，
             # 让 format_response 即使没有真实工具结果，也能向用户解释失败原因和下一步。

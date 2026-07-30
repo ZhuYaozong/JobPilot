@@ -64,6 +64,12 @@ def _install_failing_embedder(monkeypatch, exc: Exception) -> None:
     monkeypatch.setattr(EmbeddingClient, "embed", fake_embed)
 
 
+def _use_strict_vector_mode(monkeypatch) -> None:  # noqa: ANN001
+    """让只验证 pgvector 语义的测试不受生产 Hybrid 默认值影响。"""
+    monkeypatch.setattr(settings, "rag_strategy", "vector")
+    monkeypatch.setattr(settings, "rag_reranker_enabled", False)
+
+
 async def _setup_agent_run(db: AsyncSession, marker: str) -> tuple[User, int]:
     user = (
         await db.execute(select(User).where(User.username == "test"))
@@ -143,6 +149,7 @@ async def _seed_chunk(
 def test_search_knowledge_returns_nearest_chunks_and_logs_success(
     monkeypatch, test_marker: str,
 ) -> None:
+    _use_strict_vector_mode(monkeypatch)
     axis = _marker_axis(test_marker)
     other_axis = (axis + 1) % settings.embedding_dimensions
     _install_query_embedder(monkeypatch, _vec(axis))
@@ -337,6 +344,7 @@ def test_search_knowledge_rejects_other_users_knowledge_base(
 def test_search_knowledge_skips_chunks_without_embedding(
     monkeypatch, test_marker: str,
 ) -> None:
+    _use_strict_vector_mode(monkeypatch)
     axis = _marker_axis(test_marker)
     _install_query_embedder(monkeypatch, _vec(axis))
 
@@ -383,6 +391,7 @@ def test_search_knowledge_skips_chunks_without_embedding(
 def test_search_knowledge_embedding_config_error_is_business_error(
     monkeypatch, test_marker: str,
 ) -> None:
+    _use_strict_vector_mode(monkeypatch)
     _install_failing_embedder(
         monkeypatch, EmbeddingConfigError("missing embedding config"),
     )
@@ -414,5 +423,54 @@ def test_search_knowledge_embedding_config_error_is_business_error(
         ).scalar_one()
         assert log.status == "failed"
         assert log.error_class == "embedding_config_missing"
+
+    _run(_scenario)
+
+
+def test_search_knowledge_can_switch_to_bm25_without_embedding(
+    monkeypatch, test_marker: str,
+) -> None:
+    """切换 BM25 后 Agent 工具契约和用户隔离保持不变。"""
+    monkeypatch.setattr(settings, "rag_strategy", "bm25")
+
+    async def _scenario(db: AsyncSession) -> None:
+        user, agent_run_id = await _setup_agent_run(db, test_marker)
+        other = await _other_user(db)
+        kb, own_doc = await _seed_kb(
+            db, user_id=user.id, marker=test_marker, suffix="bm25-own",
+        )
+        _, other_doc = await _seed_kb(
+            db, user_id=other.id, marker=test_marker, suffix="bm25-other",
+        )
+        own = await _seed_chunk(
+            db,
+            doc=own_doc,
+            content=f"{test_marker} 稀有检索词 混合召回方案",
+            embedding=None,
+        )
+        await _seed_chunk(
+            db,
+            doc=other_doc,
+            content=f"{test_marker} 稀有检索词 稀有检索词",
+            embedding=None,
+        )
+        await db.commit()
+        own_id = own.id
+        kb_id = kb.id
+
+        result = await SearchKnowledgeTool().invoke(
+            {
+                "query": f"{test_marker} 稀有检索词",
+                "knowledge_base_id": kb_id,
+                "top_k": 1,
+            },
+            ToolContext(db=db, current_user=user, agent_run_id=agent_run_id),
+        )
+
+        assert result["ok"] is True
+        assert result["data"]["hits"][0]["chunk_id"] == own_id
+        assert set(result["data"]["hits"][0]) >= {
+            "distance", "relevance", "content", "document_title",
+        }
 
     _run(_scenario)

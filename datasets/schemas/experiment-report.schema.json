@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jobpilot.local/schemas/experiment-report.schema.json",
+  "title": "JobPilot Experiment Report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["created_at", "mode", "evaluation_count", "variants"],
+  "properties": {
+    "created_at": {"type": "string"},
+    "mode": {"enum": ["end_to_end", "retrieval_only"]},
+    "evaluation_count": {"type": "integer", "minimum": 0},
+    "variants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "retrieval_strategy", "reranker_enabled", "case_count", "success_rate", "answer_metrics", "latency_ms_average", "latency_ms_p95"],
+        "properties": {
+          "name": {"type": "string"},
+          "retrieval_strategy": {"enum": ["none", "vector", "bm25", "hybrid"]},
+          "reranker_enabled": {"type": "boolean"},
+          "case_count": {"type": "integer", "minimum": 0},
+          "success_rate": {"type": "number", "minimum": 0, "maximum": 1},
+          "retrieval_metrics": {
+            "type": ["object", "null"],
+            "properties": {
+              "recall_at_k": {"type": "number", "minimum": 0, "maximum": 1},
+              "mrr": {"type": "number", "minimum": 0, "maximum": 1}
+            }
+          },
+          "answer_metrics": {
+            "type": ["object", "null"],
+            "required": ["answer_score", "faithfulness"],
+            "properties": {
+              "answer_score": {"type": "number", "minimum": 0, "maximum": 1},
+              "faithfulness": {"type": "number", "minimum": 0, "maximum": 1}
+            }
+          },
+          "judge_metrics": {"type": ["object", "null"]},
+          "latency_ms_average": {"type": "number", "minimum": 0},
+          "latency_ms_p95": {"type": "number", "minimum": 0}
+        }
+      }
+    }
+  }
+}

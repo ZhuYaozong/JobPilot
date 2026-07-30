@@ -10,7 +10,7 @@ workflow 会用 ``state["tool_name"]`` 从这个字典里取工具类。新增�
 
 - **列表 / 读工具**(``list_user_*``、``read_resume``、``read_job_posting``、
   ``list_generated_artifacts``)：便宜、无 LLM、无副作用。list 拿 id,read 拿细节。
-- **检索工具**(``search_knowledge``)：对用户上传的知识库内容做语义检索，每次调用会
+- **检索工具**(``search_knowledge``)：对用户上传的知识库内容做可配置 RAG 检索，每次调用会
   发起一次 embedding 请求。
 - **解析工具**(``parse_resume``、``parse_job_posting``)：对已落库但未解析的简历 /
   岗位触发 LLM 结构化抽取,把 parse_status 从 pending 升级到 parsed。

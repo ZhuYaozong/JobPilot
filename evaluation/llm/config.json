@@ -1,0 +1,25 @@
+{
+  "api_base_url": "http://127.0.0.1:8000/v1",
+  "api_key_env": "VLLM_API_KEY",
+  "dataset_path": "/home/kai/zyz/Job/jobpilot-llm/data/v1-raw/evaluation.jsonl",
+  "manifest_path": "/home/kai/zyz/Job/jobpilot-llm/data/v1-raw/evaluation_manifest.jsonl",
+  "leakage_check_paths": [
+    "/home/kai/zyz/Job/jobpilot-llm/data/v1-raw/train.jsonl",
+    "/home/kai/zyz/Job/jobpilot-llm/data/v1-raw/val.jsonl",
+    "/home/kai/zyz/Job/jobpilot-llm/data/v1-raw/test.jsonl"
+  ],
+  "output_dir": "/home/kai/zyz/Job/jobpilot-llm/outputs/evaluation/vllm-pair-v1",
+  "models": [
+    "jobpilot-base",
+    "jobpilot-lora-v1"
+  ],
+  "system_prompt": "You are Qwen, created by Alibaba Cloud. You are a helpful assistant.",
+  "temperature": 0,
+  "max_tokens": 1024,
+  "seed": 42,
+  "concurrency": 4,
+  "timeout_seconds": 180,
+  "max_retries": 3,
+  "retry_backoff_seconds": 2,
+  "human_review_size": 30
+}

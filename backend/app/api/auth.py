@@ -10,9 +10,21 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 
 from app.api.deps import CurrentUserDep, DbSession
-from app.core.security import create_access_token, hash_password, verify_password
+from app.core.config import settings
+from app.core.security import (
+    create_access_token,
+    create_mcp_access_token,
+    hash_password,
+    verify_password,
+)
 from app.models.user import User
-from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserPublic
+from app.schemas.auth import (
+    LoginRequest,
+    MCPTokenResponse,
+    RegisterRequest,
+    TokenResponse,
+    UserPublic,
+)
 from app.services.user_scope_service import normalize_username
 
 from sqlalchemy import select
@@ -105,3 +117,20 @@ async def login(body: LoginRequest, db: DbSession):
 async def get_me(current_user: CurrentUserDep):
     """获取当前认证用户的公开信息。验证 token 是否有效。"""
     return UserPublic.model_validate(current_user)
+
+
+@router.post("/mcp-token", response_model=MCPTokenResponse)
+async def issue_mcp_token(current_user: CurrentUserDep):
+    """为当前用户签发短期、只读且绑定 MCP audience 的访问 token。"""
+    scopes = ["jobpilot:read"]
+    token = create_mcp_access_token(
+        current_user.id,
+        current_user.username,
+        scopes,
+    )
+    return MCPTokenResponse(
+        access_token=token,
+        expires_in=settings.mcp_token_expire_minutes * 60,
+        scopes=scopes,
+        resource=settings.mcp_server_public_url,
+    )

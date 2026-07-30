@@ -19,6 +19,9 @@ from pathlib import Path
 
 import pytest
 
+from app.agent.prompts import build_decide_prompt
+from app.agent.tool_catalog import ToolCatalog
+from app.core.config import settings
 from app.eval.assertions import run_assertion
 from app.eval.cases import (
     AssertionSpec,
@@ -29,7 +32,7 @@ from app.eval.cases import (
 )
 from app.eval.fake_llm import FakeLLMUnexpectedPrompt, build_fake_llm, fake_embedding
 from app.eval.loader import load_cases_from_yaml
-from app.eval.runner import _resolve_placeholders, run_cases
+from app.eval.runner import _model_override, _resolve_placeholders, run_cases
 
 
 # ---------- FakeLLMClient ---------------------------------------------------
@@ -106,6 +109,25 @@ def test_tool_called_assertion_passes_when_present_and_fails_when_absent() -> No
     failed = run_assertion(spec_fail, trace, {})
     assert failed.passed is False
     assert "search_knowledge" in failed.detail
+
+
+def test_tool_call_count_checks_all_tools() -> None:
+    trace = _trace_with_calls(
+        {"tool_name": "list_user_jobs", "status": "success", "arguments": {}},
+        {"tool_name": "read_job_posting", "status": "success", "arguments": {}},
+    )
+    assert run_assertion(
+        AssertionSpec(type="tool_call_count", params={"exact": 2}),
+        trace,
+        {},
+    ).passed is True
+    failed = run_assertion(
+        AssertionSpec(type="tool_call_count", params={"exact": 0}),
+        trace,
+        {},
+    )
+    assert failed.passed is False
+    assert "list_user_jobs" in failed.detail
 
 
 def test_tool_order_assertion_allows_interleaved_other_tools() -> None:
@@ -234,6 +256,46 @@ def test_loader_parses_minimal_yaml(tmp_path: Path) -> None:
     assert case.fake_responses[0].match == ["a", "b"]
     assert case.assertions[0].type == "tool_not_called"
     assert case.assertions[0].params == {"tool": "list_user_jobs"}
+
+
+def test_live_no_rag_dataset_has_only_objective_assertions() -> None:
+    dataset_path = (
+        Path(__file__).resolve().parents[1]
+        / "app"
+        / "eval"
+        / "datasets_live"
+        / "agent_no_rag_v1.yaml"
+    )
+    cases = load_cases_from_yaml(dataset_path)
+    assert len(cases) == 10
+    assert all(not case.fake_responses for case in cases)
+    assert all(
+        assertion.type != "llm_judge"
+        for case in cases
+        for assertion in case.assertions
+    )
+
+
+# ---------- 评测隔离配置 ----------------------------------------------------
+
+
+def test_tool_catalog_can_exclude_rag_without_changing_default() -> None:
+    isolated = ToolCatalog.local_only(exclude_names={"search_knowledge"})
+    default = ToolCatalog.local_only()
+    assert isolated.has("search_knowledge") is False
+    assert all(item.name != "search_knowledge" for item in isolated.descriptors)
+    assert default.has("search_knowledge") is True
+
+    prompt = build_decide_prompt("列出我的岗位", tool_catalog=isolated)
+    assert "search_knowledge" not in prompt
+    assert "list_user_jobs" in prompt
+
+
+def test_model_override_is_process_local_and_restored() -> None:
+    previous = settings.llm_model_name
+    with _model_override("jobpilot-test-model"):
+        assert settings.llm_model_name == "jobpilot-test-model"
+    assert settings.llm_model_name == previous
 
 
 # ---------- fake embedding --------------------------------------------------

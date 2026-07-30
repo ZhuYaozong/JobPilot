@@ -1,0 +1,22 @@
+{
+  "source_results_path": "../llm/results/full/jobpilot-base.jsonl",
+  "source_summary_path": "../llm/results/full/summary.json",
+  "single_turn_results": {
+    "jobpilot-base": "../llm/results/full/jobpilot-base.jsonl",
+    "jobpilot-lora-v1": "../llm/results/full/jobpilot-lora-v1.jsonl"
+  },
+  "output_dir": "./results",
+  "expected_count": 500,
+  "dataset_sha256": "2f62ea2a0568beb82acdd198b1a62065d0aed713799e6bc9cd9251d22a743530",
+  "models": [
+    "jobpilot-base",
+    "jobpilot-lora-v1"
+  ],
+  "excluded_tools": [
+    "search_knowledge"
+  ],
+  "timeout_seconds": 90,
+  "concurrency": 2,
+  "human_review_size": 30,
+  "seed": 42
+}

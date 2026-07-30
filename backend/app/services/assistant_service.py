@@ -23,6 +23,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.tool_adapter import ToolSystemError
+from app.agent.tool_catalog import ToolCatalog, build_request_tool_catalog
 from app.agent.workflow import WorkflowDecideError, build_workflow
 from app.llm.client import LLMClient
 from app.models.agent_run import AgentRun
@@ -54,6 +55,7 @@ async def run_assistant_turn(
     current_user: User,
     payload: AssistantRunRequest,
     llm_client: LLMClient | None = None,
+    tool_catalog: ToolCatalog | None = None,
 ) -> AssistantRunResponse:
     # 提前保存 user id。workflow 中的工具适配器可能在请求中途 rollback session，
     # 导致所有挂在 session 上的 ORM 实例过期；之后同步读取 current_user.id 可能触发
@@ -107,11 +109,19 @@ async def run_assistant_turn(
     )
     message_count_before_user = await _count_messages(db, conversation_id) - 1
 
+    # 正常 API 请求使用完整目录；评测器可以注入一个请求级目录来隔离 RAG 等
+    # 变量。注入不会改全局注册表，也不会影响并发中的其他业务请求。
+    request_tool_catalog = (
+        tool_catalog
+        if tool_catalog is not None
+        else await build_request_tool_catalog()
+    )
     workflow = build_workflow(
         db=db,
         current_user=current_user,
         agent_run_id=agent_run_id,
         llm_client=llm_client,
+        tool_catalog=request_tool_catalog,
     )
 
     initial_state: dict[str, Any] = {
@@ -317,12 +327,14 @@ async def run_assistant_turn_stream(
     async def emit_event(event_type: str, data: dict[str, Any]) -> None:
         await event_queue.put({"event": event_type, "data": data})
 
+    tool_catalog = await build_request_tool_catalog()
     workflow = build_workflow(
         db=db,
         current_user=current_user,
         agent_run_id=agent_run_id,
         llm_client=llm_client,
         emit_event=emit_event,
+        tool_catalog=tool_catalog,
     )
 
     initial_state: dict[str, Any] = {

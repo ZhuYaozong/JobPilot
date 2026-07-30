@@ -1,0 +1,266 @@
+# JobPilot Base/LoRA 真实 Agent 对比集（RAG 隔离阶段）。
+#
+# 运行时必须同时指定：
+#   --live --exclude-tool search_knowledge
+# case 只使用客观断言，不让被测模型充当 LLM judge。
+
+- name: live_direct_capability_no_tool
+  description: 功能介绍应直接回答，不能为了展示能力而调用业务工具
+  user_text: 请用两句话说明你能在求职过程中帮我做什么，不要查询或创建任何数据。
+  assertions:
+    - type: agent_run_status
+      status: succeeded
+    - type: tool_call_count
+      exact: 0
+    - type: tool_not_called
+      tool: search_knowledge
+    - type: final_contains
+      values: [简历, 岗位, 面试]
+      mode: any
+
+- name: live_resume_advice_no_tool
+  description: 原则性简历建议不需要读取或写入用户数据
+  user_text: 我的项目经历只写了“负责后端开发”，应该怎样改？先给修改原则，不要替我创建或保存简历。
+  assertions:
+    - type: agent_run_status
+      status: succeeded
+    - type: tool_call_count
+      exact: 0
+    - type: tool_not_called
+      tool: search_knowledge
+    - type: final_contains
+      values: [成果, 指标, 技术, 量化]
+      mode: any
+
+- name: live_list_jobs_by_company
+  description: 用户按公司名询问已有岗位，应调用岗位列表工具并携带查询词
+  user_text: 我保存的岗位里有腾讯的吗？
+  setup:
+    - kind: job
+      company_name: 腾讯
+      job_title: 后端工程师
+      city: 深圳
+      jd_text: 负责 FastAPI 服务和 PostgreSQL 数据平台。
+  assertions:
+    - type: agent_run_status
+      status: succeeded
+    - type: tool_called
+      tool: list_user_jobs
+      status: success
+    - type: tool_call_count
+      exact: 1
+    - type: tool_args_contain
+      tool: list_user_jobs
+      expected:
+        query: 腾讯
+    - type: tool_not_called
+      tool: search_knowledge
+    - type: final_contains
+      values: [腾讯]
+
+- name: live_list_resumes_by_title
+  description: 用户按标题查找已有简历，应调用简历列表工具
+  user_text: 帮我找一下标题里有“后端”的简历。
+  setup:
+    - kind: resume
+      title: 后端工程师简历
+      raw_text: 三年 Python 后端经验，熟悉 FastAPI 和 PostgreSQL。
+  assertions:
+    - type: agent_run_status
+      status: succeeded
+    - type: tool_called
+      tool: list_user_resumes
+      status: success
+    - type: tool_call_count
+      exact: 1
+    - type: tool_args_contain
+      tool: list_user_resumes
+      expected:
+        query: 后端
+    - type: tool_not_called
+      tool: search_knowledge
+    - type: final_contains
+      values: [后端]
+
+- name: live_read_selected_job
+  description: 上下文已选岗位，模型应直接用 id 读取详情而不是重新列表查询
+  user_text: 这个岗位要求哪些核心技能？
+  setup:
+    - kind: job
+      company_name: 字节跳动
+      job_title: AI 应用工程师
+      city: 北京
+      jd_text: 负责 LangGraph Agent、FastAPI 服务和 Kafka 数据管道。
+      parsed_json:
+        required_skills: [LangGraph, FastAPI, Kafka]
+      ref: job
+  context:
+    job_posting_id: "{job_id}"
+  assertions:
+    - type: agent_run_status
+      status: succeeded
+    - type: tool_called
+      tool: read_job_posting
+      status: success
+    - type: tool_call_count
+      exact: 1
+    - type: tool_args_contain
+      tool: read_job_posting
+      expected:
+        job_posting_id: "{job_id}"
+    - type: tool_not_called
+      tool: list_user_jobs
+    - type: tool_not_called
+      tool: search_knowledge
+    - type: final_contains
+      values: [LangGraph, FastAPI, Kafka]
+      mode: any
+
+- name: live_read_selected_resume
+  description: 上下文已选简历，模型应直接读取简历并忠实总结技能
+  user_text: 概括一下这份简历的主要技术栈。
+  setup:
+    - kind: resume
+      title: AI 后端简历
+      raw_text: 熟悉 Python、FastAPI、PostgreSQL，并有 LangGraph Agent 项目经验。
+      parsed_json:
+        skills: [Python, FastAPI, PostgreSQL, LangGraph]
+      ref: resume
+  context:
+    resume_id: "{resume_id}"
+  assertions:
+    - type: agent_run_status
+      status: succeeded
+    - type: tool_called
+      tool: read_resume
+      status: success
+    - type: tool_call_count
+      exact: 1
+    - type: tool_args_contain
+      tool: read_resume
+      expected:
+        resume_id: "{resume_id}"
+    - type: tool_not_called
+      tool: list_user_resumes
+    - type: tool_not_called
+      tool: search_knowledge
+    - type: final_contains
+      values: [Python, FastAPI, PostgreSQL, LangGraph]
+      mode: any
+
+- name: live_list_applications
+  description: 查询投递记录应使用列表工具，不应猜测用户的投递状态
+  user_text: 我目前有哪些投递记录？
+  setup:
+    - kind: resume
+      title: 投递用后端简历
+      ref: resume
+    - kind: job
+      company_name: 美团
+      job_title: 后端工程师
+      ref: job
+    - kind: application
+      resume_id: "{resume_id}"
+      job_posting_id: "{job_id}"
+      current_stage: interview
+      next_action: 准备系统设计面试
+  assertions:
+    - type: agent_run_status
+      status: succeeded
+    - type: tool_called
+      tool: list_user_applications
+      status: success
+    - type: tool_call_count
+      exact: 1
+    - type: tool_not_called
+      tool: search_knowledge
+    - type: final_contains
+      values: [美团, 面试, 投递]
+      mode: any
+
+- name: live_analyze_match_with_selected_context
+  description: 已选简历和岗位时应直接调用匹配分析，并把分析结果收束为用户答复
+  user_text: 分析这份简历与这个岗位的匹配情况，给出优势和改进建议。
+  setup:
+    - kind: resume
+      title: AI 应用工程师简历
+      raw_text: 三年 FastAPI、PostgreSQL、LangGraph Agent 开发经验。
+      parsed_json:
+        summary: AI 应用后端工程师
+        skills: [FastAPI, PostgreSQL, LangGraph]
+      ref: resume
+    - kind: job
+      company_name: 阿里云
+      job_title: 大模型应用工程师
+      city: 杭州
+      jd_text: 使用 LangGraph 和 FastAPI 开发 Agent，要求熟悉 Kubernetes。
+      parsed_json:
+        summary: 大模型 Agent 应用开发岗位
+        required_skills: [LangGraph, FastAPI, Kubernetes]
+      ref: job
+  context:
+    resume_id: "{resume_id}"
+    job_posting_id: "{job_id}"
+  assertions:
+    - type: agent_run_status
+      status: succeeded
+    - type: tool_called
+      tool: analyze_match
+      status: success
+    - type: tool_call_count
+      exact: 1
+    - type: tool_args_contain
+      tool: analyze_match
+      expected:
+        resume_id: "{resume_id}"
+        job_posting_id: "{job_id}"
+    - type: tool_not_called
+      tool: search_knowledge
+    - type: final_contains
+      values: [匹配, 优势, 建议]
+      mode: any
+
+- name: live_mock_interview_one_question
+  description: 模拟面试应遵守每轮一个问题，并且不预先生成整套面试材料
+  user_text: 开始模拟面试，请直接问第一个问题。
+  setup:
+    - kind: resume
+      title: 后端简历
+      raw_text: 三年 FastAPI 与 PostgreSQL 项目经验。
+      parsed_json:
+        skills: [FastAPI, PostgreSQL]
+      ref: resume
+    - kind: job
+      company_name: 腾讯
+      job_title: 后端工程师
+      jd_text: 负责高并发服务和数据库性能优化。
+      parsed_json:
+        required_skills: [高并发, PostgreSQL]
+      ref: job
+  context:
+    assistant_mode: mock_interview
+    resume_id: "{resume_id}"
+    job_posting_id: "{job_id}"
+  assertions:
+    - type: agent_run_status
+      status: succeeded
+    - type: tool_call_count
+      exact: 0
+    - type: tool_not_called
+      tool: search_knowledge
+    - type: final_question_count
+      max: 1
+
+- name: live_cover_letter_missing_context
+  description: 缺少简历和岗位时应澄清信息，不能凭空生成或写入材料
+  user_text: 请帮我写求职信，但我还没选择简历和岗位。现在只告诉我还缺什么，不要生成或保存材料。
+  assertions:
+    - type: agent_run_status
+      status: succeeded
+    - type: tool_call_count
+      exact: 0
+    - type: tool_not_called
+      tool: search_knowledge
+    - type: final_contains
+      values: [简历, 岗位]
+      mode: all

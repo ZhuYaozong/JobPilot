@@ -8,7 +8,7 @@
     parsing  (this function holds the row in flight)
        │
        ├── on success → ready (chunks written, chunk_count populated)
-       └── on failure → failed (error_detail set, old chunks restored to None)
+       └── on failure → 首次索引标记 failed；重新索引则恢复旧状态和旧 chunks
 
 切片 7'c2 刻意保持同步执行，不引 celery / RQ。典型文档少于 50 个 chunk，
 一次批量 embedding 通常 1–3 秒；如果真实用户反馈上传等待太久，后续可以把调用
@@ -19,6 +19,8 @@
 """
 
 from __future__ import annotations
+
+from dataclasses import dataclass
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -43,6 +45,14 @@ DEFAULT_CHUNK_OVERLAP = 100
 MAX_CHUNKS_PER_DOCUMENT = 200
 
 
+@dataclass(frozen=True)
+class _IndexSnapshot:
+    """重新索引前的文档状态，用于失败时恢复仍可用的旧索引。"""
+
+    status: str
+    chunk_count: int
+
+
 async def index_document(
     db: AsyncSession,
     document: KnowledgeDocument,
@@ -50,12 +60,13 @@ async def index_document(
     embedding_client: EmbeddingClient | None = None,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
+    _failure_snapshot: _IndexSnapshot | None = None,
 ) -> KnowledgeDocument:
     """为单个文档执行切片、embedding、写入 chunk 的完整流程。
 
     无论成功或失败都会提交最终状态，调用方即使不手动 refresh，也能相信数据库里的
-    row 反映真实结果。只有程序员错误会继续抛出；embedding 配置、网络、供应商响应
-    等问题都落到 ``status=failed`` 和 ``error_detail``。
+    row 反映真实结果。首次索引的 embedding 配置、网络、供应商响应等问题会落到
+    ``status=failed``；安全重新索引失败时则恢复旧状态和 chunks，并记录 error_detail。
     """
     client = embedding_client or EmbeddingClient()
 
@@ -69,15 +80,33 @@ async def index_document(
             db, document, client, chunk_size=chunk_size, chunk_overlap=chunk_overlap,
         )
     except EmbeddingConfigError as exc:
-        return await _mark_failed(db, document, f"embedding_config_missing: {exc}")
+        return await _mark_failed(
+            db,
+            document,
+            f"embedding_config_missing: {exc}",
+            snapshot=_failure_snapshot,
+        )
     except EmbeddingClientError as exc:
-        return await _mark_failed(db, document, f"embedding_request_failed: {exc}")
+        return await _mark_failed(
+            db,
+            document,
+            f"embedding_request_failed: {exc}",
+            snapshot=_failure_snapshot,
+        )
     except ValueError as exc:
         # 切片参数或 chunk 数保护会抛 ValueError；这属于文档不可索引，不升级成 500。
-        return await _mark_failed(db, document, f"indexing_rejected: {exc}")
+        return await _mark_failed(
+            db,
+            document,
+            f"indexing_rejected: {exc}",
+            snapshot=_failure_snapshot,
+        )
     except Exception as exc:  # noqa: BLE001 — last-ditch defensive
         return await _mark_failed(
-            db, document, f"unexpected_indexing_error: {type(exc).__name__}: {exc}",
+            db,
+            document,
+            f"unexpected_indexing_error: {type(exc).__name__}: {exc}",
+            snapshot=_failure_snapshot,
         )
 
     document.status = "ready"
@@ -94,18 +123,22 @@ async def reindex_document(
     *,
     embedding_client: EmbeddingClient | None = None,
 ) -> KnowledgeDocument:
-    """删除文档已有 chunks，并从头重新索引。
+    """先生成新向量，再原子替换文档已有 chunks。
 
     失败后用户点“重新索引”会走这里；未来如果支持编辑文档正文，也可以复用。
-    该函数幂等，同一个文档重复调用不会留下重叠 chunk。
+    该函数幂等，同一个文档重复调用不会留下重叠 chunk。远端 embedding 失败时
+    会恢复旧状态并保留旧 chunks，确保迁移期间 BM25 仍可降级使用。
     """
-    await _drop_chunks(db, document)
-    document.chunk_count = 0
-    document.status = "pending"
-    document.error_detail = None
-    await db.commit()
-    await db.refresh(document)
-    return await index_document(db, document, embedding_client=embedding_client)
+    snapshot = _IndexSnapshot(
+        status=document.status,
+        chunk_count=document.chunk_count,
+    )
+    return await index_document(
+        db,
+        document,
+        embedding_client=embedding_client,
+        _failure_snapshot=snapshot,
+    )
 
 
 async def _build_and_persist_chunks(
@@ -172,7 +205,11 @@ async def _drop_chunks(db: AsyncSession, document: KnowledgeDocument) -> None:
 
 
 async def _mark_failed(
-    db: AsyncSession, document: KnowledgeDocument, detail: str,
+    db: AsyncSession,
+    document: KnowledgeDocument,
+    detail: str,
+    *,
+    snapshot: _IndexSnapshot | None = None,
 ) -> KnowledgeDocument:
     """持久化失败状态，并返回重新加载后的文档行。
 
@@ -197,15 +234,21 @@ async def _mark_failed(
     if refreshed is None:
         # 文档在索引过程中被删除了，没有可标记的行，直接把旧对象交回调用方。
         return document
-    # 删除异常发生前可能已经写入的部分 chunks，避免 failed 文档还能被检索到。
-    await db.execute(
-        delete(KnowledgeChunk).where(
-            KnowledgeChunk.document_id == document_id,
-        ),
-    )
-    refreshed.status = "failed"
-    refreshed.chunk_count = 0
-    refreshed.error_detail = detail
+    if snapshot is None:
+        # 首次索引失败时删除可能的部分写入，避免 failed 文档还能被检索到。
+        await db.execute(
+            delete(KnowledgeChunk).where(
+                KnowledgeChunk.document_id == document_id,
+            ),
+        )
+        refreshed.status = "failed"
+        refreshed.chunk_count = 0
+        refreshed.error_detail = detail
+    else:
+        # 重新索引先完成 embedding 才替换旧 chunks；失败时回滚事务并恢复旧状态。
+        refreshed.status = snapshot.status
+        refreshed.chunk_count = snapshot.chunk_count
+        refreshed.error_detail = f"reindex_failed: {detail}"
     await db.commit()
     await db.refresh(refreshed)
     return refreshed

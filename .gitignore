@@ -8,6 +8,7 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+backend/.pytest-*/
 backend/pytest-cache-files-*/
 .mypy_cache/
 .ruff_cache/
@@ -39,3 +40,22 @@ Thumbs.db
 eval-reports/
 backend/eval-reports/
 logs/
+
+# 数据生产的临时响应、checkpoint 和本地报告
+datasets/.work/
+datasets/.venv/
+datasets/.pytest_cache/
+datasets/reports/.pytest-*/
+datasets/reports/**/*.json
+datasets/reports/**/*.jsonl
+datasets/reports/**/*.md
+
+# 本地模型、训练产物与实验跟踪
+datasets/models/
+datasets/artifacts/
+datasets/runs/
+datasets/wandb/
+*.safetensors
+*.ckpt
+*.pth
+*.gguf

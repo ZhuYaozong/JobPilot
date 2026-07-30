@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jobpilot.local/schemas/rag-eval-item.schema.json",
+  "title": "JobPilot RAG Evaluation Item",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "question",
+    "answer",
+    "source_document",
+    "supporting_excerpt"
+  ],
+  "properties": {
+    "question": {
+      "type": "string",
+      "minLength": 1
+    },
+    "answer": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_document": {
+      "type": "string",
+      "minLength": 1
+    },
+    "supporting_excerpt": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

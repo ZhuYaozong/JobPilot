@@ -60,3 +60,46 @@ def decode_access_token(token: str) -> dict:
         return payload
     except JWTError:
         raise
+
+
+def create_mcp_access_token(
+    user_id: int,
+    username: str,
+    scopes: list[str] | None = None,
+) -> str:
+    """签发只面向 JobPilot MCP Server 的短期 token。
+
+    MCP token 与网页 API token 分离，并绑定 issuer、audience 和 scope，避免一个 token
+    被拿到其它资源服务器复用。当前私有部署由已登录用户显式领取，不实现 OAuth 授权码流。
+    """
+    expire = datetime.now(timezone.utc) + timedelta(
+        minutes=settings.mcp_token_expire_minutes,
+    )
+    granted_scopes = scopes or ["jobpilot:read"]
+    payload = {
+        "sub": str(user_id),
+        "username": username,
+        "iss": settings.mcp_server_issuer_url,
+        "aud": settings.mcp_server_public_url,
+        "scope": " ".join(granted_scopes),
+        "client_id": f"jobpilot-user-{user_id}",
+        "exp": expire,
+    }
+    return jwt.encode(payload, settings.auth_secret_key, algorithm=settings.auth_algorithm)
+
+
+def decode_mcp_access_token(token: str) -> dict:
+    """验证 MCP token 的签名、发行者、受众和必需读权限。"""
+    payload = jwt.decode(
+        token,
+        settings.auth_secret_key,
+        algorithms=[settings.auth_algorithm],
+        audience=settings.mcp_server_public_url,
+        issuer=settings.mcp_server_issuer_url,
+    )
+    if payload.get("sub") is None:
+        raise JWTError("MCP token 缺少 sub 字段")
+    scopes = str(payload.get("scope") or "").split()
+    if "jobpilot:read" not in scopes:
+        raise JWTError("MCP token 缺少 jobpilot:read scope")
+    return payload

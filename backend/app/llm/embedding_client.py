@@ -55,6 +55,7 @@ class EmbeddingClient:
         api_key: str | None = None,
         model_name: str | None = None,
         dimensions: int | None = None,
+        send_dimensions: bool | None = None,
     ) -> None:
         # 优先使用显式 embedding 配置；没配时复用 LLM 配置，降低单供应商部署门槛。
         # 不在构造函数立刻报错，方便空输入短路和测试覆盖。
@@ -64,6 +65,11 @@ class EmbeddingClient:
             model_name or settings.embedding_model_name
         )
         self._dimensions = dimensions or settings.embedding_dimensions
+        self._send_dimensions = (
+            settings.embedding_send_dimensions
+            if send_dimensions is None
+            else send_dimensions
+        )
 
     @property
     def dimensions(self) -> int:
@@ -106,8 +112,11 @@ class EmbeddingClient:
                 payload: dict[str, Any] = {
                     "model": self._model_name,
                     "input": batch,
-                    "dimensions": self._dimensions,
                 }
+                # BGE-M3 固定输出 1024 维，常见自建服务不实现 OpenAI 的 dimensions
+                # 扩展参数；只有显式开启时才发送，返回值仍会在下方做严格维度校验。
+                if self._send_dimensions:
+                    payload["dimensions"] = self._dimensions
                 try:
                     response = await client.post(url, json=payload, headers=headers)
                 except httpx.HTTPError as exc:
@@ -144,8 +153,9 @@ class EmbeddingClient:
                     if len(vec) != self._dimensions:
                         raise EmbeddingClientError(
                             f"Embedding dim mismatch: got {len(vec)} expected "
-                            f"{self._dimensions}. Update EMBEDDING_DIMENSIONS "
-                            "+ rerun migrations to switch models.",
+                            f"{self._dimensions}. Check EMBEDDING_MODEL_NAME / "
+                            "EMBEDDING_DIMENSIONS and apply the matching database "
+                            "migration before reindexing.",
                         )
                     results.append([float(x) for x in vec])
 

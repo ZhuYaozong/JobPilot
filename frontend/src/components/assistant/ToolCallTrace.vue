@@ -83,6 +83,11 @@ const ERROR_LABELS: Record<string, string> = {
   llm_unavailable: "模型暂不可用",
   tool_args_invalid: "参数有误",
   validation_error: "参数校验失败",
+  mcp_server_unavailable: "外部服务暂不可用",
+  mcp_timeout: "外部服务超时",
+  mcp_tool_not_found: "外部工具不存在",
+  mcp_tool_execution_error: "外部工具执行失败",
+  mcp_invalid_result: "外部结果无效",
 };
 
 function humanizeError(name: string): string {

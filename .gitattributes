@@ -1,0 +1,19 @@
+* text=auto
+
+# 跨平台开发统一使用 LF，避免 Windows 提交产生整文件换行差异。
+*.py text eol=lf
+*.toml text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.jsonl text eol=lf
+*.md text eol=lf
+*.vue text eol=lf
+*.ts text eol=lf
+*.sh text eol=lf
+
+# 正式数据保留在仓库中，但在 GitHub 代码统计和 PR 中标记为生成产物。
+datasets/lora/*.jsonl linguist-generated=true
+datasets/evaluation/*.jsonl linguist-generated=true
+datasets/rag/generated_manifest.jsonl linguist-generated=true
+datasets/rag/documents/generated-*.md linguist-generated=true -whitespace

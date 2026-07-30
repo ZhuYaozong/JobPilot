@@ -18,7 +18,7 @@ import asyncio
 import contextlib
 import re
 import time
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from typing import Any
 from unittest.mock import patch
 
@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
+from app.agent.tool_catalog import ToolCatalog
 from app.eval.assertions import ASYNC_ASSERTION_TYPES, run_assertion, run_assertion_async
 from app.eval.cases import (
     AssertionResult,
@@ -37,7 +38,7 @@ from app.eval.cases import (
     SeedSpec,
 )
 from app.eval.fake_llm import FakeLLMClient, build_fake_llm, fake_embedding
-from app.eval.fixtures import SEEDERS, new_marker, resolve_test_user
+from app.eval.fixtures import SEEDERS, create_isolated_eval_user, new_marker
 from app.llm.client import LLMClient
 from app.llm.embedding_client import EmbeddingClient
 from app.models.agent_run import AgentRun
@@ -57,6 +58,8 @@ def run_cases(
     *,
     live: bool = False,
     judge: bool = False,
+    model_name: str | None = None,
+    excluded_tools: Iterable[str] = (),
     timeout_seconds: float = DEFAULT_CASE_TIMEOUT_SECONDS,
 ) -> list[CaseResult]:
     """同步入口,内部 ``asyncio.run`` 每个 case。
@@ -69,20 +72,32 @@ def run_cases(
     断言会被跳过(标记 skipped)。
     """
     enable_judge = judge or live
+    excluded = frozenset(excluded_tools)
     results: list[CaseResult] = []
-    for case in cases:
-        result = asyncio.run(
-            _run_single_case(
-                case, live=live, enable_judge=enable_judge,
-                timeout_seconds=timeout_seconds,
-            ),
-        )
-        results.append(result)
+    # settings 是进程级单例。CLI 串行执行 case，因此在整个 run 外层覆盖一次
+    # 可以同时约束 workflow 注入客户端和工具内部自行创建的 LLMClient。
+    with _model_override(model_name):
+        for case in cases:
+            result = asyncio.run(
+                _run_single_case(
+                    case,
+                    live=live,
+                    enable_judge=enable_judge,
+                    excluded_tools=excluded,
+                    timeout_seconds=timeout_seconds,
+                ),
+            )
+            results.append(result)
     return results
 
 
 async def _run_single_case(
-    case: EvalCase, *, live: bool, enable_judge: bool, timeout_seconds: float,
+    case: EvalCase,
+    *,
+    live: bool,
+    enable_judge: bool,
+    excluded_tools: frozenset[str],
+    timeout_seconds: float,
 ) -> CaseResult:
     """跑一个 case,生成 :class:`CaseResult`。
 
@@ -106,7 +121,12 @@ async def _run_single_case(
             async with AsyncSession(engine, expire_on_commit=False) as db:
                 try:
                     trace, ref_context = await asyncio.wait_for(
-                        _execute_case(db, case, live=live),
+                        _execute_case(
+                            db,
+                            case,
+                            live=live,
+                            excluded_tools=excluded_tools,
+                        ),
                         timeout=timeout_seconds,
                     )
                 except asyncio.TimeoutError:
@@ -146,10 +166,11 @@ async def _execute_case(
     case: EvalCase,
     *,
     live: bool,
+    excluded_tools: frozenset[str],
 ) -> tuple[CaseTrace, dict[str, Any]]:
     """执行 case 的主流程,返回 (trace, ref_context)。"""
-    user = await resolve_test_user(db)
     marker = new_marker()
+    user = await create_isolated_eval_user(db, marker)
 
     # ref_context 收集 seed 阶段产生的 id 别名,后续在 context / fake_responses
     # / assertion 占位符替换里使用。
@@ -178,6 +199,7 @@ async def _execute_case(
     llm_client: LLMClient | FakeLLMClient = (
         LLMClient() if (live or fake_client is None) else fake_client
     )
+    tool_catalog = ToolCatalog.local_only(exclude_names=excluded_tools)
 
     with _llm_patch(fake_client=fake_client, live=live):
         response = await run_assistant_turn(
@@ -185,6 +207,7 @@ async def _execute_case(
             user,
             payload,
             llm_client=llm_client,  # type: ignore[arg-type]  # fake 实现等价接口
+            tool_catalog=tool_catalog,
         )
 
     trace = await _collect_trace(db, response.conversation_id, response.agent_run.id)
@@ -431,3 +454,23 @@ def _llm_patch(*, fake_client: FakeLLMClient | None, live: bool):
 
     with patch.object(LLMClient, "generate_text", _patched):
         yield
+
+
+@contextlib.contextmanager
+def _model_override(model_name: str | None) -> Iterator[None]:
+    """在当前评测进程内临时覆盖聊天模型名，退出后恢复。
+
+    不能只给 workflow 注入一个带模型名的 client：部分 action 工具会在业务
+    service 内重新实例化 ``LLMClient``。覆盖 settings 能保证一条 Agent 轨迹
+    内的所有 LLM 调用都落到同一个 Base 或 LoRA 模型。
+    """
+    if model_name is None:
+        yield
+        return
+
+    previous = settings.llm_model_name
+    settings.llm_model_name = model_name
+    try:
+        yield
+    finally:
+        settings.llm_model_name = previous

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jobpilot.local/schemas/sft-item.schema.json",
+  "title": "JobPilot SFT Item",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["instruction", "input", "output"],
+  "properties": {
+    "instruction": {
+      "type": "string",
+      "minLength": 1
+    },
+    "input": {
+      "type": "string"
+    },
+    "output": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

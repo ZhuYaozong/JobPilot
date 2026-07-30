@@ -63,12 +63,15 @@ class ToolContext:
 
     ``db`` 是底层业务 service 使用的同一个 AsyncSession。
     ``current_user`` 是已通过依赖解析的当前用户，所有工具必须以它作为权限边界。
-    ``agent_run_id`` 会写入每条 ToolCallLog，后续才能复原完整工具链路。
+    ``agent_run_id`` 会写入 Assistant 的 ToolCallLog；入站 MCP 调用没有 AgentRun，
+    此时它为空，并由 ``source/client_id`` 复原调用来源。
     """
 
     db: AsyncSession
     current_user: User
-    agent_run_id: int
+    agent_run_id: int | None
+    source: str = "assistant"
+    client_id: str | None = None
 
 
 class BaseTool(ABC):
@@ -120,6 +123,8 @@ class BaseTool(ABC):
         log = ToolCallLog(
             user_id=ctx.current_user.id,
             agent_run_id=ctx.agent_run_id,
+            source=ctx.source,
+            client_id=ctx.client_id,
             tool_name=self.name,
             status="running",
             arguments_json=args.model_dump(mode="json"),
@@ -188,6 +193,8 @@ class BaseTool(ABC):
         log = ToolCallLog(
             user_id=ctx.current_user.id,
             agent_run_id=ctx.agent_run_id,
+            source=ctx.source,
+            client_id=ctx.client_id,
             tool_name=self.name,
             status="failed",
             arguments_json=raw_args,
