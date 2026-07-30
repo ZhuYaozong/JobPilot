@@ -269,8 +269,10 @@ uv run --project datasets python datasets\scripts\check_quality.py `
 先配置回答模型、Embedding 和 Reranker 端点：
 
 ```powershell
-$env:BASE_MODEL_BASE_URL='http://127.0.0.1:8001/v1'
-$env:BASE_MODEL_NAME='base-model'
+$env:BASE_MODEL_BASE_URL='http://127.0.0.1:18000/v1'
+$env:BASE_MODEL_NAME='jobpilot-base'
+$env:LORA_MODEL_BASE_URL='http://127.0.0.1:18000/v1'
+$env:LORA_MODEL_NAME='jobpilot-lora-v1'
 $env:EMBEDDING_BASE_URL='http://127.0.0.1:7997/v1'
 $env:EMBEDDING_MODEL_NAME='BAAI/bge-m3'
 $env:RERANKER_BASE_URL='http://127.0.0.1:7997/v1'
@@ -283,7 +285,8 @@ $env:RERANKER_MODEL_NAME='BAAI/bge-reranker-v2-m3'
 
 ```powershell
 uv run --project datasets python datasets\scripts\run_experiments.py `
-  --config datasets\config.yaml
+  --config datasets\config.yaml `
+  --report-subdir rag-model-comparison/full
 ```
 
 服务器生成模型资源紧张时，先只评估召回与重排，不创建 Base/LoRA/Judge
@@ -292,7 +295,9 @@ Provider：
 ```powershell
 uv run --project datasets python datasets\scripts\run_experiments.py `
   --config datasets\config.yaml `
-  --retrieval-only
+  --profile retrieval-benchmark `
+  --retrieval-only `
+  --report-subdir retrieval-benchmark
 ```
 
 该模式只需要 Embedding 与 Reranker 端点，报告中的回答和 Judge 指标会明确写为
@@ -304,17 +309,20 @@ uv run --project datasets python datasets\scripts\run_experiments.py `
 uv run --project datasets python datasets\scripts\run_experiments.py `
   --config datasets\config.yaml `
   --limit 10 `
-  --retrieval-only
+  --profile retrieval-benchmark `
+  --retrieval-only `
+  --report-subdir retrieval-benchmark/smoke
 ```
 
 默认实验矩阵：
 
-| Variant | 召回方式 | Rerank |
-| --- | --- | --- |
-| Vector RAG | 向量 | 否 |
-| BM25 RAG | BM25 | 否 |
-| Hybrid RAG | Vector + BM25 + RRF | 否 |
-| Hybrid + Rerank | Vector + BM25 + RRF | 是 |
+| Variant | 回答模型 | 召回方式 | Rerank |
+| --- | --- | --- | --- |
+| Base + RAG | `jobpilot-base` | Vector + BM25 + RRF | 是 |
+| LoRA + RAG | `jobpilot-lora-v1` | Vector + BM25 + RRF | 是 |
+
+`--profile retrieval-benchmark` 会在内存中恢复 Vector、BM25、Hybrid、Hybrid + Rerank
+四策略矩阵，不复制或修改主 YAML；这样既能复现纯检索基准，又不会污染当前双模型矩阵。
 
 ### 2026-07-30 纯检索全量结果
 
@@ -369,13 +377,49 @@ uv run --project datasets python datasets\scripts\run_retrieval_sweep.py `
 
 调参集第一名是 `0.25:1、RRF10、候选×2`，但它在隔离验证集上的 Evidence Recall
 比原始基线低 0.0079，综合分低 0.00277；虽然平均延迟少 291.3 ms，仍不适合作为
-质量优先默认值。结论是保留原始 `1:1、RRF60、候选×3`，不修改生产参数。若未来需要
+质量优先默认值。结论是采用原始 `1:1、RRF60、候选×3` 作为生产参数。若未来需要
 低延迟模式，应优先采用本轮 3.1 ms 的 BM25 基线，而不是仅缩小 Rerank 候选集。
 
 扫描报告中的延迟只用于候选之间横向比较：扫描时四个并发请求全部执行
 Hybrid + Rerank，会在单 GPU 推理锁前排队；前一张四策略混合表只有部分请求进入
 Reranker，因此两张表的绝对延迟不能直接比较。完整结果见本地
 `reports/retrieval-sweep/retrieval_sweep_report.md`。
+
+### Base + RAG / LoRA + RAG 端到端结果
+
+使用同一份 200 条黄金问题和完全一致的 Hybrid + Rerank 上下文运行两个生成模型，共
+400 个 case、0 错误，检索上下文逐题一致 200/200。运行后生成配对报告：
+
+```powershell
+uv run --project datasets python datasets\scripts\analyze_rag_model_comparison.py `
+  --cases datasets\reports\rag-model-comparison\full\experiment_cases.jsonl `
+  --output-dir datasets\reports\rag-model-comparison\full `
+  --bootstrap-samples 5000 `
+  --review-size 40
+```
+
+| 指标 | Base + RAG | LoRA + RAG | LoRA - Base | 95% CI |
+| --- | ---: | ---: | ---: | ---: |
+| Answer Score | 0.2901 | 0.2268 | -0.0633 | [-0.0869, -0.0409] |
+| Token F1 | 0.3096 | 0.2529 | -0.0567 | [-0.0818, -0.0329] |
+| ROUGE-L | 0.2705 | 0.2006 | -0.0699 | [-0.0927, -0.0477] |
+| Faithfulness | 0.2008 | 0.1565 | -0.0444 | [-0.0679, -0.0220] |
+| 平均延迟 | 6344.6 ms | 6413.8 ms | +69.2 ms | [-908.3, +1122.4] |
+| P95 延迟 | 11779 ms | 9892 ms | - | - |
+
+共同检索指标为 Recall@5 0.9950、MRR 0.9642、Evidence Recall 0.9809。LoRA 在
+Answer Score 上逐题胜/平/负 82/1/117，置信区间完全小于 0，因此 Base + RAG 在本批
+证据约束问答的自动指标上具有稳定优势；平均延迟差异的置信区间跨 0，不支持稳定速度差异。
+
+输出诊断显示 Base + RAG 平均 359.5 字符，LoRA + RAG 平均 312.3 字符；题目/参考答案
+之外数字声明率分别为 24% 和 85%。典型 LoRA 退化是在正确短答后继续追加训练模板风格的
+监控指标、错误处理和未经题目要求的参数。新增数字声明仅是风险筛查，不能直接认定事实错误；
+脚本另外生成 40 条隐藏模型身份的 `blind_review.jsonl`，人工盲评尚未完成。
+
+此前无 RAG 的 Base/LoRA 结果使用 500 条 LoRA/Agent 测试集，本轮使用 200 条 RAG
+测试集，因此不能跨数据集相减为 RAG 净增益。当前结论只回答：给定相同最终检索上下文，
+Base 比现有 LoRA Adapter 更能贴合黄金证据。后续应补充检索上下文约束型 SFT 数据，减少
+LoRA 的模板化扩写后再复测。
 
 每个 `experiments.variants` 条目可独立设置 `retrieval_strategy: none | vector | bm25 | hybrid` 和 `reranker_enabled`。旧配置中的 `use_rag` 仍兼容：为 `true` 时使用 `experiments.retriever.kind`，为 `false` 时不注入上下文。回答模型仍由 variant 的 `provider` 独立选择，因此也可以继续组织 Base / LoRA 对照。
 

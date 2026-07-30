@@ -12,6 +12,13 @@ def _settings(**overrides) -> Settings:  # noqa: ANN003
     return Settings(_env_file=None, **overrides)
 
 
+def test_factory_defaults_to_hybrid_with_reranker() -> None:
+    service = build_retrieval_service(app_settings=_settings())
+
+    assert isinstance(service.retriever, HybridRetriever)
+    assert isinstance(service.reranker, HttpReranker)
+
+
 def test_factory_supports_all_retrieval_strategies() -> None:
     vector = build_retrieval_service(app_settings=_settings(rag_strategy="vector"))
     bm25 = build_retrieval_service(app_settings=_settings(rag_strategy="bm25"))

@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 from jobpilot_datasets.config import AppConfig, load_config
+from jobpilot_datasets.evaluation.profiles import apply_experiment_profile
 from jobpilot_datasets.evaluation.runner import ExperimentRunner
 from jobpilot_datasets.evaluation.sweep import RetrievalSweepRunner
 from jobpilot_datasets.pipeline import DatasetPipeline, StageResult
@@ -102,6 +103,17 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="只评估检索与重排，不创建或调用回答模型和 Judge",
     )
+    experiment_parser.add_argument(
+        "--report-subdir",
+        default="experiments",
+        help="相对 reports_dir 的报告子目录，不能包含 ..",
+    )
+    experiment_parser.add_argument(
+        "--profile",
+        choices=("configured", "retrieval-benchmark"),
+        default="configured",
+        help="configured 使用 YAML 矩阵；retrieval-benchmark 恢复四策略检索基准",
+    )
 
     sweep_parser = subparsers.add_parser(
         "retrieval-sweep",
@@ -152,8 +164,12 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "experiment":
             if args.limit is not None and args.limit <= 0:
                 raise ValueError("--limit 必须大于 0")
+            config = apply_experiment_profile(config, args.profile)
             report = asyncio.run(
-                ExperimentRunner(config).run(
+                ExperimentRunner(
+                    config,
+                    report_subdir=args.report_subdir,
+                ).run(
                     limit=args.limit,
                     retrieval_only=args.retrieval_only,
                 ),

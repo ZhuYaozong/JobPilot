@@ -64,6 +64,12 @@ def _install_failing_embedder(monkeypatch, exc: Exception) -> None:
     monkeypatch.setattr(EmbeddingClient, "embed", fake_embed)
 
 
+def _use_strict_vector_mode(monkeypatch) -> None:  # noqa: ANN001
+    """让只验证 pgvector 语义的测试不受生产 Hybrid 默认值影响。"""
+    monkeypatch.setattr(settings, "rag_strategy", "vector")
+    monkeypatch.setattr(settings, "rag_reranker_enabled", False)
+
+
 async def _setup_agent_run(db: AsyncSession, marker: str) -> tuple[User, int]:
     user = (
         await db.execute(select(User).where(User.username == "test"))
@@ -143,6 +149,7 @@ async def _seed_chunk(
 def test_search_knowledge_returns_nearest_chunks_and_logs_success(
     monkeypatch, test_marker: str,
 ) -> None:
+    _use_strict_vector_mode(monkeypatch)
     axis = _marker_axis(test_marker)
     other_axis = (axis + 1) % settings.embedding_dimensions
     _install_query_embedder(monkeypatch, _vec(axis))
@@ -337,6 +344,7 @@ def test_search_knowledge_rejects_other_users_knowledge_base(
 def test_search_knowledge_skips_chunks_without_embedding(
     monkeypatch, test_marker: str,
 ) -> None:
+    _use_strict_vector_mode(monkeypatch)
     axis = _marker_axis(test_marker)
     _install_query_embedder(monkeypatch, _vec(axis))
 
@@ -383,6 +391,7 @@ def test_search_knowledge_skips_chunks_without_embedding(
 def test_search_knowledge_embedding_config_error_is_business_error(
     monkeypatch, test_marker: str,
 ) -> None:
+    _use_strict_vector_mode(monkeypatch)
     _install_failing_embedder(
         monkeypatch, EmbeddingConfigError("missing embedding config"),
     )

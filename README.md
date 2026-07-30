@@ -295,15 +295,39 @@ LoRA 明显提升领域回答相似度、输出收敛速度和 Agent 决策 JSON
 | Hybrid | 0.9950 | 0.9506 | 0.9743 | 539.4 ms | 597 ms |
 | Hybrid + Rerank | 0.9950 | 0.9642 | 0.9809 | 1074.6 ms | 1171 ms |
 
-Hybrid + Rerank 是当前质量优先候选，BM25 是延迟优先基线；等权 Hybrid 没有比 BM25
-获得稳定收益，因此不会仅凭本次离线实验自动修改生产 `RAG_STRATEGY`。四种策略共同漏召回
-的唯一问题缺少主题限定，属于评测集歧义，当前保留原始样本并在报告中披露。完整复现命令
-和指标边界见 [`datasets/README.md`](datasets/README.md#hybrid-rag-对照实验)。
+Hybrid + Rerank 是最终质量优先配置，BM25 是延迟优先降级基线；等权 Hybrid 没有比 BM25
+获得稳定收益，因此生产默认必须同时开启 Reranker。四种策略共同漏召回的唯一问题缺少主题
+限定，属于评测集歧义，当前保留原始样本并在报告中披露。完整复现命令和指标边界见
+[`datasets/README.md`](datasets/README.md#hybrid-rag-对照实验)。
 
 进一步使用每篇文档 1 条问题组成 50 条调参集、剩余 150 条作为隔离验证集，扫描了
 14 组 Hybrid 权重、RRF 和候选倍数。调参集第一名没有在验证集上胜过原始配置；最终仍由
 `vector_weight=1`、`bm25_weight=1`、`rrf_k=60`、`candidate_multiplier=3`
 获得最高验证综合分。生产参数因此保持不变，避免把调参集上的偶然提升当成泛化收益。
+
+### RAG 端到端双模型评测
+
+2026-07-30 在同一份 200 条 RAG 黄金问题上完成 Base + RAG 与 LoRA + RAG 的配对
+评测，共 400 个 case、0 错误；两组逐题使用完全相同的 Hybrid + Rerank 检索上下文：
+
+| 指标 | Base + RAG | LoRA + RAG | LoRA - Base |
+| --- | ---: | ---: | ---: |
+| Answer Score | 0.2901 | 0.2268 | -0.0633 |
+| Token F1 | 0.3096 | 0.2529 | -0.0567 |
+| ROUGE-L | 0.2705 | 0.2006 | -0.0699 |
+| Faithfulness | 0.2008 | 0.1565 | -0.0444 |
+| 平均延迟 | 6344.6 ms | 6413.8 ms | +69.2 ms |
+| P95 延迟 | 11779 ms | 9892 ms | -1887 ms |
+
+Answer Score 配对差值的 5000 次 Bootstrap 95% CI 为 `[-0.0869, -0.0409]`，LoRA
+逐题胜/平/负为 82/1/117；在本轮“依据检索证据回答”的自动指标上，Base + RAG 有稳定
+优势。LoRA 常在正确答案后继续追加训练数据风格的监控指标、错误码与数值，题目/参考答案
+之外数字声明率为 85%，Base 为 24%。该数字只用于风险筛查，不能直接等同于事实错误。
+
+无 RAG 的 Base/LoRA 结果来自 500 条 LoRA/Agent 测试集，而本轮来自 200 条 RAG 测试集，
+两者不能直接相减为“RAG 净增益”。当前工程决策是：求职领域 Agent 继续保留 LoRA 的独立
+价值；知识问答链路默认使用 Base + Hybrid + Rerank，后续需要用检索上下文约束型 SFT 数据
+修正 LoRA 的模板化扩写。40 条确定性盲评材料已在本地报告中生成，尚待人工评审。
 
 ## MCP Integration
 
@@ -382,9 +406,9 @@ EMBEDDING_MODEL_NAME=BAAI/bge-m3
 EMBEDDING_DIMENSIONS=1024
 EMBEDDING_SEND_DIMENSIONS=false
 
-# 默认 vector；也可切换为 bm25 / hybrid
-RAG_STRATEGY=vector
-RAG_RERANKER_ENABLED=false
+# 质量优先默认；故障或低延迟场景可回退到 bm25
+RAG_STRATEGY=hybrid
+RAG_RERANKER_ENABLED=true
 
 AUTH_SECRET_KEY=change-this-to-a-long-random-secret
 AUTH_DEV_MODE=true
@@ -392,7 +416,7 @@ AUTH_DEV_MODE=true
 
 Embedding 配置可以独立指定；如果未设置 endpoint，客户端会在运行时尝试复用对应的 `LLM_*` 配置。当前 schema 与 BGE-M3 dense embedding 统一为 1024 维。`EMBEDDING_SEND_DIMENSIONS=false` 适配固定输出维度、但不接受 OpenAI `dimensions` 参数的自建服务；客户端仍会严格校验返回值必须为 1024 维。
 
-RAG 检索已支持 `vector`、`bm25` 和基于加权 RRF 的 `hybrid`。可选 Reranker 使用独立 `/rerank` 端点；完整参数和四种切换示例见 `backend/README.md`。默认仍为 Vector RAG 且关闭重排，便于兼容和快速回滚。
+RAG 检索已支持 `vector`、`bm25` 和基于加权 RRF 的 `hybrid`。Reranker 使用独立 `/rerank` 端点；完整参数和四种切换示例见 `backend/README.md`。默认采用 Hybrid + Rerank，Vector/BM25 继续作为诊断与回退策略。
 
 从旧 1536 维索引升级时，先阅读 [backend/README.md](backend/README.md) 的“BGE-M3 维度迁移”章节。迁移会保留文档和 chunk 文本、清空不可复用的旧向量，再由批量脚本安全重建；在向量尚未补齐时可临时使用 `RAG_STRATEGY=bm25`。
 

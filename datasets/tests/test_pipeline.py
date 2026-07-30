@@ -58,19 +58,21 @@ async def test_full_pipeline_resume_quality_and_experiment(test_config) -> None:
     base_provider = DeterministicProvider(
         "服务应设置有限重试、监控错误率并在失败时降级和回滚。",
     )
+    lora_provider = DeterministicProvider(
+        "服务应设置有限重试、监控错误率并在失败时降级和回滚。",
+    )
     experiment = await ExperimentRunner(
         test_config,
         provider_overrides={
             "base": base_provider,
+            "lora": lora_provider,
         },
         embedding_provider_override=DeterministicEmbeddingProvider(),
         reranker_provider_override=PassthroughReranker(),
     ).run(limit=2)
     assert [item.name for item in experiment.variants] == [
-        "Vector RAG",
-        "BM25 RAG",
-        "Hybrid RAG",
-        "Hybrid + Rerank",
+        "Base + RAG",
+        "LoRA + RAG",
     ]
     assert all(item.case_count == 2 for item in experiment.variants)
     assert experiment.mode == "end_to_end"
@@ -88,6 +90,8 @@ async def test_full_pipeline_resume_quality_and_experiment(test_config) -> None:
         item.retrieval_metrics is not None
         and "recall_at_k" in item.retrieval_metrics
         and "mrr" in item.retrieval_metrics
+        and item.retrieval_strategy == "hybrid"
+        and item.reranker_enabled
         for item in experiment.variants
     )
     report_path = (

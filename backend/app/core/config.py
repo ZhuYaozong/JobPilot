@@ -29,8 +29,8 @@ class Settings(BaseSettings):
     # 无论是否发送，EmbeddingClient 都会校验服务实际返回的向量维度。
     embedding_send_dimensions: bool = False
 
-    # RAG 默认保持原向量检索行为；切换环境变量即可启用 BM25 或混合召回。
-    rag_strategy: Literal["vector", "bm25", "hybrid"] = "vector"
+    # 隔离验证集确认等权 Hybrid + Rerank 质量最高，因此作为默认生产策略。
+    rag_strategy: Literal["vector", "bm25", "hybrid"] = "hybrid"
     rag_candidate_multiplier: int = Field(default=3, ge=1, le=20)
     rag_bm25_k1: float = Field(default=1.5, gt=0)
     rag_bm25_b: float = Field(default=0.75, ge=0, le=1)
@@ -40,8 +40,8 @@ class Settings(BaseSettings):
     # Hybrid 下 embedding 不可用时允许退化到 BM25，纯 vector 模式仍保留旧错误语义。
     rag_hybrid_vector_fail_open: bool = True
 
-    # Reranker 使用通用 POST /rerank 协议；默认关闭，失败时默认保留召回排序。
-    rag_reranker_enabled: bool = False
+    # Reranker 使用通用 POST /rerank 协议；默认启用，失败时保留 Hybrid 融合排序。
+    rag_reranker_enabled: bool = True
     rag_reranker_fail_open: bool = True
     reranker_base_url: str | None = None
     reranker_api_key: str | None = None

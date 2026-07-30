@@ -294,7 +294,7 @@ external_documents:
 experiments:
   evaluation_file: evaluation/rag_test.jsonl
   retriever:
-    kind: bm25
+    kind: hybrid
     top_k: 5
     chunk_size: 600
     chunk_overlap: 100
@@ -309,20 +309,13 @@ experiments:
   embedding_provider: embedding
   reranker_provider: reranker
   variants:
-    - name: Vector RAG
-      provider: base
-      use_rag: true
-      retrieval_strategy: vector
-    - name: BM25 RAG
-      provider: base
-      use_rag: true
-      retrieval_strategy: bm25
-    - name: Hybrid RAG
+    - name: Base + RAG
       provider: base
       use_rag: true
       retrieval_strategy: hybrid
-    - name: Hybrid + Rerank
-      provider: base
+      reranker_enabled: true
+    - name: LoRA + RAG
+      provider: lora
       use_rag: true
       retrieval_strategy: hybrid
       reranker_enabled: true

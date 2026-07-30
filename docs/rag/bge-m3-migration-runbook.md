@@ -185,4 +185,5 @@ RAG_RERANKER_ENABLED=false
 | chunk 变化 | 总数从 1005 变为 923；由当前切片规则重建 ready 文档后产生 869 个 chunk，另保留 54 个历史异常 chunk |
 | 向量召回 | 数据管道、B 轮 SaaS、个人事实三类查询 Top-1 均命中；生产 `RetrievalService` 验收通过 |
 | 用户隔离 | 用户 1 查询用户 3 的 ByteDance 内容时，返回结果仍全部属于用户 1 |
-| 当前业务策略 | `RAG_STRATEGY=vector`、Reranker 关闭，用于单独验证 BGE-M3 向量召回 |
+| 最终业务策略 | `RAG_STRATEGY=hybrid`、Reranker 开启；等权、RRF 60、候选倍数 3 |
+| 端到端模型评测 | Base + RAG / LoRA + RAG 各 200 条，400/400 成功，检索上下文 200/200 一致 |

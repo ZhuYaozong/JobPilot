@@ -108,8 +108,8 @@ EMBEDDING_SEND_DIMENSIONS=false
 RAG 检索配置：
 
 ```env
-# vector / bm25 / hybrid；默认 vector 保持升级前行为
-RAG_STRATEGY=vector
+# vector / bm25 / hybrid；默认使用隔离验证集选出的 hybrid
+RAG_STRATEGY=hybrid
 RAG_CANDIDATE_MULTIPLIER=3
 RAG_BM25_K1=1.5
 RAG_BM25_B=0.75
@@ -117,8 +117,8 @@ RAG_HYBRID_RRF_K=60
 RAG_VECTOR_WEIGHT=1.0
 RAG_BM25_WEIGHT=1.0
 
-# 可选模型重排，使用 POST /rerank 协议
-RAG_RERANKER_ENABLED=false
+# 默认模型重排，使用 POST /rerank 协议
+RAG_RERANKER_ENABLED=true
 RERANKER_BASE_URL=http://127.0.0.1:7997/v1
 RERANKER_API_KEY=
 RERANKER_MODEL_NAME=BAAI/bge-reranker-v2-m3
@@ -129,12 +129,12 @@ RERANKER_TIMEOUT_SECONDS=15
 
 | 策略 | `RAG_STRATEGY` | `RAG_RERANKER_ENABLED` |
 | --- | --- | --- |
-| Vector RAG（兼容默认） | `vector` | `false` |
+| Vector RAG（诊断/回退） | `vector` | `false` |
 | BM25 RAG | `bm25` | `false` |
 | Hybrid RAG | `hybrid` | `false` |
-| Hybrid + Rerank | `hybrid` | `true` |
+| Hybrid + Rerank（质量优先默认） | `hybrid` | `true` |
 
-Hybrid 使用加权 RRF 融合两路排名。生产环境中向量服务不可用时默认退化到 BM25，Reranker 不可用时默认保留融合结果；可分别通过 `RAG_HYBRID_VECTOR_FAIL_OPEN=false`、`RAG_RERANKER_FAIL_OPEN=false` 改为严格失败。回滚时只需恢复 `RAG_STRATEGY=vector`、`RAG_RERANKER_ENABLED=false`，不涉及数据库迁移。
+Hybrid 使用加权 RRF 融合两路排名。生产默认采用等权 Hybrid + Rerank：`RRF k=60`、候选倍数 3。向量服务不可用时默认退化到 BM25，Reranker 不可用时默认保留融合结果；可分别通过 `RAG_HYBRID_VECTOR_FAIL_OPEN=false`、`RAG_RERANKER_FAIL_OPEN=false` 改为严格失败。快速回退建议使用 `RAG_STRATEGY=bm25`、`RAG_RERANKER_ENABLED=false`，不涉及数据库迁移。
 
 `bge-reranker-v2-m3` 对 query 与 passage 成对打相关性分数，不写入 pgvector，因此它没有需要配置的“向量维度”。1024 维只属于 BGE-M3 的 dense embedding 和 `knowledge_chunks.embedding`。
 
