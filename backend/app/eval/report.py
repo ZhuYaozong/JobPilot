@@ -15,18 +15,32 @@ import json
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from app.eval.cases import CaseResult
 
 
-def write_report(results: list[CaseResult], report_dir: Path) -> Path:
+def write_report(
+    results: list[CaseResult],
+    report_dir: Path,
+    *,
+    metadata: dict[str, Any] | None = None,
+) -> Path:
     """把 results 写到 ``<report_dir>/summary.md`` + 每 case 的 JSON,
     返回 summary.md 路径。"""
     report_dir.mkdir(parents=True, exist_ok=True)
     for result in results:
         _write_case_json(result, report_dir)
+    if metadata is not None:
+        (report_dir / "run-config.json").write_text(
+            json.dumps(metadata, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
     summary_path = report_dir / "summary.md"
-    summary_path.write_text(_render_summary(results), encoding="utf-8")
+    summary_path.write_text(
+        _render_summary(results, metadata=metadata),
+        encoding="utf-8",
+    )
     return summary_path
 
 
@@ -97,7 +111,11 @@ def _write_case_json(result: CaseResult, report_dir: Path) -> None:
     )
 
 
-def _render_summary(results: list[CaseResult]) -> str:
+def _render_summary(
+    results: list[CaseResult],
+    *,
+    metadata: dict[str, Any] | None = None,
+) -> str:
     """生成 summary.md。"""
     total = len(results)
     passed = sum(1 for r in results if r.passed)
@@ -106,6 +124,14 @@ def _render_summary(results: list[CaseResult]) -> str:
 
     out: list[str] = []
     out.append(f"# JobPilot Agent Eval — {now}\n")
+    if metadata:
+        out.append("\n## 运行配置\n\n")
+        out.append(f"- 模式：`{'live' if metadata.get('live') else 'fake'}`\n")
+        out.append(f"- 模型：`{metadata.get('model') or '(环境默认)'}`\n")
+        out.append(f"- 数据集：`{metadata.get('dataset') or ''}`\n")
+        excluded = metadata.get("excluded_tools") or []
+        out.append(f"- 排除工具：`{', '.join(excluded) if excluded else '(无)'}`\n")
+        out.append(f"- 单 case 超时：`{metadata.get('timeout_seconds')}s`\n")
     out.append(
         f"**{passed}/{total} passed**(总耗时 {total_ms} ms,平均 "
         f"{total_ms / max(total, 1):.0f} ms / case)\n",

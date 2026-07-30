@@ -172,6 +172,47 @@ def _tool_args_contain(
     )
 
 
+@register("tool_call_count")
+def _tool_call_count(
+    trace: CaseTrace, params: dict[str, Any], _refs: dict[str, Any],
+) -> AssertionResult:
+    """断言工具调用总数或指定工具的调用次数。
+
+    支持 ``exact``、``min``、``max`` 三个边界；可选 ``tool`` 只统计指定
+    工具。无工具直答场景用 ``exact: 0``，比逐个声明 ``tool_not_called``
+    更能捕获模型误选任意工具的问题。
+    """
+    tool = params.get("tool")
+    calls = [
+        call for call in trace.tool_calls
+        if tool is None or call.get("tool_name") == tool
+    ]
+    actual = len(calls)
+    exact = params.get("exact")
+    minimum = params.get("min")
+    maximum = params.get("max")
+
+    if exact is not None:
+        ok = actual == int(exact)
+        expected = f"exact={int(exact)}"
+    else:
+        ok = (
+            (minimum is None or actual >= int(minimum))
+            and (maximum is None or actual <= int(maximum))
+        )
+        expected = f"min={minimum}, max={maximum}"
+
+    detail = "" if ok else (
+        f"工具调用次数不符合要求({expected})，实际 {actual} 次；"
+        f"工具序列: {[call.get('tool_name') for call in trace.tool_calls]}"
+    )
+    return AssertionResult(
+        spec=_make_spec("tool_call_count", params),
+        passed=ok,
+        detail=detail,
+    )
+
+
 # ---------- 最终回复相关 ---------------------------------------------------
 
 

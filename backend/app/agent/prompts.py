@@ -90,6 +90,20 @@ def build_decide_prompt(
     summary_section = _format_summary_section(existing_summary)
     history_section = _format_history(history or [])
     tool_history_section = _format_tool_call_history(tool_call_history or [])
+    rag_rules = ""
+    interview_rag_rule = ""
+    if catalog.has("search_knowledge"):
+        # 工具专属规则必须跟请求级目录同步。评测隔离 RAG 时，模型既看不到
+        # 工具 schema，也不应在通用规则或模拟面试规则里看到该工具名。
+        rag_rules = """- 如果用户问到自己**保存过的资料**才能回答的细节(公司背景、项目经历、面试笔记、
+  以前的复盘等),且答案不在对话历史 / 摘要里 → 调用 search_knowledge 检索。
+  注意 search_knowledge 是检索用户的**知识库内容**,**不是**岗位/简历元数据。
+- 如果本轮上下文提示里选中了知识库,调用 search_knowledge 时使用该知识库 id。
+"""
+        interview_rag_rule = (
+            "- 如果上下文还选了知识库,可调用 search_knowledge 检索公司背景、"
+            "项目经历或面试笔记。\n"
+        )
     budget_hint = ""
     if iterations_remaining is not None:
         # 把剩余预算显式告诉模型，可以减少最后一次还想继续 call_tool 的概率。
@@ -115,11 +129,7 @@ def build_decide_prompt(
 判断规则:
 - 如果用户用名字提到岗位/简历/投递(例如"腾讯的岗位"、"我最新的简历")但你不知道 id,
   优先调用 list_user_jobs / list_user_resumes / list_user_applications 查出来。
-- 如果用户问到自己**保存过的资料**才能回答的细节(公司背景、项目经历、面试笔记、
-  以前的复盘等),且答案不在对话历史 / 摘要里 → 调用 search_knowledge 检索。
-  注意 search_knowledge 是检索用户的**知识库内容**,**不是**岗位/简历元数据。
-- 如果本轮上下文提示里选中了知识库,调用 search_knowledge 时使用该知识库 id。
-- 拿到 id 后再调用需要 id 的动作工具(analyze_match / generate_cover_letter /
+{rag_rules}- 拿到 id 后再调用需要 id 的动作工具(analyze_match / generate_cover_letter /
   generate_interview_prep / generate_tailored_resume)。
 - 如果用户要"添加 / 录入 / 帮我加 / 帮我保存"一个**新**岗位或简历(贴了 JD 文本、岗位 URL,
   或一段简历正文),先调 draft_job / draft_resume 起草,不要直接调 create_*。
@@ -154,9 +164,8 @@ def build_decide_prompt(
 - 如果当前上下文提示里是"模拟面试"模式:
   - 没有简历和岗位 id 时,直接回复用户先在右侧选择简历和岗位,不要调用工具。
   - 用户要求开始模拟面试且已有简历+岗位 id 时,本轮优先按顺序准备信息:先调用 analyze_match,
-    再调用 generate_interview_prep;如果上下文还选了知识库,再调用 search_knowledge 检索公司背景、
-    项目经历或面试笔记。最后直接开始第一题。
-  - 如果用户正在回答上一题,通常直接给一句具体反馈并继续追问下一题;只有确实缺少资料时才检索知识库。
+    再调用 generate_interview_prep,最后直接开始第一题。
+{interview_rag_rule}  - 如果用户正在回答上一题,通常直接给一句具体反馈并继续追问下一题。
   - 最终回复要像面试官:简短开场或反馈后,只提出 1 个问题;不要一次性输出完整题库或长篇面试提纲。
 - 如果已有足够信息回答用户,选 respond_directly;不要重复调用同样参数的同一个工具。
 - 外部 MCP 工具名以 `mcp__<server>__<tool>` 命名。岗位搜索时优先使用 description

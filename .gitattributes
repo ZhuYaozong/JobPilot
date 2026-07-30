@@ -10,6 +10,7 @@
 *.md text eol=lf
 *.vue text eol=lf
 *.ts text eol=lf
+*.sh text eol=lf
 
 # 正式数据保留在仓库中，但在 GitHub 代码统计和 PR 中标记为生成产物。
 datasets/lora/*.jsonl linguist-generated=true

@@ -9,8 +9,8 @@ assertions 就能通过占位符引用。
   KnowledgeChunk(带向量),走 HTTP 会触发真嵌入调用,成本不可控
 - 用一个 marker(uuid 后缀)嵌进所有标题 / content_hash,保证多次 eval
   跑共用一个测试 DB 时不会撞键
-- 所有种子用户固定取 username='test',跟 ``backend/tests/conftest.py``
-  的约定一致 —— eval 不引入新 dev user
+- 每个 case 创建独立 ``is_test_user``，确保列表工具只能看到本 case 的种子
+  数据。仅靠标题 marker 不能隔离 ``query='腾讯'`` 这类模糊检索。
 """
 
 from __future__ import annotations
@@ -19,7 +19,6 @@ import hashlib
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.eval.fake_llm import fake_embedding
@@ -32,19 +31,21 @@ from app.models.resume import Resume
 from app.models.user import User
 
 
-async def resolve_test_user(db: AsyncSession) -> User:
-    """所有 case 都共用 test 用户;不存在时由 deps 自动创建,这里只 select。
+async def create_isolated_eval_user(db: AsyncSession, marker: str) -> User:
+    """为单个 case 创建独立测试用户，阻断历史 eval 数据串台。
 
-    我们不在 eval 框架里自动 create_or_get;假设运行环境至少跑过一次 API
-    或 conftest,数据库里已经有 test 用户。失败抛出能立即提示作者去 init。
+    Agent 的所有业务查询都带 ``user_id`` 作用域，因此独立用户比在标题中拼
+    marker 更可靠，也能让 Base/LoRA 每次运行都看到同样数量的业务记录。
     """
-    row = await db.execute(select(User).where(User.username == "test"))
-    user = row.scalar_one_or_none()
-    if user is None:
-        raise RuntimeError(
-            "测试 DB 里没有 username='test' 用户。"
-            "先在 backend 跑一次 pytest 或调一次 API 让 deps 自动建。",
-        )
+    username = f"agent-{marker}"[:64]
+    user = User(
+        username=username,
+        display_name="Agent Eval User",
+        is_test_user=True,
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
     return user
 
 
@@ -62,7 +63,7 @@ async def seed_knowledge_base(
     """种一个空知识库。"""
     kb = KnowledgeBase(
         user_id=user.id,
-        name=f"{marker} {name}",
+        name=name,
         description=description,
         status="active",
     )
@@ -136,7 +137,7 @@ async def seed_resume(
     """种一份简历(可选已解析)。"""
     resume = Resume(
         user_id=user.id,
-        title=f"{marker} {title}",
+        title=title,
         raw_text=raw_text,
         content_hash=hashlib.sha256(f"{marker}-{title}-{raw_text}".encode("utf-8")).hexdigest(),
         source_type="manual",
@@ -163,7 +164,7 @@ async def seed_job(
     """种一个岗位(可选已解析)。"""
     job = JobPosting(
         user_id=user.id,
-        company_name=f"{marker} {company_name}",
+        company_name=company_name,
         job_title=job_title,
         city=city,
         jd_text=jd_text,
@@ -179,11 +180,15 @@ async def seed_application(
     db: AsyncSession,
     user: User,
     *,
+    marker: str,
     resume_id: int,
     job_posting_id: int,
     current_stage: str = "saved",
     next_action: str | None = "看 JD",
 ) -> int:
+    # application 本身没有可放 marker 的文本字段，但保留统一 seeder 签名，
+    # 这样 runner 可以对所有 setup kind 使用同一调用约定。
+    _ = marker
     app = ApplicationRecord(
         user_id=user.id,
         resume_id=resume_id,

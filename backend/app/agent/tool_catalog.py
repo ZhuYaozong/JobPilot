@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -37,9 +38,23 @@ class ToolCatalog:
         self.notices: list[str] = []
 
     @classmethod
-    def local_only(cls) -> "ToolCatalog":
+    def local_only(
+        cls,
+        *,
+        exclude_names: Iterable[str] = (),
+    ) -> "ToolCatalog":
+        """构建只含本地工具的目录，可按技术名排除指定工具。
+
+        ``exclude_names`` 主要用于控制变量实验：例如 Base/LoRA 的纯 Agent
+        对比需要让两个模型都看不到 ``search_knowledge``，但不能修改生产请求
+        的默认工具集合。排除发生在 descriptor 生成前，因此被排除工具既不会
+        出现在 prompt，也无法通过 :meth:`has` 校验。
+        """
         catalog = cls()
+        excluded = set(exclude_names)
         for name, tool_cls in TOOL_REGISTRY.items():
+            if name in excluded:
+                continue
             catalog._descriptors[name] = ToolDescriptor(
                 name=name,
                 description=tool_cls.description,

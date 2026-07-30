@@ -96,8 +96,8 @@ LLM_MODEL_NAME=your-chat-model
 Embedding 配置：
 
 ```env
-EMBEDDING_BASE_URL=http://127.0.0.1:8003/v1
-EMBEDDING_API_KEY=your-api-key
+EMBEDDING_BASE_URL=http://127.0.0.1:7997/v1
+EMBEDDING_API_KEY=local-no-auth
 EMBEDDING_MODEL_NAME=BAAI/bge-m3
 EMBEDDING_DIMENSIONS=1024
 EMBEDDING_SEND_DIMENSIONS=false
@@ -119,7 +119,7 @@ RAG_BM25_WEIGHT=1.0
 
 # 可选模型重排，使用 POST /rerank 协议
 RAG_RERANKER_ENABLED=false
-RERANKER_BASE_URL=http://127.0.0.1:8004/v1
+RERANKER_BASE_URL=http://127.0.0.1:7997/v1
 RERANKER_API_KEY=
 RERANKER_MODEL_NAME=BAAI/bge-reranker-v2-m3
 RERANKER_TIMEOUT_SECONDS=15
@@ -152,20 +152,26 @@ Hybrid 使用加权 RRF 融合两路排名。生产环境中向量服务不可�
 生产执行前必须备份数据库，并暂停文档写入。推荐先把运行实例临时切到 `RAG_STRATEGY=bm25`、关闭 Reranker，然后按以下顺序操作：
 
 ```powershell
-# 1. 将 backend/.env 切到 BGE-M3 配置（见上文），再执行 schema 迁移
+# 1. 数据库仍是 vector(1536) 时，只读预测迁移后的重建规模
+uv --cache-dir .uv-cache --directory backend run python scripts/reindex_knowledge_embeddings.py --pre-migration-audit
+
+# 2. 将 backend/.env 切到 BGE-M3 配置（见上文），再执行 schema 迁移
 uv --cache-dir .uv-cache --directory backend run alembic upgrade head
 
-# 2. 先验证数据库列、Embedding 端点和待处理数量，不写数据
+# 3. 验证数据库列、Embedding 端点和真实待处理数量，不写数据
 uv --cache-dir .uv-cache --directory backend run python scripts/reindex_knowledge_embeddings.py --dry-run
 
-# 3. 可按用户或数量灰度；失败时退出码非 0，旧 chunks 会保留供 BM25 使用
+# 4. 可按用户或数量灰度；失败时退出码非 0，旧 chunks 会保留供 BM25 使用
 uv --cache-dir .uv-cache --directory backend run python scripts/reindex_knowledge_embeddings.py --username test --limit 10
 
-# 4. 全量重建
+# 5. 全量重建
 uv --cache-dir .uv-cache --directory backend run python scripts/reindex_knowledge_embeddings.py
+
+# 中断时可从控制台最后输出的 last_document_id 之后继续
+uv --cache-dir .uv-cache --directory backend run python scripts/reindex_knowledge_embeddings.py --after-id 123
 ```
 
-脚本启动写入前会同时检查 `EMBEDDING_DIMENSIONS=1024`、数据库为 `vector(1024)`，并实际调用一次 embedding 端点确认返回 1024 维。处理过程按文档顺序执行，`--batch-size` 只控制游标分页大小，不会并发打满模型服务。全量成功后可切换：
+脚本默认只处理此前为 `ready` 的文档，避免把历史 `failed/pending/parsing` 数据混入迁移结果；只有显式传入 `--include-non-ready` 才扩展范围。启动写入前会同时检查 `EMBEDDING_DIMENSIONS=1024`、数据库为 `vector(1024)`，并实际调用一次 embedding 端点确认返回 1024 维。处理过程按文档顺序执行，`--batch-size` 只控制游标分页大小，不会并发打满模型服务。全量结束后应再次从 0 执行 `--dry-run`，确认 `candidates=0`。完整的备份、灰度、断点续跑和回退步骤见 [BGE-M3 迁移运行手册](../docs/rag/bge-m3-migration-runbook.md)。全量成功后可切换：
 
 ```env
 RAG_STRATEGY=hybrid
@@ -257,6 +263,8 @@ uv --cache-dir .uv-cache --directory backend run python -m app.eval.cli
 
 - `--filter NAME`：正则匹配 case 名，只跑命中的（如 `--filter search`）。
 - `--live`：用真 `LLMClient` + `EmbeddingClient`，需要 `LLM_*` / `EMBEDDING_*` 环境变量已配置。
+- `--model NAME`：仅在当前 eval 进程覆盖聊天模型名，Agent 与工具内部的 LLM 调用保持一致。
+- `--exclude-tool NAME`：从本次 Agent prompt 和执行目录排除工具，可重复指定。
 - `--report-dir PATH`：自定义报告输出根目录（默认 `./eval-reports/`，每次跑会生成时间戳子目录）。
 
 每次跑会输出：
@@ -266,6 +274,35 @@ uv --cache-dir .uv-cache --directory backend run python -m app.eval.cli
 - `eval-reports/<timestamp>/case-<name>.json`：每 case 的完整 trace（工具调用、参数、结果、最终回复）。
 
 新增 case 时只需在 `app/eval/datasets/` 下加 yaml，runner 会自动加载；参考 `v1.yaml` 的 fake_responses 关键词分发约定。框架本身的回归测试在 `tests/test_eval_runner.py`，跟 pytest 一起跑。
+
+### Base / LoRA 无 RAG Agent 对比
+
+第一阶段使用 `app/eval/datasets_live/agent_no_rag_v1.yaml`。这里的“关闭 RAG”是
+请求级隔离：评测 Agent 看不到也无法执行 `search_knowledge`，不需要停止 embedding、
+reranker 或其他 RAG 服务。每个 case 会创建独立测试用户，避免以前的种子数据被列表
+工具读到。两个模型必须使用同一数据集和同一排除配置：
+
+```powershell
+uv --cache-dir .uv-cache --directory backend run python -m app.eval.cli --live --dataset app/eval/datasets_live/agent_no_rag_v1.yaml --model jobpilot-base --exclude-tool search_knowledge --report-dir eval-reports/agent-no-rag/base
+
+uv --cache-dir .uv-cache --directory backend run python -m app.eval.cli --live --dataset app/eval/datasets_live/agent_no_rag_v1.yaml --model jobpilot-lora-v1 --exclude-tool search_knowledge --report-dir eval-reports/agent-no-rag/lora
+
+uv --cache-dir .uv-cache --directory backend run python -m app.eval.compare --base-dir eval-reports/agent-no-rag/base --lora-dir eval-reports/agent-no-rag/lora --output-dir eval-reports/agent-no-rag/comparison
+```
+
+对比报告同时给出 case 通过率、Agent 成功率、工具路由、工具参数、最终回复、
+平均耗时和 RAG 工具泄漏次数。真实对比集只用确定性断言，不让被测模型给自己评分。
+
+独立 500 条领域数据的完整 Agent 配对实验见
+[`evaluation/agent/README.md`](../evaluation/agent/README.md)。该实验支持六类均衡预检、
+逐条落盘和断点续跑，并对比单轮直调与 LangGraph Agent 包装后的指标变化。
+
+2026-07-30 的 500 条运行结果表明：LoRA 工作流成功率为 99.6%，高于 Base 的
+78.8%，但 LoRA 错误工具调用率为 11.2%、重复工具调用率为 7.6%；Base 的主要
+失败类别是 `decide_repair_failed`（106 条）。这说明当前请求级 RAG 隔离已经有效，
+下一步优化重点应是 Base 决策 JSON 的解析鲁棒性和 LoRA 对“泛化咨询”与“操作已保存
+资源”的意图区分。结果文件默认被 `.gitignore` 排除，README 只记录可复核的汇总，
+不把自动指标当作最终上线结论。
 
 ## User Scope
 

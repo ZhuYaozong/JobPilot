@@ -20,6 +20,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from app.core.config import settings
 from app.eval.cases import EvalCase
 from app.eval.loader import load_cases_from_dir, load_cases_from_yaml
 from app.eval.report import render_console_lines, write_report
@@ -69,7 +70,12 @@ def main(argv: list[str] | None = None) -> int:
     print("=" * 70)
 
     results = run_cases(
-        cases, live=args.live, judge=args.judge, timeout_seconds=args.timeout,
+        cases,
+        live=args.live,
+        judge=args.judge,
+        model_name=args.model,
+        excluded_tools=args.exclude_tool,
+        timeout_seconds=args.timeout,
     )
 
     # 控制台逐条打印 + 最终汇总
@@ -85,7 +91,18 @@ def main(argv: list[str] | None = None) -> int:
     report_root = Path(args.report_dir) if args.report_dir else _DEFAULT_REPORT_ROOT
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     report_dir = report_root / stamp
-    summary_path = write_report(results, report_dir)
+    summary_path = write_report(
+        results,
+        report_dir,
+        metadata={
+            "live": bool(args.live),
+            "model": args.model or settings.llm_model_name,
+            "dataset": str(dataset_path.resolve()),
+            "excluded_tools": sorted(set(args.exclude_tool)),
+            "judge": bool(args.judge),
+            "timeout_seconds": args.timeout,
+        },
+    )
     print(f"报告: {summary_path}")
 
     return 0 if passed == total else 1
@@ -109,6 +126,22 @@ def _build_parser() -> argparse.ArgumentParser:
         "--live",
         action="store_true",
         help="用真 LLMClient,需要 LLM_* env 配置;默认 fake LLM",
+    )
+    p.add_argument(
+        "--model",
+        help=(
+            "本次评测使用的 OpenAI-compatible 模型名；仅覆盖当前进程，"
+            "例如 jobpilot-base 或 jobpilot-lora-v1"
+        ),
+    )
+    p.add_argument(
+        "--exclude-tool",
+        action="append",
+        default=[],
+        help=(
+            "从本次 Agent 工具目录排除一个技术名，可重复指定；"
+            "纯模型对比使用 --exclude-tool search_knowledge"
+        ),
     )
     p.add_argument(
         "--judge",

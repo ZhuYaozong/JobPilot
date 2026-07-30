@@ -245,6 +245,43 @@ uv run --project datasets python datasets\scripts\check_quality.py `
 完整配置、生成、外部文档导入和实验说明见
 [`datasets/README.md`](datasets/README.md)。
 
+## Model Topology And Verified Status
+
+2026-07-30 完成了模型产物、运行服务和 500 条配对评测审计。服务是否在线是
+瞬时状态，下面的“已验证”表示产物和调用链真实跑通，不表示服务必须常驻：
+
+| 模型 | 职责 | 部署位置与接口 | 已验证状态 |
+| --- | --- | --- | --- |
+| Qwen2.5-7B-Instruct | Base 生成模型 | RTX 3090，vLLM `jobpilot-base` | 4 个分片、14.19 GiB，16384 上下文，真实 Chat API 通过 |
+| JobPilot LoRA r16 | 求职领域生成模型 | 同一 vLLM 动态 adapter `jobpilot-lora-v1` | 154.05 MiB，rank 16，真实 Chat API 通过 |
+| BAAI/bge-m3 | 召回 embedding | RTX 4060，`POST /v1/embeddings` | FP16、1024 维，pgvector 全量重建与 Vector 召回通过 |
+| BAAI/bge-reranker-v2-m3 | Cross-encoder 精排 | RTX 4060，`POST /v1/rerank` | FP16，双模型共存和排序冒烟通过；不写入 pgvector |
+
+Base 和 LoRA 共用一份 Base 权重，通过请求中的 `model` 字段切换；Embedding 与
+Reranker 使用独立 `j-rag` 环境，避免影响 LLaMA-Factory 的 `j-train` 和 vLLM 的
+`j-serve`。完整部署说明见 [`deploy/vllm/README.md`](deploy/vllm/README.md) 和
+[`services/rag_models/README.md`](services/rag_models/README.md)。
+
+### 当前评测结论
+
+| 指标（500 条独立配对） | Base | LoRA |
+| --- | ---: | ---: |
+| 单轮字符 F1 | 0.2102 | 0.4464 |
+| 单轮平均延迟 | 11.756 秒 | 2.231 秒 |
+| Agent 工作流成功率 | 78.8% | 99.6% |
+| Agent 完整 case 通过率 | 78.6% | 88.4% |
+| Agent 错误工具调用率 | 0.2% | 11.2% |
+| Agent 重复工具调用率 | 0.2% | 7.6% |
+| RAG 工具泄漏次数 | 0 | 0 |
+
+LoRA 明显提升领域回答相似度、输出收敛速度和 Agent 决策 JSON 成功率，但还不能只凭
+自动指标宣布“全面优于 Base”：LoRA 的新增数字声明率更高，并且容易把通用简历/JD
+问题误判为操作用户资源；Base 的主要失败是回答中的未转义换行导致严格 JSON 决策解析
+失败。人工盲评尚未完成，后续应分别优化 Agent 协议鲁棒性和工具意图边界，再用同一
+500 条数据重跑。详细报告生成方式和解读边界见
+[`evaluation/llm/README.md`](evaluation/llm/README.md) 与
+[`evaluation/agent/README.md`](evaluation/agent/README.md)。
+
 ## MCP Integration
 
 JobPilot 采用“内部业务工具保持本地调用，外部能力通过 MCP 接入”的双向架构：
@@ -316,8 +353,8 @@ LLM_BASE_URL=https://api.example.com/v1
 LLM_API_KEY=your-api-key
 LLM_MODEL_NAME=your-chat-model
 
-EMBEDDING_BASE_URL=http://127.0.0.1:8003/v1
-EMBEDDING_API_KEY=your-api-key
+EMBEDDING_BASE_URL=http://127.0.0.1:7997/v1
+EMBEDDING_API_KEY=local-no-auth
 EMBEDDING_MODEL_NAME=BAAI/bge-m3
 EMBEDDING_DIMENSIONS=1024
 EMBEDDING_SEND_DIMENSIONS=false
@@ -335,6 +372,8 @@ Embedding 配置可以独立指定；如果未设置 endpoint，客户端会在�
 RAG 检索已支持 `vector`、`bm25` 和基于加权 RRF 的 `hybrid`。可选 Reranker 使用独立 `/rerank` 端点；完整参数和四种切换示例见 `backend/README.md`。默认仍为 Vector RAG 且关闭重排，便于兼容和快速回滚。
 
 从旧 1536 维索引升级时，先阅读 [backend/README.md](backend/README.md) 的“BGE-M3 维度迁移”章节。迁移会保留文档和 chunk 文本、清空不可复用的旧向量，再由批量脚本安全重建；在向量尚未补齐时可临时使用 `RAG_STRATEGY=bm25`。
+
+本地 RTX GPU 上同时运行 BGE-M3 与 bge-reranker-v2-m3 的安装、版本锁定和 API 测试见 [本地 RAG 模型服务](services/rag_models/README.md)；正式切换数据库前按 [BGE-M3 迁移运行手册](docs/rag/bge-m3-migration-runbook.md) 完成备份与只读预演。
 
 合并本次代码不会自动修改现有数据库或调用模型服务。BGE-M3 服务、数据库备份和维护窗口准备完成前，可以继续运行旧版本配置；正式切换时再按迁移章节执行 Alembic 和向量重建脚本。
 
@@ -440,6 +479,12 @@ uv --cache-dir .uv-cache --directory backend run python -m app.eval.cli
 ```
 
 详细见 [backend/README.md#agent-eval](backend/README.md#agent-eval)。
+
+Base / LoRA 的纯 Agent 控制变量实验使用请求级工具隔离，不需要停止 RAG 服务；
+完整命令和指标说明见 [Base / LoRA 无 RAG Agent 对比](backend/README.md#base--lora-无-rag-agent-对比)。
+
+500 条独立领域问题经完整 LangGraph 的配对评测见
+[evaluation/agent/README.md](evaluation/agent/README.md)。
 
 Frontend build:
 
