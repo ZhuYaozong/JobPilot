@@ -12,7 +12,9 @@ def _settings(**overrides) -> Settings:  # noqa: ANN003
     return Settings(_env_file=None, **overrides)
 
 
-def test_factory_defaults_to_hybrid_with_reranker() -> None:
+def test_factory_defaults_to_hybrid_with_reranker(monkeypatch) -> None:
+    # 验证生产默认值时移除测试环境覆盖，其他测试仍保持外部调用隔离。
+    monkeypatch.delenv('RAG_RERANKER_ENABLED', raising=False)
     service = build_retrieval_service(app_settings=_settings())
 
     assert isinstance(service.retriever, HybridRetriever)

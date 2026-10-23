@@ -11,27 +11,8 @@ jobs:
   backend:
     name: Backend
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: pgvector/pgvector:pg17
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: "123456"
-          POSTGRES_DB: jobpilot
-        ports:
-          - 25432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d jobpilot"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     env:
-      APP_ENV: test
-      APP_DEBUG: "false"
-      DATABASE_URL: postgresql+asyncpg://postgres:123456@127.0.0.1:25432/jobpilot
-      REDIS_URL: redis://127.0.0.1:26379/0
-      AUTH_SECRET_KEY: ci-test-secret-not-for-production
-      AUTH_DEV_MODE: "true"
+      TEST_DATABASE_URL: postgresql+asyncpg://jobpilot_test:disposable-test-only@127.0.0.1:35432/jobpilot_test
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -50,11 +31,18 @@ jobs:
       - name: Install backend dependencies
         run: uv --directory backend sync
 
-      - name: Run migrations
-        run: uv --directory backend run alembic upgrade head
+      - name: Start isolated test database
+        run: docker compose -f backend/compose.test.yaml up -d --wait
+
+      - name: Run guarded test migrations
+        run: uv --directory backend run python testing_environment.py migrate
 
       - name: Run backend tests
         run: uv --directory backend run pytest --basetemp pytest-cache-files-ci
+
+      - name: Stop isolated test database
+        if: always()
+        run: docker compose -f backend/compose.test.yaml down
 
   frontend:
     name: Frontend
