@@ -53,11 +53,13 @@ class EnvironmentGuardTests(unittest.TestCase):
         with patch.dict(os.environ, {
             "TEST_DATABASE_URL": SAFE, "DATABASE_URL": "business",
             "LLM_API_KEY": "real-secret", "MCP_ENABLED": "true",
+            "RAG_RERANKER_ENABLED": "true",
         }, clear=True):
             configure_test_environment()
             self.assertEqual(os.environ["DATABASE_URL"], SAFE)
             self.assertEqual(os.environ["LLM_API_KEY"], "test-only")
             self.assertEqual(os.environ["MCP_ENABLED"], "false")
+            self.assertEqual(os.environ["RAG_RERANKER_ENABLED"], "false")
 
     def test_settings_directory_is_empty_and_restored_on_failure(self):
         previous = Path.cwd()

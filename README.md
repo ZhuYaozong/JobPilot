@@ -531,7 +531,7 @@ docker compose -f backend/compose.test.yaml down
 ```
 
 测试首次加载 Settings 时在空临时目录执行，避免读取仓库 `.env`。
-模型/MCP/Redis 配置覆盖为测试值；每个测试的相对文件写入独立临时目录，
+模型/MCP/Redis 配置覆盖为测试值，通用业务测试默认禁用外部 reranker（专门测试显式使用替身）；每个测试的相对文件写入独立临时目录，
 真实 TCP 连接仅允许专用数据库端口（Windows 标准库内部 socketpair 除外）。模型和 HTTP 调用应使用替身。
 此护栏用于避免测试误连，不能作为任意不可信测试代码的操作系统沙箱。
 不要通过 `--noconftest` 绕过它运行业务测试。

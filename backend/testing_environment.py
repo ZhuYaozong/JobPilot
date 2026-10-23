@@ -55,6 +55,8 @@ def configure_test_environment() -> str:
         "EMBEDDING_BASE_URL": "http://127.0.0.1:9/v1",
         "EMBEDDING_API_KEY": "test-only",
         "EMBEDDING_MODEL_NAME": "test-only",
+        # 通用业务测试不调用外部重排；专门重排测试显式使用替身。
+        "RAG_RERANKER_ENABLED": "false",
         "RERANKER_BASE_URL": "http://127.0.0.1:9",
         "RERANKER_API_KEY": "test-only",
         "RERANKER_MODEL_NAME": "test-only",
