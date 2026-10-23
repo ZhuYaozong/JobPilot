@@ -547,7 +547,7 @@ http://localhost:5173
 
 ## Development Commands
 
-Backend tests:
+Backend tests（先按文末“隔离测试环境”启动专用实例、设置 TEST_DATABASE_URL 并执行测试迁移）：
 
 ```powershell
 uv --cache-dir .uv-cache --directory backend run pytest
@@ -600,3 +600,47 @@ docker compose down -v
 ## License
 
 JobPilot is released under the [MIT License](LICENSE).
+
+
+## 隔离测试环境（平台改造 B01）
+
+后端测试必须显式设置 `TEST_DATABASE_URL`，不会回退到应用的
+`DATABASE_URL`。测试目标固定为本机 `127.0.0.1:35432/jobpilot_test`，
+角色固定为 `jobpilot_test`；URL 参数、其他地址、业务库和管理员角色均被拒绝。
+数据库名包含 test 并不代表安全，请使用下面的独立容器。
+
+从仓库根目录执行（PowerShell）：
+
+```powershell
+# 只启动专用测试实例，不启动/修改 compose.yaml 中的业务服务。
+docker compose -f backend/compose.test.yaml up -d --wait
+
+Set-Location backend
+$env:TEST_DATABASE_URL = "postgresql+asyncpg://jobpilot_test:disposable-test-only@127.0.0.1:35432/jobpilot_test"
+
+# 护栏本身可独立验证，不加载应用、不连接数据库。
+.\.venv\Scripts\python.exe tests/test_test_environment_guard.py
+
+# 迁移入口同样先通过护栏，仅向专用测试库应用已有迁移。
+.\.venv\Scripts\python.exe testing_environment.py migrate
+.\.venv\Scripts\python.exe -m pytest tests/test_test_environment_guard.py tests/test_user_scope_and_list_rules.py
+
+# 用完后移除当前进程变量；测试实例的数据在容器移除后丢弃。
+Remove-Item Env:TEST_DATABASE_URL
+Set-Location ..
+docker compose -f backend/compose.test.yaml down
+```
+
+测试首次加载 Settings 时在空临时目录执行，避免读取仓库 `.env`。
+模型/MCP/Redis 配置覆盖为测试值；每个测试的相对文件写入独立临时目录，
+真实 TCP 连接仅允许专用数据库端口（Windows 标准库内部 socketpair 除外）。模型和 HTTP 调用应使用替身。
+此护栏用于避免测试误连，不能作为任意不可信测试代码的操作系统沙箱。
+不要通过 `--noconftest` 绕过它运行业务测试。
+
+测试容器仅绑定本机端口，数据使用 tmpfs；初始化的运行角色不是超级用户，
+不能创建角色/数据库，也不能连接实例内的 postgres/template1。示例口令只适用于
+这个可销毁的本机测试实例，不能用于部署。护栏测试可在容器未启动时运行，
+完整 API 测试则需要完成测试库迁移。
+
+B01 保留既有测试的开发身份头行为，仅在测试进程设置相关配置；
+生产认证缺口由后续 J01 处理。B01 已在隔离库执行后端全量 pytest；未执行真实模型或外部 MCP 集成验证，远端 GitHub CI 待运行。

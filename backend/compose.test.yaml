@@ -1,0 +1,18 @@
+name: jobpilot-isolated-tests
+services:
+  database:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_PASSWORD: disposable-bootstrap-only
+    ports:
+      - "127.0.0.1:35432:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    volumes:
+      - ./tests/bootstrap_test_db.sql:/docker-entrypoint-initdb.d/010-test.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d jobpilot_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+

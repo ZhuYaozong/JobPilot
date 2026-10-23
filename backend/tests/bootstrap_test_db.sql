@@ -1,0 +1,13 @@
+-- 仅在独立临时实例执行；运行角色不能访问 postgres/template1。
+REVOKE CONNECT ON DATABASE postgres FROM PUBLIC;
+REVOKE CONNECT ON DATABASE template1 FROM PUBLIC;
+CREATE ROLE jobpilot_test LOGIN PASSWORD 'disposable-test-only'
+    NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
+CREATE DATABASE jobpilot_test OWNER jobpilot_test;
+REVOKE ALL ON DATABASE jobpilot_test FROM PUBLIC;
+GRANT CONNECT ON DATABASE jobpilot_test TO jobpilot_test;
+\connect jobpilot_test
+CREATE EXTENSION IF NOT EXISTS vector;
+REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+GRANT USAGE, CREATE ON SCHEMA public TO jobpilot_test;
+

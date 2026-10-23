@@ -4,12 +4,18 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
+from testing_environment import configure_test_environment, isolated_settings_directory
+
+# 必须先通过测试目标校验，再导入任何应用模块或数据库引擎。
+configure_test_environment()
+with isolated_settings_directory():
+    from app.core.config import settings
+
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from app.core.config import settings
 from app.main import app
 from app.models.job_posting import JobPosting
 from app.models.resume import Resume
@@ -149,3 +155,39 @@ def create_application(
         return response.json()
 
     return _create_application
+
+
+@pytest.fixture(autouse=True)
+def isolated_test_files_and_network(monkeypatch, tmp_path):
+    """相对文件写入临时目录；真实套接字仅允许访问专用测试库。"""
+    import socket
+    import sys
+
+    monkeypatch.chdir(tmp_path)
+    original_connect = socket.socket.connect
+    original_connect_ex = socket.socket.connect_ex
+    socketpair_code = getattr(socket.socketpair, "__code__", None)
+
+    def check_address(address):
+        if not isinstance(address, tuple) or address[:2] != ("127.0.0.1", 35432):
+            raise RuntimeError("Test network blocked: use an HTTP/model mock")
+
+    def guarded_connect(sock, address):
+        # Windows 标准库使用本机 TCP 创建 socketpair；只放行该函数的直接调用。
+        # 不放开任意 loopback 端口，业务库和本机模型服务仍被护栏阻断。
+        internal_pair = (
+            socketpair_code is not None
+            and sys._getframe(1).f_code is socketpair_code
+            and isinstance(address, tuple)
+            and address[0] in ("127.0.0.1", "::1")
+        )
+        if not internal_pair:
+            check_address(address)
+        return original_connect(sock, address)
+
+    def guarded_connect_ex(sock, address):
+        check_address(address)
+        return original_connect_ex(sock, address)
+
+    monkeypatch.setattr(socket.socket, "connect", guarded_connect)
+    monkeypatch.setattr(socket.socket, "connect_ex", guarded_connect_ex)
