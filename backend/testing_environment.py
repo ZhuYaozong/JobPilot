@@ -93,4 +93,3 @@ if __name__ == "__main__":
     if sys.argv[1:] != ["migrate"]:
         raise SystemExit("Usage: python testing_environment.py migrate")
     migrate_test_database()
-
