@@ -365,6 +365,8 @@ RAG 检索已支持 `vector`、`bm25` 和基于加权 RRF 的 `hybrid`。Reranke
 
 J01-a 入口修复和本地验证见 [认证边界记录](docs/platform/J01a-auth-boundary.md)。
 
+J01-b 新增独立的受托身份确认入口 `GET /api/internal/v1/identity/me`，默认关闭。启用前先应用新迁移并配置固定 HTTPS 身份源、可信调用方和 introspection 凭据；按 issuer + subject 唯一映射，不按用户名或邮箱认领旧账号。外部绑定账号不能通过开发头进入；现有业务 API 仍使用原认证入口。配置、回滚限制及验证范围见 [外部身份记录](docs/platform/J01b-external-identity.md)。
+
 ### 4. Install Backend Dependencies
 
 ```powershell

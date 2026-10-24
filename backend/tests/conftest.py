@@ -218,3 +218,82 @@ def auth_user_record():
         return snapshot
 
     return record
+
+
+@pytest.fixture(scope="session")
+def delegated_signing_keys():
+    """测试专用 RSA 私钥只留在进程内，不写仓库或报告。"""
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.hazmat.primitives import serialization
+    from jose import jwk
+    result = {}
+    for kid in ("original", "rotated"):
+        private = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        pem = private.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
+        public = jwk.construct(private.public_key().public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo), "RS256").to_dict()
+        public.update(kid=kid, use="sig", alg="RS256")
+        result[kid] = (pem, public)
+    return result
+
+
+@pytest.fixture
+def delegated_idp(delegated_signing_keys):
+    """可控 HTTP 身份源替身；仍执行真实 JWT 签名和数据库映射。"""
+    import base64
+    from copy import deepcopy
+    import time
+    from urllib.parse import parse_qs
+    import httpx
+    import respx
+    from jose import jwt
+    from app.api.deps import get_delegated_verifier
+    from app.core.config import Settings
+    from app.core.delegated_security import DelegatedTokenVerifier
+
+    class IdentityProvider:
+        def __init__(self):
+            self.config = Settings(_env_file=None, app_env="test", delegated_auth_enabled=True,
+                delegated_issuer="https://identity.example.invalid/realms/jobpilot",
+                delegated_jwks_url="https://identity.example.invalid/realms/jobpilot/certs",
+                delegated_introspection_url="https://identity.example.invalid/realms/jobpilot/introspect",
+                delegated_client_secret="test-only-introspection-secret")
+            self.verifier = DelegatedTokenVerifier(self.config)
+            self.subject = "subject-" + uuid4().hex
+            self.keys = [deepcopy(delegated_signing_keys["original"][1])]
+            self.status = {}
+            self.seen_client_auth = False
+
+        def token(self, kid="original", remove=(), **overrides):
+            now = int(time.time())
+            claims = dict(iss=self.config.delegated_issuer, sub=self.subject, aud="jobpilot", azp="tiki",
+                          exp=now+180, iat=now, nbf=now-1, sid="session-"+self.subject, typ="Bearer",
+                          scope="openid resume.read", preferred_username="External Name", email="external@example.invalid")
+            claims.update(overrides)
+            for field in remove:
+                claims.pop(field, None)
+            return jwt.encode(claims, delegated_signing_keys[kid][0], algorithm="RS256", headers={"kid": kid})
+
+        def introspection(self, request):
+            expected = base64.b64encode(b"jobpilot:test-only-introspection-secret").decode()
+            self.seen_client_auth = request.headers.get("authorization") == "Basic " + expected
+            claims = jwt.get_unverified_claims(parse_qs(request.content.decode())["token"][0])
+            value = {"active": True, "sub": claims["sub"], "sid": claims.get("sid"), "username": claims.get("preferred_username")}
+            value.update(self.status)
+            return httpx.Response(200, json=value)
+
+        def get(self, client, token=None, **kwargs):
+            return client.get("/api/internal/v1/identity/me", headers={"Authorization": "Bearer " + (token or self.token())}, **kwargs)
+
+    provider = IdentityProvider()
+    with respx.mock(assert_all_called=False) as mock:
+        provider.jwks_route = mock.get(provider.config.delegated_jwks_url).mock(side_effect=lambda request: httpx.Response(200, json={"keys": provider.keys}))
+        provider.introspection_route = mock.post(provider.config.delegated_introspection_url).mock(side_effect=provider.introspection)
+        previous = app.dependency_overrides.get(get_delegated_verifier)
+        app.dependency_overrides[get_delegated_verifier] = lambda: provider.verifier
+        try:
+            yield provider
+        finally:
+            if previous is None:
+                app.dependency_overrides.pop(get_delegated_verifier, None)
+            else:
+                app.dependency_overrides[get_delegated_verifier] = previous
