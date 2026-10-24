@@ -44,23 +44,8 @@ async def register(body: RegisterRequest, db: DbSession):
     existing_user = existing.scalar_one_or_none()
 
     if existing_user is not None:
-        # 已有同名用户且有密码 → 真正的重复注册
-        if existing_user.hashed_password is not None:
-            raise HTTPException(409, "用户名已被注册")
-        # 已有同名用户但无密码 → dev 模式创建的空壳,升级为正式用户
-        existing_user.hashed_password = hash_password(body.password)
-        existing_user.is_active = True
-        if body.email:
-            existing_user.email = body.email
-        if body.display_name:
-            existing_user.display_name = body.display_name
-        await db.commit()
-        await db.refresh(existing_user)
-        token = create_access_token(existing_user.id, existing_user.username)
-        return TokenResponse(
-            access_token=token,
-            user=UserPublic.model_validate(existing_user),
-        )
+        # 无密码的历史/开发账号同样有数据归属，注册不能作为认领证明。
+        raise HTTPException(409, "用户名已被注册")
 
     # email 唯一性检查
     if body.email:

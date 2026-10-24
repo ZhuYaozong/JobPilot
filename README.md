@@ -59,7 +59,7 @@ JobPilot/
 - AI 实验数据闭环：独立 `datasets` 工程生产 LoRA SFT、RAG 文档和带证据评测集，并比较 Vector、BM25、Hybrid、Hybrid + Rerank。
 - 交互式模拟面试：基于当前岗位、简历、匹配结果、interview_prep 和 search_knowledge 逐轮提问。
 - 定制简历版本：针对岗位生成 `ai_tailored` 简历版本，保留版本号、来源类型和变更摘要，前端可查看 / 复制 / 导出 Markdown 与 DOCX。
-- 多用户认证：JWT 注册 / 登录 / me 与 dev 模式（`X-User-Name`）并存；侧边栏支持多会话切换、登录其他、注册新用户、退出登录。
+- 多用户认证：默认 JWT 注册 / 登录 / me；local/test 可显式开启受限开发身份（`X-User-Name`）；侧边栏支持多会话切换、登录其他、注册新用户、退出登录。
 - AI 草稿入口：岗位 / 简历创建抽屉里粘文本或贴 URL，LLM 自动推断公司 / 岗位 / 城市或标题并抽取结构化字段，编辑后一次落库；同样的 `draft_*` / `create_*` 工具也接入了 AI 助手，可以直接在对话里完成起草、确认、保存。
 - 工程约束清晰：不引入 `langchain-openai`、`langchain-community`、`langchain-text-splitters`，模型调用由自研 OpenAI-compatible client 承载。
 
@@ -344,7 +344,7 @@ RAG_STRATEGY=hybrid
 RAG_RERANKER_ENABLED=true
 
 AUTH_SECRET_KEY=change-this-to-a-long-random-secret
-AUTH_DEV_MODE=true
+AUTH_DEV_MODE=false
 ```
 
 Embedding 配置可以独立指定；如果未设置 endpoint，客户端会在运行时尝试复用对应的 `LLM_*` 配置。当前 schema 与 BGE-M3 dense embedding 统一为 1024 维。`EMBEDDING_SEND_DIMENSIONS=false` 适配固定输出维度、但不接受 OpenAI `dimensions` 参数的自建服务；客户端仍会严格校验返回值必须为 1024 维。
@@ -358,6 +358,12 @@ RAG 检索已支持 `vector`、`bm25` 和基于加权 RRF 的 `hybrid`。Reranke
 合并本次代码不会自动修改现有数据库或调用模型服务。BGE-M3 服务、数据库备份和维护窗口准备完成前，可以继续运行旧版本配置；正式切换时再按迁移章节执行 Alembic 和向量重建脚本。
 
 `POSTGRES_PASSWORD=123456` 和 `AUTH_DEV_MODE=true` 只面向本地开发。对外部署前请至少设置 `APP_ENV=production`、`APP_DEBUG=false`、`AUTH_DEV_MODE=false`，并替换 `AUTH_SECRET_KEY`、数据库密码和所有模型 API key。
+
+认证默认关闭开发头。需要本地无密码演示时，显式设置 `APP_ENV=local`、`AUTH_DEV_MODE=true`，且每个请求提供非空 `X-User-Name`；无头请求返回 401，开发头不能进入有密码或停用账号。前端使用账号登录时，在 `frontend/.env` 设置 `VITE_AUTH_DEV_MODE=false`；仅本地演示时与后端一起设为 true。
+
+服务环境（除 local/test 外的所有 APP_ENV 值）会在启动时拒绝开发认证、debug、示例密钥、少于 32 字节的密钥和不受支持的本地 JWT 算法。长度检查不代替随机性，部署时应生成强随机密钥。已有无密码账号不能再通过同名注册认领；注册返回 409，原数据保留，有归属证明的绑定流程留待 J01-c。
+
+J01-a 入口修复和本地验证见 [认证边界记录](docs/platform/J01a-auth-boundary.md)。
 
 ### 4. Install Backend Dependencies
 

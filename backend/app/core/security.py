@@ -8,6 +8,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import math
+import re
 
 import bcrypt
 from jose import JWTError, jwt
@@ -45,21 +47,24 @@ def create_access_token(user_id: int, username: str) -> str:
 
 
 def decode_access_token(token: str) -> dict:
-    """解码并验证 JWT token，返回 payload dict。
-
-    失败时抛 ``JWTError``（过期、签名错、格式错等）。
-    """
+    """校验本地 API JWT；非法字段统一作为认证失败，不让整数转换异常流入 API。"""
     try:
         payload = jwt.decode(
             token,
             settings.auth_secret_key,
             algorithms=[settings.auth_algorithm],
+            options={"require_sub": True, "require_exp": True},
         )
-        if payload.get("sub") is None:
-            raise JWTError("token 缺少 sub 字段")
+        subject = payload["sub"]
+        # users.id 是 PostgreSQL Integer；拒绝负数、超范围值和非规范数字串。
+        if not isinstance(subject, str) or not re.fullmatch(r"[1-9][0-9]{0,9}", subject) or int(subject) > 2_147_483_647:
+            raise JWTError("token sub 格式无效")
+        expires = payload["exp"]
+        if type(expires) not in (int, float) or not math.isfinite(expires) or expires <= 0:
+            raise JWTError("token exp 格式无效")
         return payload
-    except JWTError:
-        raise
+    except (KeyError, TypeError, ValueError, OverflowError) as error:
+        raise JWTError("token 字段无效") from error
 
 
 def create_mcp_access_token(

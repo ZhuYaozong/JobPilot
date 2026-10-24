@@ -74,8 +74,8 @@ class TestRegister:
         })
         assert resp.status_code == 422
 
-    def test_register_upgrades_dev_user(self, auth_client: TestClient):
-        """dev 模式下已自动创建的无密码用户,注册时应升级而非报重复。"""
+    def test_register_cannot_claim_dev_user(self, auth_client: TestClient):
+        """无密码账号仍有归属，注册不得直接认领。"""
         username = _unique_username()
         # 先用 X-User-Name 触发自动创建
         auth_client.get("/api/v1/resumes", headers={"X-User-Name": username})
@@ -84,8 +84,9 @@ class TestRegister:
             "username": username,
             "password": "upgrade123",
         })
-        assert resp.status_code == 201
-        assert resp.json()["user"]["username"] == username
+        assert resp.status_code == 409
+        login = auth_client.post("/api/auth/login", json={"username": username, "password": "upgrade123"})
+        assert login.status_code == 401
 
 
 class TestLogin:
@@ -202,3 +203,76 @@ class TestDevModeCompat:
         )
         assert resp.status_code == 200
         assert resp.json()["username"] == jwt_user
+
+
+class TestAuthBoundary:
+    """真实 API 与隔离数据库验证认证旁路被阻断。"""
+
+    @pytest.mark.parametrize("headers", [{}, {"X-User-Name": ""}, {"X-User-Name": "   "}])
+    def test_no_implicit_demo_identity(self, auth_client, headers):
+        assert auth_client.get("/api/auth/me", headers=headers).status_code == 401
+
+    @pytest.mark.parametrize("authorization", ["", "Basic ignored", "Token ignored", "Bearer", "Bearer ", "Bearer invalid", "Bearer bad token"])
+    def test_bad_authorization_never_falls_back(self, auth_client, authorization):
+        result = auth_client.get("/api/auth/me", headers={"Authorization": authorization, "X-User-Name": _unique_username()})
+        assert result.status_code == 401
+
+    def test_service_mode_rejects_dev_header(self, auth_client, monkeypatch):
+        from app.core.config import settings
+        monkeypatch.setattr(settings, "auth_dev_mode", False)
+        assert auth_client.get("/api/auth/me", headers={"X-User-Name": _unique_username()}).status_code == 401
+
+    def test_runtime_environment_cannot_allow_dev_header(self, auth_client, monkeypatch):
+        from app.core.config import settings
+        monkeypatch.setattr(settings, "app_env", "production")
+        assert auth_client.get("/api/auth/me", headers={"X-User-Name": _unique_username()}).status_code == 401
+
+    def test_password_account_cannot_use_dev_header(self, auth_client):
+        name = _unique_username()
+        registration = auth_client.post("/api/auth/register", json={"username": name, "password": "account-password"})
+        assert registration.status_code == 201
+        assert auth_client.get("/api/auth/me", headers={"X-User-Name": name}).status_code == 401
+        assert auth_client.get("/api/auth/me", headers={"Authorization": "bearer " + registration.json()["access_token"]}).status_code == 200
+
+    @pytest.mark.parametrize("has_password", [False, True])
+    def test_disabled_user_cannot_be_claimed_or_reactivated(self, auth_client, auth_user_record, has_password):
+        from app.core.security import hash_password, create_access_token
+        name = _unique_username()
+        user = auth_user_record(name, is_active=False, hashed_password=hash_password("original-password") if has_password else None)
+        before = auth_user_record(name)
+        assert auth_client.get("/api/auth/me", headers={"X-User-Name": name}).status_code == 403
+        assert auth_client.post("/api/auth/register", json={"username": name, "password": "attacker-password", "email": "attacker@example.invalid", "display_name": "Changed"}).status_code == 409
+        assert auth_user_record(name) == before
+        token = create_access_token(user["id"], name)
+        assert auth_client.get("/api/auth/me", headers={"Authorization": "Bearer " + token}).status_code == 403
+
+    def test_legacy_account_data_not_transferred_by_registration(self, auth_client, auth_user_record):
+        name = _unique_username()
+        headers = {"X-User-Name": name}
+        created = auth_client.post("/api/v1/resumes", headers=headers, json={"title": "Private resume", "raw_text": "Private content", "content_hash": _unique_username(), "source_type": "manual"})
+        assert created.status_code == 201
+        resume_id = created.json()["id"]
+        before = auth_user_record(name)
+        assert auth_client.post("/api/auth/register", json={"username": name, "password": "claim-password", "display_name": "Claimed", "email": "claim@example.invalid"}).status_code == 409
+        assert auth_user_record(name) == before
+        other = auth_client.post("/api/auth/register", json={"username": _unique_username(), "password": "other-password"})
+        assert other.status_code == 201
+        result = auth_client.get(f"/api/v1/resumes/{resume_id}", headers={"Authorization": "Bearer " + other.json()["access_token"]})
+        assert result.status_code == 404
+        assert auth_client.get(f"/api/v1/resumes/{resume_id}", headers=headers).status_code == 200
+
+    @pytest.mark.parametrize("claims", [
+        {}, {"sub": "1"}, {"exp": "future"}, {"sub": "1", "exp": None},
+        {"sub": "1", "exp": True}, {"sub": "1", "exp": 1},
+        *({"sub": value, "exp": 4102444800} for value in ("bad", "-1", "0", "01", "1.0", "1e2", "999999999999999999999", "2147483648", " 1", 1, [], {})),
+    ])
+    def test_invalid_signed_claims_are_unauthorized(self, auth_client, claims):
+        from jose import jwt
+        from app.core.config import settings
+        token = jwt.encode(claims, settings.auth_secret_key, algorithm=settings.auth_algorithm)
+        assert auth_client.get("/api/auth/me", headers={"Authorization": "Bearer " + token, "X-User-Name": _unique_username()}).status_code == 401
+
+    def test_unknown_user_token_is_unauthorized(self, auth_client):
+        from app.core.security import create_access_token
+        token = create_access_token(2147483647, "missing")
+        assert auth_client.get("/api/auth/me", headers={"Authorization": "Bearer " + token}).status_code == 401
