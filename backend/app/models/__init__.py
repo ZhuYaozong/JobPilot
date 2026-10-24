@@ -15,6 +15,7 @@ from app.models.resume import Resume
 from app.models.resume_version import ResumeVersion
 from app.models.tool_call_log import ToolCallLog
 from app.models.user import User
+from app.models.external_binding import ExternalBindingChallenge, ExternalBindingAudit, ExternalBindingAttempt
 from app.models.external_identity import ExternalIdentity
 
 __all__ = [
@@ -36,4 +37,7 @@ __all__ = [
     "ToolCallLog",
     "User",
     "ExternalIdentity",
+    "ExternalBindingChallenge",
+    "ExternalBindingAudit",
+    "ExternalBindingAttempt",
 ]

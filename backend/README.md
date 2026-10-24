@@ -672,3 +672,7 @@ uv --cache-dir .uv-cache --directory backend run alembic current
 默认关闭，缺少 scope 不允许访问，身份服务故障不降级。首次合法访问原子创建 `external_identities` 与独立本地用户，不继承同名/同邮箱账号数据；已有映射用户仍受本地 is_active 控制。
 
 启用前先应用 `f29b6a70d183`，再配置 `DELEGATED_*`；已有映射时拒绝自动 downgrade。真实业务与 A2A 接入、任务授权及旧账号绑定由后续任务完成。完整配置和测试证据见 [J01-b 记录](../docs/platform/J01b-external-identity.md)。
+
+## 旧账号外部身份绑定（J01-c）
+
+默认 `EXTERNAL_BINDING_ENABLED=false`，`EXTERNAL_BINDING_ALLOWED_CLIENTS=[]`。先执行 Alembic 迁移，再部署；真实身份源须限制 `identity.bind` 仅授予显式可信平台客户端，普通 TiKi 读取委派不得获取。新增 `/api/auth/external-bindings/challenges` 与 `/confirm` 两步接口；不接收开发头作为证明，不自动认领同名账号。没有前端绑定页和 Agent 工具。详见 [绑定契约、并发与验收](../docs/platform/J01c-proven-account-binding.md)。

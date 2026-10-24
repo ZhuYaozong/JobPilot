@@ -49,6 +49,8 @@ def configure_test_environment() -> str:
         "AUTH_DEV_MODE": "true",  # 兼容既有身份夹具，不更改生产默认值。
         "AUTH_SECRET_KEY": "jobpilot-isolated-test-only",
         "DELEGATED_AUTH_ENABLED": "false",
+        "EXTERNAL_BINDING_ENABLED": "false",
+        "EXTERNAL_BINDING_ALLOWED_CLIENTS": "[]",
         "DELEGATED_ACTOR_CLIENTS": '{"tiki":"tiki"}',
         "REDIS_URL": "redis://127.0.0.1:9/0",
         "LLM_BASE_URL": "http://127.0.0.1:9/v1",

@@ -18,6 +18,9 @@ class VerifiedExternalIdentity:
     subject: str
     actor: str
     scopes: frozenset[str]
+    client_id: str = ""
+    session_id: str = ""
+    expires_at: int = 0
 
 
 def unauthorized():
@@ -108,13 +111,16 @@ class DelegatedTokenVerifier:
                 subject, session = payload["sub"], payload.get("sid")
                 if not isinstance(subject, str) or not subject.strip() or len(subject.encode()) > 255:
                     raise unauthorized()
-                if not isinstance(session, str) or not session or payload.get("typ") != "Bearer":
+                if not isinstance(session, str) or not 1 <= len(session) <= 512 or payload.get("typ") != "Bearer":
                     raise unauthorized()
                 if type(payload["exp"]) is not int or type(payload["iat"]) is not int or payload["iat"] > time.time() + 5:
                     raise unauthorized()
                 if not 0 < payload["exp"] - payload["iat"] <= self.config.delegated_max_lifetime_seconds:
                     raise unauthorized()
-                actor = self.config.delegated_actor_clients.get(payload.get("azp"))
+                client_id = payload.get("azp")
+                if not isinstance(client_id, str) or not 1 <= len(client_id) <= 255:
+                    raise unauthorized()
+                actor = self.config.delegated_actor_clients.get(client_id)
                 username = payload.get("preferred_username")
                 if actor is None or not isinstance(username, str) or not username or username.startswith("service-account-"):
                     raise unauthorized()
@@ -136,4 +142,4 @@ class DelegatedTokenVerifier:
             # 网络核验期间也可能到期，持久化身份前再次检查。
             if payload["exp"] <= time.time():
                 raise unauthorized()
-            return VerifiedExternalIdentity(payload["iss"], subject, actor, scopes)
+            return VerifiedExternalIdentity(payload["iss"], subject, actor, scopes, client_id, session, payload["exp"])

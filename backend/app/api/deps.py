@@ -100,21 +100,39 @@ class DelegatedUserContext:
     user: User
 
 
-async def get_delegated_context(
-    db: DbSession,
+async def get_verified_external_identity(
     verifier=Depends(get_delegated_verifier),
     authorization: Annotated[str | None, Header()] = None,
-) -> DelegatedUserContext:
+) -> VerifiedExternalIdentity:
     from app.core.delegated_security import unauthorized
-    from app.services.external_identity_service import resolve_external_user
     if not verifier.config.delegated_auth_enabled:
         raise HTTPException(404, "受托身份入口未启用")
     scheme, separator, token = (authorization or "").partition(" ")
     if scheme.lower() != "bearer" or not separator or not token or any(char.isspace() for char in token):
         raise unauthorized()
-    identity = await verifier.verify(token)
+    return await verifier.verify(token)
+
+
+async def get_delegated_context(db: DbSession, identity=Depends(get_verified_external_identity)) -> DelegatedUserContext:
+    from app.services.external_identity_service import resolve_external_user
     user = await resolve_external_user(db, identity)
     return DelegatedUserContext(identity, user)
 
 
 DelegatedIdentityDep = Annotated[DelegatedUserContext, Depends(get_delegated_context)]
+
+
+def get_binding_local_credential(
+    verifier=Depends(get_delegated_verifier),
+    authorization: Annotated[str | None, Header()] = None,
+):
+    from app.core.binding_security import local_credential
+    if not verifier.config.external_binding_enabled:
+        raise HTTPException(404, "绑定功能未启用")
+    return local_credential(authorization)
+
+
+def get_binding_external_token(x_external_authorization: Annotated[str | None, Header()] = None):
+    # 这里只提取凭据，验证在已提交尝试计数后执行；无自动开户。
+    from app.core.binding_security import bearer
+    return bearer(x_external_authorization)
