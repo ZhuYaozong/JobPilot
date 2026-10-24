@@ -64,6 +64,15 @@ def is_generated_test_username(username: str) -> bool:
     )
 
 
+def _require_dev_user(user: User) -> User:
+    # 开发用户名不是账号归属证明，不能访问真实密码账号或重新激活停用账号。
+    if not user.is_active:
+        raise HTTPException(403, "账号已被禁用")
+    if user.hashed_password is not None:
+        raise HTTPException(401, "该账号必须使用密码登录")
+    return user
+
+
 async def get_or_create_user_by_username(
     db: AsyncSession,
     requested_username: str | None,
@@ -73,7 +82,7 @@ async def get_or_create_user_by_username(
     result = await db.execute(statement)
     user = result.scalar_one_or_none()
     if user is not None:
-        return user
+        return _require_dev_user(user)
 
     user = User(**build_user_defaults(username))
     db.add(user)
@@ -86,10 +95,10 @@ async def get_or_create_user_by_username(
         existing_user = retry_result.scalar_one_or_none()
         if existing_user is None:
             raise
-        return existing_user
+        return _require_dev_user(existing_user)
 
     await db.refresh(user)
-    return user
+    return _require_dev_user(user)
 
 
 async def _get_owned_record_or_404[T](

@@ -187,10 +187,10 @@ RERANKER_MODEL_NAME=BAAI/bge-reranker-v2-m3
 AUTH_SECRET_KEY=change-this-to-a-long-random-secret
 AUTH_ALGORITHM=HS256
 AUTH_ACCESS_TOKEN_EXPIRE_MINUTES=1440
-AUTH_DEV_MODE=true
+AUTH_DEV_MODE=false
 ```
 
-`AUTH_DEV_MODE=true` 会允许 `X-User-Name` header 自动创建/切换本地用户，只应在本地开发和测试中使用。生产部署请设置 `APP_ENV=production`、`APP_DEBUG=false`、`AUTH_DEV_MODE=false`，并使用足够长的随机 `AUTH_SECRET_KEY`。
+开发认证默认关闭。只有 local/test 中显式开启 `AUTH_DEV_MODE=true` 并提供非空 `X-User-Name` 才能使用开发账号；密码账号必须登录，停用账号拒绝访问。其他环境必须关闭 debug 和开发认证，使用至少 32 字节的非示例随机 HS256 密钥，否则配置加载失败。
 
 ## Local Development
 
@@ -310,7 +310,7 @@ uv --cache-dir .uv-cache --directory backend run python -m app.eval.compare --ba
 
 ### JWT 认证(主路径)
 
-- `POST /api/auth/register`:用户名 + email(可选) + 密码注册,bcrypt 哈希。
+- `POST /api/auth/register`:用户名 + email(可选) + 密码创建新账号；已存在用户名统一返回 409，包括无密码历史账号，不通过注册完成账号绑定。
 - `POST /api/auth/login`:用户名 + 密码,签发 JWT(默认 `AUTH_ACCESS_TOKEN_EXPIRE_MINUTES=1440`,即 24 小时)。
 - `GET /api/auth/me`:校验 token 并返回当前用户公开信息。
 - 后续业务请求带 `Authorization: Bearer <token>`,服务端从 token 解析 user_id 加载用户。
@@ -319,13 +319,13 @@ JWT secret 由 `AUTH_SECRET_KEY` 提供。生产部署必须使用强随机密�
 
 ### Dev 模式(开发与测试路径)
 
-无 `Authorization` 时,服务端回落到 dev 模式,通过请求头识别用户:
+仅在 local/test 显式开启开发认证且没有 Authorization 头时，通过以下非空请求头访问开发账号。无头请求不会自动成为 demo；错误/无效 Authorization 会直接返回 401，不回退开发身份：
 
 ```http
 X-User-Name: demo
 ```
 
-默认 dev 用户:
+可显式选择的开发用户（仍需开启开发认证）：
 
 | User | Purpose |
 | --- | --- |
@@ -335,7 +335,7 @@ X-User-Name: demo
 
 ### 作用域执行
 
-- 依赖解析:`app/api/deps.py`(JWT 优先,无 token 则回落到 dev header)
+- 依赖解析:`app/api/deps.py`(认证头严格校验；无认证头时才检查显式开发准入)
 - 资源归属校验:`app/services/user_scope_service.py`(`get_resume_for_user_or_404` 等)
 
 核心业务对象都直接或间接受当前用户约束,避免跨用户读取或写入。JWT 用户和 dev 用户在数据库中是同一张 `users` 表,只是登入路径不同。

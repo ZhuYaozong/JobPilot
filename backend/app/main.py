@@ -1,3 +1,5 @@
+from app.core.config import settings  # 先拒绝不安全配置，再加载路由与数据库依赖。
+
 from fastapi import FastAPI
 
 from app.api.application_events import router as application_events_router
@@ -12,7 +14,6 @@ from app.api.knowledge import router as knowledge_router
 from app.api.matches import router as matches_router
 from app.api.resume_versions import router as resume_versions_router
 from app.api.resumes import router as resumes_router
-from app.core.config import settings
 
 app = FastAPI(
     title=settings.app_name,

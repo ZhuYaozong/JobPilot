@@ -2,7 +2,7 @@
 
 认证策略(双模):
 1. 请求头带 ``Authorization: Bearer <jwt>`` → JWT 认证(优先)
-2. ``settings.auth_dev_mode=True`` 且请求头带 ``X-User-Name`` → dev 模式自动建用户
+2. local/test 显式开启开发认证且提供非空 ``X-User-Name`` → 受限开发账号
 3. 两者都没有 → 401
 """
 
@@ -18,7 +18,6 @@ from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.models.user import User
 from app.services.user_scope_service import (
-    DEFAULT_DEMO_USERNAME,
     get_or_create_user_by_username,
 )
 
@@ -50,10 +49,12 @@ async def get_current_user(
     authorization: Annotated[str | None, Header()] = None,
     x_user_name: Annotated[str | None, Header(alias="X-User-Name")] = None,
 ) -> User:
-    """双模认证:JWT 优先,dev 模式 fallback X-User-Name header。"""
+    """有认证头就严格验证；仅无认证头时允许显式开发身份。"""
     # 路径 1: JWT Bearer token
-    if authorization and authorization.startswith("Bearer "):
-        token = authorization[7:]
+    if authorization is not None:
+        scheme, separator, token = authorization.partition(" ")
+        if scheme.lower() != "bearer" or not separator or not token or any(char.isspace() for char in token):
+            raise HTTPException(401, "认证头格式无效")
         try:
             payload = decode_access_token(token)
         except JWTError:
@@ -68,10 +69,12 @@ async def get_current_user(
         return user
 
     # 路径 2: dev 模式 X-User-Name header
-    if settings.auth_dev_mode:
+    if settings.auth_dev_mode and settings.app_env in {"local", "test"}:
+        if not x_user_name or not x_user_name.strip():
+            raise HTTPException(401, "开发认证必须显式提供 X-User-Name")
         return await get_or_create_user_by_username(
             db,
-            requested_username=x_user_name or DEFAULT_DEMO_USERNAME,
+            requested_username=x_user_name,
         )
 
     raise HTTPException(401, "未认证:请提供 Authorization: Bearer <token>")

@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -49,12 +49,12 @@ class Settings(BaseSettings):
     reranker_timeout_seconds: float = Field(default=15.0, gt=0)
 
     # 认证配置
-    # auth_dev_mode=True 时同时接受 X-User-Name header（向后兼容开发模式）；
-    # 生产部署应设为 False，仅允许 JWT token 认证。
+    # 默认只接受 JWT；开发头需在 local/test 中显式开启并提供用户名。
+    # 其他环境统一按服务部署处理，不允许开发认证与默认密钥。
     auth_secret_key: str = "jobpilot-dev-secret-change-in-production"
     auth_algorithm: str = "HS256"
     auth_access_token_expire_minutes: int = 1440  # 24 小时
-    auth_dev_mode: bool = True
+    auth_dev_mode: bool = False
 
     # MCP Client 配置。服务器清单使用 JSON，避免在代码里保存 URL 或凭证；
     # 每个服务器的 token 只保存对应环境变量名，真实 token 不进入配置对象和日志。
@@ -72,10 +72,38 @@ class Settings(BaseSettings):
     mcp_server_issuer_url: str = "http://127.0.0.1:8000"
     mcp_token_expire_minutes: int = 60
 
+    @field_validator("app_env")
+    @classmethod
+    def normalize_app_env(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if not normalized:
+            raise ValueError("APP_ENV 不能为空")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_auth_environment(self):
+        # 不识别的环境名称也按服务部署处理，避免拼写错误绕过保护。
+        if self.app_env not in {"local", "test"}:
+            if self.auth_dev_mode:
+                raise ValueError("服务环境禁止 AUTH_DEV_MODE")
+            if self.app_debug:
+                raise ValueError("服务环境必须关闭 APP_DEBUG")
+            placeholders = {
+                "jobpilot-dev-secret-change-in-production",
+                "change-this-to-a-long-random-secret",
+                "jobpilot-isolated-test-only",
+            }
+            if self.auth_secret_key.strip() in placeholders or len(self.auth_secret_key.strip().encode("utf-8")) < 32:
+                raise ValueError("服务环境 AUTH_SECRET_KEY 必须使用至少 32 字节的非示例密钥")
+            if self.auth_algorithm != "HS256":
+                raise ValueError("当前服务认证只支持 HS256；外部令牌由独立验证入口接入")
+        return self
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        hide_input_in_errors=True,
     )
 
 

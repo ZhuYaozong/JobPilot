@@ -191,3 +191,30 @@ def isolated_test_files_and_network(monkeypatch, tmp_path):
 
     monkeypatch.setattr(socket.socket, "connect", guarded_connect)
     monkeypatch.setattr(socket.socket, "connect_ex", guarded_connect_ex)
+
+
+@pytest.fixture
+def auth_user_record():
+    """只在隔离数据库准备/检查认证账号，不提供新的生产管理入口。"""
+    from app.models.user import User
+
+    def record(username, **changes):
+        snapshot = {}
+
+        async def work(db):
+            user = (await db.execute(select(User).where(User.username == username))).scalar_one_or_none()
+            if user is None:
+                user = User(username=username, display_name="Original user", **changes)
+                db.add(user)
+                await db.commit()
+            elif changes:
+                for field, value in changes.items():
+                    setattr(user, field, value)
+                await db.commit()
+            await db.refresh(user)
+            snapshot.update({field: getattr(user, field) for field in ("id", "username", "display_name", "email", "hashed_password", "is_active")})
+
+        _run_with_fresh_engine(work)
+        return snapshot
+
+    return record
