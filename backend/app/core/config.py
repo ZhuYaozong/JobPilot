@@ -70,6 +70,10 @@ class Settings(BaseSettings):
     delegated_jwks_cache_seconds: int = Field(default=300, ge=5, le=300)
     delegated_max_lifetime_seconds: int = Field(default=600, ge=30, le=3600)
 
+    # 绑定默认关闭；仅受信平台客户端可取得绑定专用权限。
+    external_binding_enabled: bool = False
+    external_binding_allowed_clients: list[str] = Field(default_factory=list)
+
     # MCP Client 配置。服务器清单使用 JSON，避免在代码里保存 URL 或凭证；
     # 每个服务器的 token 只保存对应环境变量名，真实 token 不进入配置对象和日志。
     mcp_enabled: bool = False
@@ -138,6 +142,16 @@ class Settings(BaseSettings):
             raise ValueError("受托身份必须配置 client_id、client_secret 与 audience")
         if not self.delegated_actor_clients or any(not key.strip() for key in self.delegated_actor_clients):
             raise ValueError("受托身份必须配置可信调用方到 actor 的映射")
+        return self
+
+    @model_validator(mode="after")
+    def validate_external_binding(self):
+        if self.external_binding_enabled:
+            clients = self.external_binding_allowed_clients
+            if not self.delegated_auth_enabled or not clients or len(set(clients)) != len(clients):
+                raise ValueError("绑定必须启用受托认证并配置非空且不重复的平台客户端白名单")
+            if any(not value or value != value.strip() or len(value) > 255 or "*" in value or self.delegated_actor_clients.get(value) != "platform" for value in clients):
+                raise ValueError("绑定白名单只允许精确的平台客户端")
         return self
 
     model_config = SettingsConfigDict(

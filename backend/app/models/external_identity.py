@@ -9,7 +9,8 @@ from app.db.base import Base
 
 class ExternalIdentity(Base):
     __tablename__ = "external_identities"
-    __table_args__ = (UniqueConstraint("issuer", "subject", name="uq_external_identity_issuer_subject"),)
+    __table_args__ = (UniqueConstraint("issuer", "subject", name="uq_external_identity_issuer_subject"),
+        UniqueConstraint("issuer", "user_id", name="uq_external_identity_issuer_user"))
 
     id: Mapped[int] = mapped_column(primary_key=True)
     issuer: Mapped[str] = mapped_column(String(512), nullable=False)
