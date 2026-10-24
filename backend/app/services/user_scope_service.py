@@ -12,6 +12,7 @@ from app.models.job_posting import JobPosting
 from app.models.match_result import MatchResult
 from app.models.resume import Resume
 from app.models.user import User
+from app.models.external_identity import ExternalIdentity
 
 DEFAULT_DEMO_USERNAME = "demo"
 DEFAULT_SANDBOX_USERNAME = "sandbox"
@@ -64,12 +65,15 @@ def is_generated_test_username(username: str) -> bool:
     )
 
 
-def _require_dev_user(user: User) -> User:
+async def _require_dev_user(db: AsyncSession, user: User) -> User:
     # 开发用户名不是账号归属证明，不能访问真实密码账号或重新激活停用账号。
     if not user.is_active:
         raise HTTPException(403, "账号已被禁用")
     if user.hashed_password is not None:
         raise HTTPException(401, "该账号必须使用密码登录")
+    external = (await db.execute(select(ExternalIdentity.id).where(ExternalIdentity.user_id == user.id).limit(1))).scalar_one_or_none()
+    if external is not None:
+        raise HTTPException(401, "该账号必须使用受托身份访问")
     return user
 
 
@@ -82,7 +86,7 @@ async def get_or_create_user_by_username(
     result = await db.execute(statement)
     user = result.scalar_one_or_none()
     if user is not None:
-        return _require_dev_user(user)
+        return await _require_dev_user(db, user)
 
     user = User(**build_user_defaults(username))
     db.add(user)
@@ -95,10 +99,10 @@ async def get_or_create_user_by_username(
         existing_user = retry_result.scalar_one_or_none()
         if existing_user is None:
             raise
-        return _require_dev_user(existing_user)
+        return await _require_dev_user(db, existing_user)
 
     await db.refresh(user)
-    return _require_dev_user(user)
+    return await _require_dev_user(db, user)
 
 
 async def _get_owned_record_or_404[T](

@@ -7,6 +7,8 @@
 """
 
 from typing import Annotated
+from dataclasses import dataclass
+from functools import lru_cache
 
 from fastapi import Depends, Header, HTTPException, Query
 from jose import JWTError
@@ -14,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.delegated_security import VerifiedExternalIdentity
 from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.models.user import User
@@ -81,3 +84,37 @@ async def get_current_user(
 
 
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
+
+
+
+@lru_cache
+def get_delegated_verifier():
+    from app.core.delegated_security import DelegatedTokenVerifier
+    return DelegatedTokenVerifier(settings)
+
+
+@dataclass(frozen=True)
+class DelegatedUserContext:
+    # 身份由验证器创建，本地 user 由映射事务解析，不使用请求自报 ID。
+    identity: "VerifiedExternalIdentity"
+    user: User
+
+
+async def get_delegated_context(
+    db: DbSession,
+    verifier=Depends(get_delegated_verifier),
+    authorization: Annotated[str | None, Header()] = None,
+) -> DelegatedUserContext:
+    from app.core.delegated_security import unauthorized
+    from app.services.external_identity_service import resolve_external_user
+    if not verifier.config.delegated_auth_enabled:
+        raise HTTPException(404, "受托身份入口未启用")
+    scheme, separator, token = (authorization or "").partition(" ")
+    if scheme.lower() != "bearer" or not separator or not token or any(char.isspace() for char in token):
+        raise unauthorized()
+    identity = await verifier.verify(token)
+    user = await resolve_external_user(db, identity)
+    return DelegatedUserContext(identity, user)
+
+
+DelegatedIdentityDep = Annotated[DelegatedUserContext, Depends(get_delegated_context)]

@@ -2,6 +2,8 @@ from app.core.config import settings  # 先拒绝不安全配置，再加载路�
 
 from fastapi import FastAPI
 
+from app.api.internal_identity import router as internal_identity_router
+
 from app.api.application_events import router as application_events_router
 from app.api.applications import router as applications_router
 from app.api.artifacts import router as artifacts_router
@@ -21,6 +23,7 @@ app = FastAPI(
 )
 
 app.include_router(health_router)
+app.include_router(internal_identity_router)
 app.include_router(auth_router)
 app.include_router(resumes_router)
 app.include_router(jobs_router)

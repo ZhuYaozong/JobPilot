@@ -665,3 +665,10 @@ uv --cache-dir .uv-cache --directory backend run alembic current
 - AgentRun token_usage 字段尚未真填(schema 已透出,等接入 token 计费时再补)。
 
 这些边界是刻意保留的工程取舍,避免在核心求职 workflow 和 Agent 可控性尚未完全稳定前引入过多平台复杂度。
+
+## 受托身份入口（J01-b）
+
+`GET /api/internal/v1/identity/me` 使用独立依赖验证外部 RS256 token，并在线核对 active、sub、sid、username。
+默认关闭，缺少 scope 不允许访问，身份服务故障不降级。首次合法访问原子创建 `external_identities` 与独立本地用户，不继承同名/同邮箱账号数据；已有映射用户仍受本地 is_active 控制。
+
+启用前先应用 `f29b6a70d183`，再配置 `DELEGATED_*`；已有映射时拒绝自动 downgrade。真实业务与 A2A 接入、任务授权及旧账号绑定由后续任务完成。完整配置和测试证据见 [J01-b 记录](../docs/platform/J01b-external-identity.md)。

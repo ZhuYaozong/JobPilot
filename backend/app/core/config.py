@@ -1,7 +1,8 @@
 from functools import lru_cache
 from typing import Literal
+from urllib.parse import urlsplit
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import SecretStr, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -56,6 +57,19 @@ class Settings(BaseSettings):
     auth_access_token_expire_minutes: int = 1440  # 24 小时
     auth_dev_mode: bool = False
 
+    # 外部身份独立启用；以下地址由部署者固定，不能由请求或 token 选择。
+    delegated_auth_enabled: bool = False
+    delegated_issuer: str = ""
+    delegated_jwks_url: str = ""
+    delegated_introspection_url: str = ""
+    delegated_client_id: str = "jobpilot"
+    delegated_client_secret: SecretStr = SecretStr("")
+    delegated_audience: str = "jobpilot"
+    delegated_actor_clients: dict[str, Literal["tiki", "platform"]] = Field(default_factory=lambda: {"tiki": "tiki"})
+    delegated_timeout_seconds: float = Field(default=3.0, gt=0, le=10)
+    delegated_jwks_cache_seconds: int = Field(default=300, ge=5, le=300)
+    delegated_max_lifetime_seconds: int = Field(default=600, ge=30, le=3600)
+
     # MCP Client 配置。服务器清单使用 JSON，避免在代码里保存 URL 或凭证；
     # 每个服务器的 token 只保存对应环境变量名，真实 token 不进入配置对象和日志。
     mcp_enabled: bool = False
@@ -97,6 +111,33 @@ class Settings(BaseSettings):
                 raise ValueError("服务环境 AUTH_SECRET_KEY 必须使用至少 32 字节的非示例密钥")
             if self.auth_algorithm != "HS256":
                 raise ValueError("当前服务认证只支持 HS256；外部令牌由独立验证入口接入")
+        return self
+
+    @model_validator(mode="after")
+    def validate_delegated_auth(self):
+        if not self.delegated_auth_enabled:
+            return self
+        urls = [self.delegated_issuer, self.delegated_jwks_url, self.delegated_introspection_url]
+        try:
+            parsed = [urlsplit(value) for value in urls]
+            for value, url in zip(urls, parsed):
+                if value != value.strip() or url.scheme != "https" or not url.hostname or url.username or url.password or url.query or url.fragment:
+                    raise ValueError("endpoint")
+                if url.port is not None and not 1 <= url.port <= 65535:
+                    raise ValueError("port")
+            origins = {(url.hostname, url.port or 443) for url in parsed}
+            if len(origins) != 1 or not 1 <= len(self.delegated_issuer.encode()) <= 512:
+                raise ValueError("origin")
+            if any(not url.path.startswith(parsed[0].path.rstrip("/") + "/") for url in parsed[1:]):
+                raise ValueError("issuer path")
+            if self.delegated_jwks_url == self.delegated_introspection_url:
+                raise ValueError("different endpoints")
+        except ValueError:
+            raise ValueError("受托身份必须配置同一 HTTPS 身份源下的 issuer/JWKS/introspection 地址") from None
+        if not self.delegated_client_id.strip() or not self.delegated_audience.strip() or not self.delegated_client_secret.get_secret_value().strip():
+            raise ValueError("受托身份必须配置 client_id、client_secret 与 audience")
+        if not self.delegated_actor_clients or any(not key.strip() for key in self.delegated_actor_clients):
+            raise ValueError("受托身份必须配置可信调用方到 actor 的映射")
         return self
 
     model_config = SettingsConfigDict(
